@@ -1,9 +1,14 @@
 import React, { useMemo } from "react";
+import type { StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, View } from "react-native";
-import { useReducedMotion } from "react-native-reanimated";
+import { useDerivedValue, useReducedMotion } from "react-native-reanimated";
 
 import { GlowBlob } from "@/components/GlowBlob";
 import { useColors } from "@/hooks/useColors";
+import {
+  useSmoothedTraitInfluence,
+  type SmoothedTraitInfluence,
+} from "@/hooks/useSmoothedTraitInfluence";
 import type { CompanionStatus } from "@/contexts/CompanionContext";
 import type { MoodLabel } from "@/lib/mood";
 import {
@@ -49,6 +54,102 @@ const ACTIVE_DYNAMICS: Partial<Record<CompanionStatus, Dynamics>> = {
 
 const BASE_DURATION = 4200;
 
+type OrbBlobKind = "halo" | "blue" | "purple" | "pink" | "orange" | "core";
+
+interface OrbBlobConfig {
+  id: string;
+  kind: OrbBlobKind;
+  color: string;
+  size: number;
+  offX: number;
+  offY: number;
+  durMult: number;
+  delay: number;
+  drift: number;
+  scaleTo: number;
+  innerStop: number;
+}
+
+interface OrbBlobProps {
+  kind: OrbBlobKind;
+  /** Snappy brightness from mood/activity (no trait influence). */
+  baseIntensity: number;
+  /** Snappy core brightness from mood/activity (core blob only). */
+  baseCoreBoost: number;
+  /** Eased trait influence — read on the UI thread. */
+  traits: SmoothedTraitInfluence;
+  id: string;
+  color: string;
+  size: number;
+  duration: number;
+  delay?: number;
+  drift: number;
+  scaleTo: number;
+  innerStop: number;
+  reduceMotion: boolean;
+  style?: StyleProp<ViewStyle>;
+}
+
+/**
+ * One orb blob. The status/mood brightness (`baseIntensity` / `baseCoreBoost`)
+ * stays snappy in JS, while the personality contribution is read from eased
+ * shared values inside a worklet — so a trait shift cross-fades but a state
+ * change (listening / thinking) still lands instantly.
+ *
+ * Reproduces the original per-blob opacity formulas exactly, except the orb's
+ * `warm` boolean threshold is replaced with a narrow smoothstep ramp so the
+ * pink/orange warm tones don't pop as the threshold is crossed mid-fade.
+ */
+function OrbBlob({
+  kind,
+  baseIntensity,
+  baseCoreBoost,
+  traits,
+  ...glow
+}: OrbBlobProps) {
+  const opacity = useDerivedValue(() => {
+    const glowV = traits.glowBoost.value;
+    const warmthV = traits.warmthShift.value;
+
+    if (kind === "core") {
+      const coreBoost = Math.min(1.35, baseCoreBoost + glowV * 0.5);
+      return Math.min(1, 0.85 * coreBoost);
+    }
+
+    const intensity = Math.min(1, baseIntensity + glowV);
+    const warmBoost = warmthV * 0.4;
+
+    if (kind === "halo") return Math.min(1, 0.45 * intensity);
+    if (kind === "blue") {
+      return Math.min(1, Math.max(0.3, 0.9 * intensity - warmBoost * 0.5));
+    }
+    if (kind === "purple") {
+      return Math.min(1, Math.max(0.35, 0.9 * intensity - warmBoost * 0.25));
+    }
+
+    // Pink / orange warm tones: ramp smoothly up to the warmth threshold
+    // instead of flipping a boolean (which would snap by ~0.35×intensity).
+    // The ramp reaches full warmth exactly at the threshold, so any state that
+    // was already "warm" (intensity ≥ threshold) keeps its original opacity —
+    // only the false→true crossing is softened, over a 0.1 window below it.
+    const warmThreshold = 0.85 - warmthV * 1.5;
+    const lo = warmThreshold - 0.1;
+    let t = (intensity - lo) / 0.1;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const warmRamp = t * t * (3 - 2 * t);
+
+    if (kind === "pink") {
+      const base = 0.5 + 0.35 * warmRamp;
+      return Math.min(1, base * intensity + warmBoost);
+    }
+    // orange
+    const base = 0.32 + 0.38 * warmRamp;
+    return Math.min(1, base * intensity + warmBoost * 0.8);
+  });
+
+  return <GlowBlob opacity={opacity} {...glow} />;
+}
+
 export function CompanionOrb({
   status,
   mood = "content",
@@ -57,36 +158,29 @@ export function CompanionOrb({
 }: CompanionOrbProps) {
   const colors = useColors();
   const reduceMotion = useReducedMotion();
+  const smoothed = useSmoothedTraitInfluence(traits);
 
   const baseDyn = ACTIVE_DYNAMICS[status] ?? MOOD_DYNAMICS[mood];
 
-  // Layer trait influence on top of mood/activity dynamics.
-  // All adjustments stay subtle — they shift perception, not override it.
-  const dyn: Dynamics = {
-    speed: baseDyn.speed * (1 + traits.livelinessBoost * 0.6),
-    intensity: Math.min(1, baseDyn.intensity + traits.glowBoost),
-    drift: baseDyn.drift * (1 + traits.livelinessBoost * 0.5),
-    coreBoost: Math.min(1.35, baseDyn.coreBoost + traits.glowBoost * 0.5),
-  };
+  // Breathing cadence + drift carry a small liveliness boost. These feed the
+  // GlowBlob animation loop (rebuilt on change), so they stay derived from the
+  // settled target trait — a ≤17% cadence retarget on the rare refresh is
+  // invisible, and easing them would restart the loop every frame. The visible
+  // jump (brightness + warm/cool balance) is eased via the trait shared values.
+  const speed = baseDyn.speed * (1 + traits.livelinessBoost * 0.6);
+  const driftMult = baseDyn.drift * (1 + traits.livelinessBoost * 0.5);
 
-  const dur = (mult: number) => Math.round((BASE_DURATION / dyn.speed) * mult);
+  const dur = (mult: number) => Math.round((BASE_DURATION / speed) * mult);
   const [blue, purple, pink, orange] = colors.spectrum;
-
-  // A faded companion cools toward blue/violet; an awake one glows warm.
-  // A high-warmth personality lowers the threshold for warm tones.
-  const warmThreshold = 0.85 - traits.warmthShift * 1.5;
-  const warm = dyn.intensity >= warmThreshold;
-
-  // Warm-tone opacity boost from personality (additive, clamped at 1).
-  const warmBoost = traits.warmthShift * 0.4;
 
   const wrap = size * 1.85;
 
   // Stable-ish layout offsets so blobs overlap and mix into one presence.
-  const blobs = useMemo(
+  const blobs = useMemo<OrbBlobConfig[]>(
     () => [
       {
         id: "orb-halo",
+        kind: "halo",
         color: purple,
         size: size * 1.6,
         offX: 0,
@@ -95,11 +189,11 @@ export function CompanionOrb({
         delay: 0,
         drift: 10,
         scaleTo: 1.12,
-        op: 0.45 * dyn.intensity,
         innerStop: 40,
       },
       {
         id: "orb-blue",
+        kind: "blue",
         color: blue,
         size: size * 1.05,
         offX: -size * 0.22,
@@ -108,12 +202,11 @@ export function CompanionOrb({
         delay: 0,
         drift: 16,
         scaleTo: 1.16,
-        // Cool blues recede slightly when warmth trait is high
-        op: Math.max(0.3, 0.9 * dyn.intensity - warmBoost * 0.5),
         innerStop: 55,
       },
       {
         id: "orb-purple",
+        kind: "purple",
         color: purple,
         size: size * 1.05,
         offX: size * 0.2,
@@ -122,11 +215,11 @@ export function CompanionOrb({
         delay: 300,
         drift: 18,
         scaleTo: 1.2,
-        op: Math.max(0.35, 0.9 * dyn.intensity - warmBoost * 0.25),
         innerStop: 55,
       },
       {
         id: "orb-pink",
+        kind: "pink",
         color: pink,
         size: size,
         offX: size * 0.16,
@@ -135,11 +228,11 @@ export function CompanionOrb({
         delay: 600,
         drift: 17,
         scaleTo: 1.18,
-        op: Math.min(1, (warm ? 0.85 : 0.5) * dyn.intensity + warmBoost),
         innerStop: 55,
       },
       {
         id: "orb-orange",
+        kind: "orange",
         color: orange,
         size: size * 0.9,
         offX: -size * 0.18,
@@ -148,26 +241,28 @@ export function CompanionOrb({
         delay: 900,
         drift: 15,
         scaleTo: 1.16,
-        op: Math.min(1, (warm ? 0.7 : 0.32) * dyn.intensity + warmBoost * 0.8),
         innerStop: 55,
       },
     ],
-    [size, blue, purple, pink, orange, warm, warmBoost, dyn.intensity],
+    [size, blue, purple, pink, orange],
   );
 
   return (
     <View style={[styles.wrap, { width: wrap, height: wrap }]}>
       {blobs.map((b) => (
-        <GlowBlob
+        <OrbBlob
           key={b.id}
+          kind={b.kind}
+          baseIntensity={baseDyn.intensity}
+          baseCoreBoost={baseDyn.coreBoost}
+          traits={smoothed}
           id={b.id}
           color={b.color}
           size={b.size}
           duration={dur(b.durMult)}
           delay={b.delay}
-          drift={b.drift * dyn.drift}
+          drift={b.drift * driftMult}
           scaleTo={b.scaleTo}
-          opacity={Math.min(1, b.op)}
           innerStop={b.innerStop}
           reduceMotion={reduceMotion}
           style={{
@@ -178,14 +273,17 @@ export function CompanionOrb({
       ))}
 
       {/* Bright living core */}
-      <GlowBlob
+      <OrbBlob
+        kind="core"
+        baseIntensity={baseDyn.intensity}
+        baseCoreBoost={baseDyn.coreBoost}
+        traits={smoothed}
         id="orb-core"
         color={colors.presenceCore}
         size={size * 0.62}
         duration={dur(0.7)}
-        drift={6 * dyn.drift}
+        drift={6 * driftMult}
         scaleTo={1.14}
-        opacity={Math.min(1, 0.85 * dyn.coreBoost)}
         innerStop={45}
         reduceMotion={reduceMotion}
         style={{

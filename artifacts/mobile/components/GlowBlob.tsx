@@ -9,6 +9,7 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
 
@@ -25,8 +26,11 @@ interface GlowBlobProps {
   scaleTo?: number;
   /** Phase offset in ms so stacked blobs feel fluid, not synchronized. */
   delay?: number;
-  /** Overall opacity of the blob. */
-  opacity?: number;
+  /**
+   * Overall opacity of the blob. A plain number renders statically; a shared
+   * value lets a personality shift cross-fade the brightness on the UI thread.
+   */
+  opacity?: number | SharedValue<number>;
   /** Inner gradient stop (%) — higher = tighter, brighter core. */
   innerStop?: number;
   /** When true, holds a calm static frame instead of animating. */
@@ -118,6 +122,7 @@ export function GlowBlob({
   }, [reduceMotion, duration, drift, scaleTo, delay, scale, tx, ty]);
 
   const animatedStyle = useAnimatedStyle(() => ({
+    opacity: typeof opacity === "number" ? opacity : opacity.value,
     transform: [
       { translateX: tx.value },
       { translateY: ty.value },
@@ -132,7 +137,6 @@ export function GlowBlob({
           position: "absolute",
           width: size,
           height: size,
-          opacity,
           pointerEvents: "none",
         },
         animatedStyle,

@@ -8,3 +8,4 @@
 - [Empiri check-in cadence vs bell](empiri-checkin-cadence.md) — keep cadence + notification bell as two persisted prefs; couple only at the off boundary; never merge into one.
 - [Mobile test-suite pre-existing failures](mobile-test-suite-preexisting-failures.md) — CompanionContext proactive-check-in jest suite + auth.tsx 'nonce' typecheck fail deterministically, independent of UI work; don't block on them.
 - [Empiri auth ownership pattern](empiri-auth-ownership.md) — all conversation routes enforce owner_id == req.user.id via requireOwnedConversation(); cross-user access returns 404 not 403 to avoid leaking existence.
+- [Empiri orb/glow trait smoothing](orb-trait-smoothing.md) — ease only the trait part of blob opacity via 3s shared values; never ease breathing cadence (loop restarts/freezes); warm boolean→smoothstep.
