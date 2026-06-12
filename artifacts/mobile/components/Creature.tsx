@@ -25,6 +25,7 @@ const STATE_COLORS: Record<CreatureState, string> = {
   responding: "#00E676",
   happy: "#FFD700",
   sleepy: "#4A90D9",
+  sad: "#64748B",
 };
 
 export function Creature({ state, size = 60 }: Props) {
@@ -173,6 +174,18 @@ export function Creature({ state, size = 60 }: Props) {
       glowOpacity.value = withSequence(
         withTiming(1.0, { duration: 200 }),
         withTiming(0.7, { duration: 900 })
+      );
+    } else if (state === "sad") {
+      scale.value = withTiming(0.96, { duration: 600 });
+      bobY.value = withTiming(4, { duration: 600 });
+      rotate.value = withTiming(-4, { duration: 600 });
+      glowOpacity.value = withRepeat(
+        withSequence(
+          withTiming(0.3, { duration: 1600 }),
+          withTiming(0.14, { duration: 1600 })
+        ),
+        -1,
+        true
       );
     }
 
