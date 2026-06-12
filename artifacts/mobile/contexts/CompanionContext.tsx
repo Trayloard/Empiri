@@ -48,17 +48,30 @@ export type CompanionStatus =
   | "transcribing"
   | "speaking";
 
+/**
+ * A user turn whose reply failed. We keep the original message id (the
+ * optimistic bubble still on screen) and its text so the user can retry
+ * with one tap instead of retyping.
+ */
+export interface FailedTurn {
+  messageId: number;
+  content: string;
+}
+
 interface CompanionContextValue {
   messages: Message[];
   status: CompanionStatus;
   voiceEnabled: boolean;
   notificationsEnabled: boolean;
   mood: ComputedMood;
+  conversationId: number | null;
   initializing: boolean;
   initError: string | null;
   error: string | null;
+  failedTurn: FailedTurn | null;
   isRecording: boolean;
   sendText: (content: string) => Promise<void>;
+  retryMessage: () => Promise<void>;
   startListening: () => Promise<void>;
   stopListening: () => Promise<void>;
   toggleVoice: () => void;
@@ -115,12 +128,15 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const [mood, setMood] = useState<ComputedMood>(() =>
     computeMood(freshMoodState()),
   );
+  const [conversationId, setConversationId] = useState<number | null>(null);
   const [initializing, setInitializing] = useState<boolean>(true);
   const [initError, setInitError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failedTurn, setFailedTurn] = useState<FailedTurn | null>(null);
   const [isRecording, setIsRecording] = useState<boolean>(false);
 
   const conversationIdRef = useRef<number | null>(null);
+  const failedTurnRef = useRef<FailedTurn | null>(null);
   const moodStateRef = useRef<CompanionMoodState>(moodState);
   const notificationsEnabledRef = useRef<boolean>(notificationsEnabled);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -208,11 +224,13 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       if (storedId) {
         const id = Number(storedId);
         conversationIdRef.current = id;
+        setConversationId(id);
         history = await listMessages(id);
         setMessages(history);
       } else {
         const conversation = await createConversation({ title: "Empiri" });
         conversationIdRef.current = conversation.id;
+        setConversationId(conversation.id);
         await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
         setMessages([]);
       }
@@ -263,32 +281,19 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
-  const refresh = useCallback(async () => {
-    const id = conversationIdRef.current;
-    if (id == null) return;
-    try {
-      const latest = await listMessages(id);
-      setMessages(latest);
-    } catch {
-      // ignore — keep optimistic state
-    }
+  const clearFailedTurn = useCallback(() => {
+    failedTurnRef.current = null;
+    setFailedTurn(null);
   }, []);
 
-  const sendText = useCallback(
-    async (raw: string) => {
-      const content = raw.trim();
-      const id = conversationIdRef.current;
-      if (!content || id == null) return;
-
-      const optimistic: Message = {
-        id: tempId(),
-        conversationId: id,
-        role: "user",
-        content,
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, optimistic]);
+  // Shared delivery path for both a fresh send and a retry. The optimistic
+  // user bubble (`optimistic`) is already in `messages`; on success we swap it
+  // for the server's real pair, and on failure we leave it in place and mark
+  // the turn as retryable.
+  const deliver = useCallback(
+    async (content: string, optimistic: Message, id: number) => {
       setError(null);
+      clearFailedTurn();
       setStatus("thinking");
 
       try {
@@ -308,13 +313,51 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {
         setError("Empiri couldn't reply just now. Try again.");
-        await refresh();
+        const failed: FailedTurn = { messageId: optimistic.id, content };
+        failedTurnRef.current = failed;
+        setFailedTurn(failed);
       } finally {
         setStatus("idle");
       }
     },
-    [voiceEnabled, playSpeech, refresh, touchInteraction],
+    [voiceEnabled, playSpeech, touchInteraction, clearFailedTurn],
   );
+
+  const sendText = useCallback(
+    async (raw: string) => {
+      const content = raw.trim();
+      const id = conversationIdRef.current;
+      if (!content || id == null) return;
+
+      const optimistic: Message = {
+        id: tempId(),
+        conversationId: id,
+        role: "user",
+        content,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimistic]);
+      await deliver(content, optimistic, id);
+    },
+    [deliver],
+  );
+
+  // Re-send the last failed user turn without retyping. The optimistic bubble
+  // is still on screen, so we reuse its id and text.
+  const retryMessage = useCallback(async () => {
+    const turn = failedTurnRef.current;
+    const id = conversationIdRef.current;
+    if (!turn || id == null) return;
+
+    const optimistic: Message = {
+      id: turn.messageId,
+      conversationId: id,
+      role: "user",
+      content: turn.content,
+      createdAt: new Date().toISOString(),
+    };
+    await deliver(turn.content, optimistic, id);
+  }, [deliver]);
 
   const startListening = useCallback(async () => {
     if (conversationIdRef.current == null) return;
@@ -412,11 +455,14 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         voiceEnabled,
         notificationsEnabled,
         mood,
+        conversationId,
         initializing,
         initError,
         error,
+        failedTurn,
         isRecording,
         sendText,
+        retryMessage,
         startListening,
         stopListening,
         toggleVoice,

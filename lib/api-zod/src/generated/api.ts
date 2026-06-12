@@ -97,6 +97,34 @@ export const CompanionCheckInResponse = zod.object({
 
 
 /**
+ * Returns a friendly summary of the companion's evolving inner self (drives, traits, interests, and self-narrative) for the given conversation.
+ * @summary Get the companion's current inner self
+ */
+export const GetCompanionSelfParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCompanionSelfResponse = zod.object({
+  "drives": zod.array(zod.object({
+  "key": zod.string(),
+  "level": zod.number(),
+  "striving": zod.number()
+})),
+  "traits": zod.array(zod.object({
+  "key": zod.string(),
+  "value": zod.number()
+})),
+  "interests": zod.array(zod.object({
+  "topic": zod.string(),
+  "affinity": zod.number()
+})),
+  "narrative": zod.array(zod.string()),
+  "interactions": zod.number(),
+  "ageHours": zod.number()
+})
+
+
+/**
  * @summary Transcribe recorded audio into text
  */
 export const TranscribeAudioBody = zod.object({

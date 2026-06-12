@@ -143,6 +143,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /conversations/{id}/self:
+    get:
+      operationId: getCompanionSelf
+      tags: [companion]
+      summary: Get the companion's current inner self
+      description: Returns a friendly summary of the companion's evolving inner self (drives, traits, interests, and self-narrative) for the given conversation.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The companion's current inner-self summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionSelf"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /voice/transcribe:
     post:
       operationId: transcribeAudio
@@ -317,6 +342,69 @@ components:
       required:
         - audio
         - format
+    CompanionDrive:
+      type: object
+      properties:
+        key:
+          type: string
+        level:
+          type: number
+        striving:
+          type: number
+      required:
+        - key
+        - level
+        - striving
+    CompanionTrait:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: number
+      required:
+        - key
+        - value
+    CompanionInterest:
+      type: object
+      properties:
+        topic:
+          type: string
+        affinity:
+          type: number
+      required:
+        - topic
+        - affinity
+    CompanionSelf:
+      type: object
+      properties:
+        drives:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionDrive"
+        traits:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionTrait"
+        interests:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionInterest"
+        narrative:
+          type: array
+          items:
+            type: string
+        interactions:
+          type: integer
+        ageHours:
+          type: number
+      required:
+        - drives
+        - traits
+        - interests
+        - narrative
+        - interactions
+        - ageHours
     ApiError:
       type: object
       properties:

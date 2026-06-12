@@ -112,8 +112,11 @@ async function renderReadyCompanion() {
   return utils;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
+  // AsyncStorage persists between tests in the same file; reset it so stored
+  // prefs (e.g. voiceEnabled) from one test don't bleed into the next.
+  await AsyncStorage.clear();
   mockCreateConversation.mockResolvedValue({
     id: 1,
     title: "Empiri",
@@ -167,6 +170,81 @@ describe("CompanionContext failed-reply handling", () => {
     expect(
       result.current.messages.every((m) => m.content.trim().length > 0),
     ).toBe(true);
+    expect(result.current.status).toBe("idle");
+  });
+
+  it("lets the user retry a failed turn without retyping, and succeeds on retry", async () => {
+    // First attempt fails, the retry succeeds.
+    mockSendMessage.mockRejectedValueOnce(new Error("AI unavailable"));
+    mockSendMessage.mockResolvedValueOnce({
+      userMessage: makeMessage(1, "user", "hello"),
+      assistantMessage: makeMessage(2, "assistant", "Hey! Good to see you."),
+    });
+
+    const { result } = await renderReadyCompanion();
+
+    act(() => {
+      result.current.toggleVoice();
+    });
+    await waitFor(() => expect(result.current.voiceEnabled).toBe(false));
+
+    await act(async () => {
+      await result.current.sendText("hello");
+    });
+
+    // The failure is retryable and the user's text was preserved on screen.
+    expect(result.current.error).toBe(FRIENDLY_ERROR);
+    expect(result.current.failedTurn).not.toBeNull();
+    expect(result.current.failedTurn?.content).toBe("hello");
+    expect(result.current.messages.some((m) => m.content === "hello")).toBe(
+      true,
+    );
+
+    // One tap re-sends the same message — no retyping.
+    await act(async () => {
+      await result.current.retryMessage();
+    });
+
+    const assistantMessages = result.current.messages.filter(
+      (m) => m.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0].content).toBe("Hey! Good to see you.");
+    // Only a single user copy of "hello" remains — no duplicate from the retry.
+    expect(
+      result.current.messages.filter((m) => m.content === "hello"),
+    ).toHaveLength(1);
+    expect(result.current.error).toBeNull();
+    expect(result.current.failedTurn).toBeNull();
+    expect(result.current.status).toBe("idle");
+    expect(mockSendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the error again when a retry also fails", async () => {
+    mockSendMessage.mockRejectedValue(new Error("still down"));
+
+    const { result } = await renderReadyCompanion();
+
+    act(() => {
+      result.current.toggleVoice();
+    });
+    await waitFor(() => expect(result.current.voiceEnabled).toBe(false));
+
+    await act(async () => {
+      await result.current.sendText("hello");
+    });
+    expect(result.current.failedTurn).not.toBeNull();
+
+    await act(async () => {
+      await result.current.retryMessage();
+    });
+
+    // A second failure surfaces the error and keeps the turn retryable.
+    expect(result.current.error).toBe(FRIENDLY_ERROR);
+    expect(result.current.failedTurn?.content).toBe("hello");
+    expect(result.current.messages.some((m) => m.role === "assistant")).toBe(
+      false,
+    );
     expect(result.current.status).toBe("idle");
   });
 

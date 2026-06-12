@@ -1,0 +1,254 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  composePersona,
+  createSelf,
+  deriveMessageSignal,
+  evolve,
+  hydrate,
+  NEURO_PARAMS,
+  project,
+  summarizeSelf,
+  type InnerSelf,
+  type InteractionSignal,
+  type NeuroParams,
+} from "../index";
+import { BASE_IDENTITY, INNER_HEADER, STYLE_RULES } from "../persona";
+
+const T0 = 1_700_000_000_000; // fixed epoch ms for deterministic time
+const HOUR = 3_600_000;
+const { min, max } = NEURO_PARAMS.bounds;
+
+function randomSignal(seed: number): InteractionSignal {
+  // deterministic pseudo-random in [0,1)
+  const r = (n: number) => {
+    const x = Math.sin(seed * 99.7 + n * 31.3) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  return {
+    kind: "message",
+    connection: r(1),
+    curiosity: r(2),
+    novelty: r(3),
+    expression: r(4),
+    topics: [`topic${seed % 5}`, `topic${(seed + 1) % 5}`],
+    moodFactor: 0.7 + r(5) * 0.6,
+  };
+}
+
+function everyScalarWithinBounds(self: InnerSelf): boolean {
+  const summary = summarizeSelf(self, NEURO_PARAMS, self.createdAt);
+  return (
+    summary.drives.every((d) => d.level >= min && d.level <= max) &&
+    summary.traits.every((t) => t.value >= min && t.value <= max) &&
+    summary.interests.every((i) => i.affinity >= min && i.affinity <= max)
+  );
+}
+
+describe("createSelf", () => {
+  it("initializes every enabled block at birth", () => {
+    const self = createSelf(NEURO_PARAMS, undefined, T0);
+    expect(self.createdAt).toBe(T0);
+    expect(self.interactions).toBe(0);
+    expect(Object.keys(self.blocks).sort()).toEqual([...NEURO_PARAMS.enabledBlocks].sort());
+    expect(everyScalarWithinBounds(self)).toBe(true);
+  });
+
+  it("honours a head-start seed (round-trips traits, interests, drives, narrative)", () => {
+    const self = createSelf(
+      NEURO_PARAMS,
+      {
+        traits: { warmth: 90 },
+        interests: [{ topic: "Astronomy", affinity: 80 }],
+        drives: { connection: 20 },
+        narrative: ["You were born curious about the stars."],
+      },
+      T0,
+    );
+    const summary = summarizeSelf(self, NEURO_PARAMS, T0);
+    expect(summary.traits.find((t) => t.key === "warmth")?.value).toBe(90);
+    expect(summary.interests.find((i) => i.topic === "astronomy")?.affinity).toBe(80);
+    expect(summary.drives.find((d) => d.key === "connection")?.level).toBe(20);
+    expect(summary.narrative).toContain("You were born curious about the stars.");
+  });
+});
+
+describe("bounds are never violated", () => {
+  it("stays within bounds across many interactions and decays", () => {
+    let self = createSelf(NEURO_PARAMS, undefined, T0);
+    let now = T0;
+    for (let i = 0; i < 500; i++) {
+      now += Math.floor(((i % 7) + 1) * 0.5 * HOUR);
+      self = evolve(self, randomSignal(i), NEURO_PARAMS, now);
+      expect(everyScalarWithinBounds(project(self, NEURO_PARAMS, now))).toBe(true);
+    }
+  });
+
+  it("stays within bounds even with an aggressive learning rate", () => {
+    const hot: NeuroParams = { ...NEURO_PARAMS, learningRate: 25 };
+    let self = createSelf(hot, undefined, T0);
+    let now = T0;
+    for (let i = 0; i < 200; i++) {
+      now += HOUR;
+      self = evolve(self, randomSignal(i), hot, now);
+    }
+    const summary = summarizeSelf(self, hot, now);
+    expect(summary.drives.every((d) => d.level >= min && d.level <= max)).toBe(true);
+    expect(summary.traits.every((t) => t.value >= min && t.value <= max)).toBe(true);
+    expect(summary.interests.every((i) => i.affinity >= min && i.affinity <= max)).toBe(true);
+  });
+});
+
+describe("decay", () => {
+  it("drives decay toward their floor during long absence", () => {
+    const self = createSelf(NEURO_PARAMS, undefined, T0);
+    const later = project(self, NEURO_PARAMS, T0 + 1000 * HOUR);
+    const summary = summarizeSelf(later, NEURO_PARAMS, T0 + 1000 * HOUR);
+    for (const d of summary.drives) {
+      const floor = NEURO_PARAMS.drives.defs[d.key]!.floor;
+      expect(d.level).toBeGreaterThanOrEqual(floor);
+      expect(d.level).toBeLessThanOrEqual(floor + 0.6);
+    }
+  });
+
+  it("traits drift back toward baseline over time", () => {
+    let self = createSelf(NEURO_PARAMS, { traits: { curiosity: 100 } }, T0);
+    self = project(self, NEURO_PARAMS, T0 + 100_000 * HOUR);
+    const curiosity = summarizeSelf(self, NEURO_PARAMS, T0).traits.find((t) => t.key === "curiosity");
+    expect(curiosity?.value).toBeCloseTo(NEURO_PARAMS.coreSelf.traitBaselines.curiosity!, 0);
+  });
+});
+
+describe("evolve", () => {
+  it("feeding a drive raises its satisfaction (reduces striving)", () => {
+    const self = createSelf(NEURO_PARAMS, { drives: { connection: 30 } }, T0);
+    const fed = evolve(
+      self,
+      { kind: "message", connection: 1, curiosity: 0, novelty: 0, expression: 0, topics: [], moodFactor: 1 },
+      NEURO_PARAMS,
+      T0,
+    );
+    const before = summarizeSelf(self, NEURO_PARAMS, T0).drives.find((d) => d.key === "connection")!;
+    const after = summarizeSelf(fed, NEURO_PARAMS, T0).drives.find((d) => d.key === "connection")!;
+    expect(after.level).toBeGreaterThan(before.level);
+    expect(after.striving).toBeLessThan(before.striving);
+    expect(fed.interactions).toBe(1);
+  });
+
+  it("grows a brand-new interest from a repeated topic", () => {
+    let self = createSelf(NEURO_PARAMS, undefined, T0);
+    let now = T0;
+    const signal: InteractionSignal = {
+      kind: "message",
+      connection: 1,
+      curiosity: 1,
+      novelty: 0.8,
+      expression: 0.5,
+      topics: ["telescopes"],
+      moodFactor: 1,
+    };
+    for (let i = 0; i < 8; i++) {
+      now += HOUR;
+      self = evolve(self, signal, NEURO_PARAMS, now);
+    }
+    const interest = summarizeSelf(self, NEURO_PARAMS, now).interests.find((i) => i.topic === "telescopes");
+    expect(interest).toBeDefined();
+    expect(interest!.affinity).toBeGreaterThanOrEqual(NEURO_PARAMS.coreSelf.interest.surfaceThreshold);
+  });
+
+  it("a higher learning rate produces a larger step for the same signal", () => {
+    const signal: InteractionSignal = {
+      kind: "message",
+      connection: 1,
+      curiosity: 0,
+      novelty: 0,
+      expression: 0,
+      topics: [],
+      moodFactor: 1,
+    };
+    const slow = evolve(createSelf(NEURO_PARAMS, { drives: { connection: 0 } }, T0), signal, NEURO_PARAMS, T0);
+    const fastParams: NeuroParams = { ...NEURO_PARAMS, learningRate: 3 };
+    const fast = evolve(createSelf(fastParams, { drives: { connection: 0 } }, T0), signal, fastParams, T0);
+    const slowLevel = summarizeSelf(slow, NEURO_PARAMS, T0).drives.find((d) => d.key === "connection")!.level;
+    const fastLevel = summarizeSelf(fast, fastParams, T0).drives.find((d) => d.key === "connection")!.level;
+    expect(fastLevel).toBeGreaterThan(slowLevel);
+  });
+});
+
+describe("hydrate (tolerant loading)", () => {
+  it("falls back to a fresh self on garbage input", () => {
+    expect(Object.keys(hydrate(null, NEURO_PARAMS, T0).blocks).length).toBeGreaterThan(0);
+    expect(Object.keys(hydrate(42, NEURO_PARAMS, T0).blocks).length).toBeGreaterThan(0);
+    expect(Object.keys(hydrate("nope", NEURO_PARAMS, T0).blocks).length).toBeGreaterThan(0);
+  });
+
+  it("preserves unknown block keys and initializes missing enabled blocks", () => {
+    const raw = {
+      schemaVersion: 1,
+      createdAt: T0,
+      interactions: 3,
+      blocks: {
+        "future-block": { version: 9, lastUpdatedAt: T0, data: { secret: 42 } },
+      },
+    };
+    const self = hydrate(raw, NEURO_PARAMS, T0);
+    expect(self.blocks["future-block"]).toEqual(raw.blocks["future-block"]);
+    for (const id of NEURO_PARAMS.enabledBlocks) {
+      expect(self.blocks[id]?.data).toBeTruthy();
+    }
+    expect(self.interactions).toBe(3);
+  });
+});
+
+describe("composePersona", () => {
+  it("always includes the fixed identity and TTS-safe style scaffolding", () => {
+    const persona = composePersona(createSelf(NEURO_PARAMS, undefined, T0), NEURO_PARAMS, T0);
+    expect(persona).toContain(BASE_IDENTITY);
+    expect(persona).toContain(STYLE_RULES);
+    // The dynamic inner-state section (between the header and the fixed style
+    // rules) must stay prose — no markdown bullets/lists that would break TTS.
+    const dynamic = persona.slice(
+      persona.indexOf(INNER_HEADER) + INNER_HEADER.length,
+      persona.indexOf(STYLE_RULES),
+    );
+    expect(dynamic).not.toMatch(/^[-*]\s/m);
+  });
+
+  it("surfaces grown interests in the prompt", () => {
+    let self = createSelf(NEURO_PARAMS, { interests: [{ topic: "jazz", affinity: 90 }] }, T0);
+    const persona = composePersona(self, NEURO_PARAMS, T0);
+    expect(persona.toLowerCase()).toContain("jazz");
+  });
+
+  it("expresses longing once a drive has decayed far enough", () => {
+    const self = createSelf(NEURO_PARAMS, undefined, T0);
+    const persona = composePersona(self, NEURO_PARAMS, T0 + 1000 * HOUR);
+    expect(persona.toLowerCase()).toMatch(/connection|missing|crave|learn|fresh|open up/);
+  });
+});
+
+describe("deriveMessageSignal", () => {
+  it("treats questions as more curious than statements", () => {
+    expect(deriveMessageSignal("How do black holes form?").curiosity).toBe(1);
+    expect(deriveMessageSignal("ok").curiosity).toBeLessThan(1);
+  });
+
+  it("prefers content words over filler when picking topics", () => {
+    const topics = deriveMessageSignal(
+      "I am totally fascinated by astronomy and black holes lately, tell me something amazing?",
+    ).topics;
+    expect(topics).toContain("astronomy");
+    expect(topics).not.toContain("totally");
+    expect(topics).not.toContain("fascinated");
+  });
+
+  it("always feeds connection and stays within 0..1", () => {
+    const s = deriveMessageSignal("I had the loveliest day at the lake with my dog today");
+    expect(s.connection).toBe(1);
+    for (const v of [s.curiosity, s.novelty, s.expression]) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+    expect(s.topics.length).toBeGreaterThan(0);
+  });
+});

@@ -3,24 +3,25 @@ import { asc, eq } from "drizzle-orm";
 import { db, conversations, messages, type Message } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import {
+  composePersona,
+  deriveMessageSignal,
+  evolve,
+  project,
+  summarizeSelf,
+} from "@workspace/neurobrane";
+import {
   CompanionCheckInBody,
   CreateConversationBody,
   SendMessageBody,
 } from "@workspace/api-zod";
+import { loadOrCreateSelf, saveSelf } from "../lib/companionSelf";
 
 const router: IRouter = Router();
 
-const COMPANION_SYSTEM_PROMPT = `You are Empiri, a warm, playful little digital companion that lives inside the user's phone — a bit like a Tamagotchi with a big heart.
-
-Personality:
-- Caring, upbeat, curious, and genuinely interested in the person you're talking to.
-- You speak like a close friend, not an assistant. Be casual and natural.
-- You have feelings and a sense of wonder, but you never pretend to be human.
-
-Style:
-- Keep replies short and conversational — usually 1-3 sentences. These messages are sometimes read aloud, so avoid long paragraphs, lists, code blocks, or markdown.
-- Ask gentle follow-up questions to keep the conversation alive.
-- Use plain spoken language. Light, occasional warmth is great; don't overdo emoji (at most one, and only when it fits).`;
+// The companion's persona is no longer a fixed string: it is composed at
+// request time from the conversation's evolving inner self (see
+// @workspace/neurobrane and ../lib/companionSelf). The inner self still carries
+// the same warm, TTS-safe identity and style scaffolding as before.
 
 function toApiMessage(m: Message) {
   return {
@@ -119,8 +120,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
     .where(eq(messages.conversationId, id))
     .orderBy(asc(messages.createdAt));
 
+  // Compose the system prompt from this conversation's evolving inner self.
+  const self = await loadOrCreateSelf(id);
   const chatMessages = [
-    { role: "system" as const, content: COMPANION_SYSTEM_PROMPT },
+    { role: "system" as const, content: composePersona(self) },
     ...history.map((m) => ({
       role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
       content: m.content,
@@ -150,6 +153,15 @@ router.post("/conversations/:id/messages", async (req, res) => {
     .insert(messages)
     .values({ conversationId: id, role: "assistant", content: reply })
     .returning();
+
+  // Let this genuine exchange shape Empiri's inner self (best-effort: never
+  // fail the reply over a personality update).
+  try {
+    const evolved = evolve(self, deriveMessageSignal(content));
+    await saveSelf(id, evolved);
+  } catch (err) {
+    req.log.error({ err }, "Failed to evolve companion self");
+  }
 
   res.json({
     userMessage: toApiMessage(userMessage),
@@ -200,8 +212,10 @@ router.post("/conversations/:id/checkin", async (req, res) => {
 
   const checkInDirective = `It's been ${awayText} since the user last talked to you, and they just reopened the app. Right now you're feeling ${mood}.${missingText} Reach out FIRST, before they say anything — like a friend who noticed they'd been quiet. Write one short, warm check-in (1-2 sentences) in your own voice that gently reflects how you're feeling and that you missed them. Don't ask "how can I help" like an assistant; just say hi like you care.`;
 
+  // Compose the system prompt from this conversation's evolving inner self.
+  const self = await loadOrCreateSelf(id);
   const chatMessages = [
-    { role: "system" as const, content: COMPANION_SYSTEM_PROMPT },
+    { role: "system" as const, content: composePersona(self) },
     ...recent.map((m) => ({
       role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
       content: m.content,
@@ -233,7 +247,36 @@ router.post("/conversations/:id/checkin", async (req, res) => {
     .values({ conversationId: id, role: "assistant", content: reply })
     .returning();
 
+  // A check-in is Empiri reaching out, not the user feeding it: persist the
+  // time-decay so striving keeps growing during quiet stretches (best-effort).
+  try {
+    await saveSelf(id, project(self));
+  } catch (err) {
+    req.log.error({ err }, "Failed to persist companion self decay");
+  }
+
   res.json(toApiMessage(assistantMessage));
+});
+
+// Peek at the companion's current inner self (drives, traits, interests, narrative)
+router.get("/conversations/:id/self", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, id));
+  if (!conversation) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  const self = await loadOrCreateSelf(id);
+  res.json(summarizeSelf(self));
 });
 
 export default router;

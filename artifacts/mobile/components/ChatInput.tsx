@@ -1,5 +1,7 @@
 import { Feather } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
   Platform,
@@ -9,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import { FONTS } from "@/constants/fonts";
 import { useColors } from "@/hooks/useColors";
 
 interface ChatInputProps {
@@ -50,11 +53,16 @@ export function ChatInput({
         style={[
           styles.inputRow,
           {
-            backgroundColor: colors.card,
-            borderColor: isRecording ? colors.primary : colors.border,
+            backgroundColor: colors.glass,
+            borderColor: isRecording ? colors.primary : colors.glassBorder,
           },
         ]}
       >
+        <BlurView
+          intensity={30}
+          tint={colors.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
         <TextInput
           style={[styles.input, { color: colors.foreground }]}
           placeholder={isRecording ? "Listening…" : "Message Empiri…"}
@@ -73,35 +81,58 @@ export function ChatInput({
             onPress={handleSend}
             disabled={busy}
             style={({ pressed }) => [
-              styles.button,
+              styles.buttonWrap,
               {
-                backgroundColor: colors.primary,
                 opacity: busy ? 0.5 : pressed ? 0.8 : 1,
+                shadowColor: colors.spectrum[1],
               },
             ]}
             testID="send-button"
           >
-            <Feather name="arrow-up" size={20} color={colors.primaryForeground} />
+            <LinearGradient
+              colors={colors.spectrum}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.button}
+            >
+              <Feather name="arrow-up" size={20} color="#FFFFFF" />
+            </LinearGradient>
           </Pressable>
         ) : (
           <Pressable
             onPress={handleMic}
             disabled={busy && !isRecording}
             style={({ pressed }) => [
-              styles.button,
+              styles.buttonWrap,
               {
-                backgroundColor: isRecording ? colors.destructive : colors.primary,
                 opacity: pressed ? 0.8 : 1,
                 transform: [{ scale: isRecording ? 1.05 : 1 }],
+                shadowColor: isRecording
+                  ? colors.destructive
+                  : colors.spectrum[1],
               },
             ]}
             testID="mic-button"
           >
-            <Feather
-              name={isRecording ? "square" : "mic"}
-              size={isRecording ? 18 : 20}
-              color={colors.primaryForeground}
-            />
+            {isRecording ? (
+              <View
+                style={[
+                  styles.button,
+                  { backgroundColor: colors.destructive },
+                ]}
+              >
+                <Feather name="square" size={18} color="#FFFFFF" />
+              </View>
+            ) : (
+              <LinearGradient
+                colors={colors.spectrum}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.button}
+              >
+                <Feather name="mic" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            )}
           </Pressable>
         )}
       </View>
@@ -118,11 +149,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     borderWidth: 1.5,
-    borderRadius: 26,
+    borderRadius: 28,
     paddingLeft: 18,
     paddingRight: 6,
     paddingVertical: 6,
     gap: 8,
+    overflow: "hidden",
   },
   input: {
     flex: 1,
@@ -131,12 +163,19 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     paddingTop: Platform.OS === "ios" ? 8 : 6,
     paddingBottom: Platform.OS === "ios" ? 8 : 6,
-    fontFamily: "Inter_400Regular",
+    fontFamily: FONTS.regular,
+  },
+  buttonWrap: {
+    borderRadius: 21,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+    elevation: 6,
   },
   button: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
   },

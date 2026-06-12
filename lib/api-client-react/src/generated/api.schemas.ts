@@ -68,6 +68,31 @@ export interface SpeechResult {
   format: string;
 }
 
+export interface CompanionDrive {
+  key: string;
+  level: number;
+  striving: number;
+}
+
+export interface CompanionTrait {
+  key: string;
+  value: number;
+}
+
+export interface CompanionInterest {
+  topic: string;
+  affinity: number;
+}
+
+export interface CompanionSelf {
+  drives: CompanionDrive[];
+  traits: CompanionTrait[];
+  interests: CompanionInterest[];
+  narrative: string[];
+  interactions: number;
+  ageHours: number;
+}
+
 export interface ApiError {
   error: string;
 }

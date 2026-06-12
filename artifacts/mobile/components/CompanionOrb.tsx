@@ -1,16 +1,8 @@
-import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect } from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
+import { useReducedMotion } from "react-native-reanimated";
 
+import { GlowBlob } from "@/components/GlowBlob";
 import { useColors } from "@/hooks/useColors";
 import type { CompanionStatus } from "@/contexts/CompanionContext";
 import type { MoodLabel } from "@/lib/mood";
@@ -21,156 +13,163 @@ interface CompanionOrbProps {
   size?: number;
 }
 
-const AnimatedGradient = Animated.createAnimatedComponent(LinearGradient);
-
-interface OrbConfig {
-  peak: number;
-  duration: number;
-  halo: number;
-  haloOp: number;
-  opacity: number;
+interface Dynamics {
+  /** Pace multiplier — higher is faster/more energetic. */
+  speed: number;
+  /** Brightness/presence multiplier. */
+  intensity: number;
+  /** Drift multiplier — how widely the light morphs. */
+  drift: number;
+  /** Extra brightness for the white core. */
+  coreBoost: number;
 }
 
-const MOOD_CONFIG: Record<MoodLabel, OrbConfig> = {
-  bright: { peak: 1.08, duration: 1500, halo: 1.4, haloOp: 0.42, opacity: 1 },
-  happy: { peak: 1.06, duration: 1900, halo: 1.32, haloOp: 0.36, opacity: 1 },
-  content: { peak: 1.05, duration: 2400, halo: 1.24, haloOp: 0.3, opacity: 0.96 },
-  low: { peak: 1.035, duration: 3400, halo: 1.16, haloOp: 0.2, opacity: 0.82 },
-  sleepy: { peak: 1.02, duration: 4600, halo: 1.1, haloOp: 0.13, opacity: 0.62 },
+// At rest the mood sets how alive and warm the presence feels.
+const MOOD_DYNAMICS: Record<MoodLabel, Dynamics> = {
+  bright: { speed: 1.25, intensity: 1.0, drift: 1.0, coreBoost: 1.0 },
+  happy: { speed: 1.1, intensity: 0.95, drift: 0.95, coreBoost: 0.95 },
+  content: { speed: 0.9, intensity: 0.88, drift: 0.85, coreBoost: 0.9 },
+  low: { speed: 0.65, intensity: 0.72, drift: 0.7, coreBoost: 0.78 },
+  sleepy: { speed: 0.5, intensity: 0.58, drift: 0.55, coreBoost: 0.66 },
 };
+
+// Active states are unmistakable — the presence quickens and brightens.
+const ACTIVE_DYNAMICS: Partial<Record<CompanionStatus, Dynamics>> = {
+  thinking: { speed: 1.9, intensity: 1.0, drift: 1.4, coreBoost: 1.15 },
+  transcribing: { speed: 1.9, intensity: 1.0, drift: 1.4, coreBoost: 1.15 },
+  listening: { speed: 2.5, intensity: 1.18, drift: 1.9, coreBoost: 1.3 },
+  speaking: { speed: 3.0, intensity: 1.12, drift: 1.7, coreBoost: 1.25 },
+};
+
+const BASE_DURATION = 4200;
 
 export function CompanionOrb({
   status,
   mood = "content",
-  size = 132,
+  size = 120,
 }: CompanionOrbProps) {
   const colors = useColors();
-  const scale = useSharedValue(1);
-  const haloScale = useSharedValue(1);
-  const haloOpacity = useSharedValue(0.5);
-  const coreOpacity = useSharedValue(1);
+  const reduceMotion = useReducedMotion();
 
-  useEffect(() => {
-    cancelAnimation(scale);
-    cancelAnimation(haloScale);
-    cancelAnimation(haloOpacity);
-    cancelAnimation(coreOpacity);
+  const dyn = ACTIVE_DYNAMICS[status] ?? MOOD_DYNAMICS[mood];
+  const dur = (mult: number) => Math.round((BASE_DURATION / dyn.speed) * mult);
+  const [blue, purple, pink, orange] = colors.spectrum;
 
-    // Active states get their own lively rhythm; at rest the companion's
-    // mood drives how bright and bouncy it looks.
-    const config: OrbConfig = (() => {
-      switch (status) {
-        case "thinking":
-        case "transcribing":
-          return { peak: 1.08, duration: 620, halo: 1.35, haloOp: 0.35, opacity: 1 };
-        case "listening":
-          return { peak: 1.16, duration: 480, halo: 1.6, haloOp: 0.45, opacity: 1 };
-        case "speaking":
-          return { peak: 1.12, duration: 360, halo: 1.45, haloOp: 0.4, opacity: 1 };
-        default:
-          return MOOD_CONFIG[mood];
-      }
-    })();
+  // A faded companion cools toward blue/violet; an awake one glows warm.
+  const warm = dyn.intensity >= 0.85;
 
-    coreOpacity.value = withTiming(config.opacity, { duration: 600 });
+  const wrap = size * 1.85;
 
-    scale.value = withRepeat(
-      withSequence(
-        withTiming(config.peak, {
-          duration: config.duration,
-          easing: Easing.inOut(Easing.ease),
-        }),
-        withTiming(1, {
-          duration: config.duration,
-          easing: Easing.inOut(Easing.ease),
-        }),
-      ),
-      -1,
-      false,
-    );
-
-    haloScale.value = withRepeat(
-      withSequence(
-        withTiming(config.halo, {
-          duration: config.duration,
-          easing: Easing.out(Easing.ease),
-        }),
-        withTiming(1, {
-          duration: config.duration,
-          easing: Easing.in(Easing.ease),
-        }),
-      ),
-      -1,
-      false,
-    );
-
-    haloOpacity.value = withRepeat(
-      withSequence(
-        withTiming(config.haloOp, { duration: config.duration }),
-        withTiming(0.12, { duration: config.duration }),
-      ),
-      -1,
-      false,
-    );
-  }, [status, mood, scale, haloScale, haloOpacity, coreOpacity]);
-
-  const coreStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: coreOpacity.value,
-  }));
-
-  const haloStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: haloScale.value }],
-    opacity: haloOpacity.value,
-  }));
-
-  // A faded companion cools toward muted tones; a happy one glows warm.
-  const isResting = status === "idle";
-  const dim = isResting && (mood === "sleepy" || mood === "low");
-  const gradientColors: [string, string] = dim
-    ? [colors.secondary, colors.accent]
-    : [colors.accent, colors.primary];
+  // Stable-ish layout offsets so blobs overlap and mix into one presence.
+  const blobs = useMemo(
+    () => [
+      {
+        id: "orb-halo",
+        color: purple,
+        size: size * 1.6,
+        offX: 0,
+        offY: 0,
+        durMult: 1.5,
+        delay: 0,
+        drift: 10,
+        scaleTo: 1.12,
+        op: 0.45 * dyn.intensity,
+        innerStop: 40,
+      },
+      {
+        id: "orb-blue",
+        color: blue,
+        size: size * 1.05,
+        offX: -size * 0.22,
+        offY: -size * 0.16,
+        durMult: 1.0,
+        delay: 0,
+        drift: 16,
+        scaleTo: 1.16,
+        op: 0.9 * dyn.intensity,
+        innerStop: 55,
+      },
+      {
+        id: "orb-purple",
+        color: purple,
+        size: size * 1.05,
+        offX: size * 0.2,
+        offY: -size * 0.1,
+        durMult: 0.85,
+        delay: 300,
+        drift: 18,
+        scaleTo: 1.2,
+        op: 0.9 * dyn.intensity,
+        innerStop: 55,
+      },
+      {
+        id: "orb-pink",
+        color: pink,
+        size: size,
+        offX: size * 0.16,
+        offY: size * 0.2,
+        durMult: 0.95,
+        delay: 600,
+        drift: 17,
+        scaleTo: 1.18,
+        op: (warm ? 0.85 : 0.5) * dyn.intensity,
+        innerStop: 55,
+      },
+      {
+        id: "orb-orange",
+        color: orange,
+        size: size * 0.9,
+        offX: -size * 0.18,
+        offY: size * 0.18,
+        durMult: 1.1,
+        delay: 900,
+        drift: 15,
+        scaleTo: 1.16,
+        op: (warm ? 0.7 : 0.32) * dyn.intensity,
+        innerStop: 55,
+      },
+    ],
+    [size, blue, purple, pink, orange, warm, dyn.intensity],
+  );
 
   return (
-    <View style={[styles.wrap, { width: size * 1.7, height: size * 1.7 }]}>
-      <Animated.View
-        style={[
-          styles.halo,
-          haloStyle,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: colors.accent,
-          },
-        ]}
-      />
-      <AnimatedGradient
-        colors={gradientColors}
-        start={{ x: 0.2, y: 0 }}
-        end={{ x: 0.8, y: 1 }}
-        style={[
-          styles.core,
-          coreStyle,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            shadowColor: colors.primary,
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.shine,
-            {
-              width: size * 0.32,
-              height: size * 0.32,
-              borderRadius: size * 0.16,
-            },
-          ]}
+    <View style={[styles.wrap, { width: wrap, height: wrap }]}>
+      {blobs.map((b) => (
+        <GlowBlob
+          key={b.id}
+          id={b.id}
+          color={b.color}
+          size={b.size}
+          duration={dur(b.durMult)}
+          delay={b.delay}
+          drift={b.drift * dyn.drift}
+          scaleTo={b.scaleTo}
+          opacity={Math.min(1, b.op)}
+          innerStop={b.innerStop}
+          reduceMotion={reduceMotion}
+          style={{
+            left: wrap / 2 - b.size / 2 + b.offX,
+            top: wrap / 2 - b.size / 2 + b.offY,
+          }}
         />
-      </AnimatedGradient>
+      ))}
+
+      {/* Bright living core */}
+      <GlowBlob
+        id="orb-core"
+        color={colors.presenceCore}
+        size={size * 0.62}
+        duration={dur(0.7)}
+        drift={6 * dyn.drift}
+        scaleTo={1.14}
+        opacity={Math.min(1, 0.85 * dyn.coreBoost)}
+        innerStop={45}
+        reduceMotion={reduceMotion}
+        style={{
+          left: wrap / 2 - (size * 0.62) / 2,
+          top: wrap / 2 - (size * 0.62) / 2,
+        }}
+      />
     </View>
   );
 }
@@ -179,22 +178,5 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
     justifyContent: "center",
-  },
-  halo: {
-    position: "absolute",
-  },
-  core: {
-    alignItems: "center",
-    justifyContent: "center",
-    shadowOpacity: 0.45,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 12,
-  },
-  shine: {
-    position: "absolute",
-    top: "18%",
-    left: "20%",
-    backgroundColor: "rgba(255,255,255,0.45)",
   },
 });

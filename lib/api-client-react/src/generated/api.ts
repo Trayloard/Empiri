@@ -22,6 +22,7 @@ import type {
 import type {
   ApiError,
   CheckInInput,
+  CompanionSelf,
   Conversation,
   ConversationInput,
   HealthStatus,
@@ -415,6 +416,84 @@ export const useCompanionCheckIn = <TError = ErrorType<ApiError>,
       > => {
       return useMutation(getCompanionCheckInMutationOptions(options));
     }
+
+export const getGetCompanionSelfUrl = (id: number,) => {
+
+
+
+
+  return `/api/conversations/${id}/self`
+}
+
+/**
+ * Returns a friendly summary of the companion's evolving inner self (drives, traits, interests, and self-narrative) for the given conversation.
+ * @summary Get the companion's current inner self
+ */
+export const getCompanionSelf = async (id: number, options?: RequestInit): Promise<CompanionSelf> => {
+
+  return customFetch<CompanionSelf>(getGetCompanionSelfUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompanionSelfQueryKey = (id: number,) => {
+    return [
+    `/api/conversations/${id}/self`
+    ] as const;
+    }
+
+
+export const getGetCompanionSelfQueryOptions = <TData = Awaited<ReturnType<typeof getCompanionSelf>>, TError = ErrorType<ApiError>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanionSelf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompanionSelfQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompanionSelf>>> = ({ signal }) => getCompanionSelf(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompanionSelf>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCompanionSelfQueryResult = NonNullable<Awaited<ReturnType<typeof getCompanionSelf>>>
+export type GetCompanionSelfQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get the companion's current inner self
+ */
+
+export function useGetCompanionSelf<TData = Awaited<ReturnType<typeof getCompanionSelf>>, TError = ErrorType<ApiError>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanionSelf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCompanionSelfQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getTranscribeAudioUrl = () => {
 

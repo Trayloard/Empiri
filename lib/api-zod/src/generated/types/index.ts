@@ -8,6 +8,10 @@
 
 export * from './apiError';
 export * from './checkInInput';
+export * from './companionDrive';
+export * from './companionInterest';
+export * from './companionSelf';
+export * from './companionTrait';
 export * from './conversation';
 export * from './conversationInput';
 export * from './healthStatus';
