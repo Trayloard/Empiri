@@ -1,5 +1,6 @@
 - [Voice on Expo mobile](voice-on-expo.md) — record with expo-audio + base64 to your own OpenAI STT/TTS endpoints; MediaRecorder web libs don't work in RN; native-first, web degrades.
 - [Monorepo typecheck gotchas](monorepo-typecheck-gotchas.md) — root `pnpm run typecheck` has a pre-existing mockup-sandbox failure (dup @types/react); rebuild libs first.
 - [Companion DB schema drift](companion-db-schema-drift.md) — API 500 on conversation insert? isolated-env DB has columns not in Drizzle schema; run `pnpm --filter @workspace/db run push`.
+- [video-js tsconfig DOM lib](video-js-scaffold-tsconfig-dom.md) — video artifact typecheck fails on window/document/audio; add `lib:["es2022","dom","dom.iterable"]` to the artifact tsconfig, not the base.
 - [Reanimated SharedValue type](reanimated-shared-value-type.md) — reanimated v4: import `type SharedValue` directly; `Animated.SharedValue` doesn't exist and fails tsc.
 - [Empiri evolving self](neurobrane-self.md) — persona is composed at request time from a server-persisted evolving self (lib/neurobrane + companion_selves), not a hardcoded prompt.
