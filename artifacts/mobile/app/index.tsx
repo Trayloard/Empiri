@@ -33,6 +33,7 @@ import { PresenceStatusLine } from "@/components/PresenceStatusLine";
 import { FONTS } from "@/constants/fonts";
 import { useCompanion } from "@/contexts/CompanionContext";
 import { useColors } from "@/hooks/useColors";
+import { useCompanionTraits } from "@/hooks/useCompanionTraits";
 import type { MoodLabel } from "@/lib/mood";
 
 function moodLabel(mood: MoodLabel): string {
@@ -102,6 +103,7 @@ export default function CompanionScreen() {
     dismissError,
   } = useCompanion();
 
+  const traits = useCompanionTraits(conversationId);
   const [peekVisible, setPeekVisible] = useState(false);
 
   // First-launch "wake up": the presence blooms into view, then settles into
@@ -173,7 +175,7 @@ export default function CompanionScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-      <AmbientGlow status={status} />
+      <AmbientGlow status={status} traits={traits} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior="padding"
@@ -241,7 +243,7 @@ export default function CompanionScreen() {
               accessibilityLabel="Peek inside Empiri"
               hitSlop={8}
             >
-              <CompanionOrb status={status} mood={mood.label} size={120} />
+              <CompanionOrb status={status} mood={mood.label} size={120} traits={traits} />
             </Pressable>
             <Text style={[styles.name, { color: colors.foreground }]}>
               Empiri

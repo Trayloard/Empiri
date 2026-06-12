@@ -11,9 +11,15 @@ import Animated, {
 import { GlowBlob } from "@/components/GlowBlob";
 import { useColors } from "@/hooks/useColors";
 import type { CompanionStatus } from "@/contexts/CompanionContext";
+import {
+  NEUTRAL_INFLUENCE,
+  type TraitInfluence,
+} from "@/lib/traitInfluence";
 
 interface AmbientGlowProps {
   status: CompanionStatus;
+  /** Personality-derived influence — layered on top of mood/activity dynamics. */
+  traits?: TraitInfluence;
 }
 
 /**
@@ -21,15 +27,31 @@ interface AmbientGlowProps {
  * whole screen, so the app always feels awake. It breathes gently at rest and
  * intensifies + quickens during active states (listening / thinking /
  * speaking). Pointer-transparent and purely decorative.
+ *
+ * Empiri's evolving personality subtly shapes the glow: a warmer companion
+ * warms the palette, a livelier one breathes a little faster, and a curious
+ * one glows a touch brighter — all layered on top of the activity dynamics.
  */
-export function AmbientGlow({ status }: AmbientGlowProps) {
+export function AmbientGlow({
+  status,
+  traits = NEUTRAL_INFLUENCE,
+}: AmbientGlowProps) {
   const colors = useColors();
   const reduceMotion = useReducedMotion();
   const { width, height } = useWindowDimensions();
 
   const active = status !== "idle";
-  const intensity = active ? 1 : 0.6;
-  const speed = active ? (status === "listening" ? 2.2 : 1.8) : 1;
+  const baseIntensity = active ? 1 : 0.6;
+  const baseSpeed = active ? (status === "listening" ? 2.2 : 1.8) : 1;
+
+  // Layer trait influence on top of activity dynamics.
+  const intensity = Math.min(1, baseIntensity + traits.glowBoost * 0.7);
+  const speed = baseSpeed * (1 + traits.livelinessBoost * 0.45);
+
+  // Warm-palette shift: boost pink, soften blue when warmth is high.
+  const warmBoost = Math.max(0, traits.warmthShift);
+  const coolDamp = Math.max(0, -traits.warmthShift);
+
   const dur = (base: number) => Math.round(base / speed);
 
   // On cold start the ambient field blooms in so the app wakes up gently.
@@ -58,6 +80,7 @@ export function AmbientGlow({ status }: AmbientGlowProps) {
         top: -height * 0.12,
         duration: dur(7000),
         drift: 26,
+        // Purple is neutral on the warm/cool axis — intensity drives it
         op: 0.5 * intensity,
         delay: 0,
       },
@@ -69,7 +92,8 @@ export function AmbientGlow({ status }: AmbientGlowProps) {
         top: height * 0.18,
         duration: dur(8000),
         drift: 30,
-        op: 0.4 * intensity,
+        // Blue recedes as warmth trait rises
+        op: Math.max(0.15, 0.4 * intensity - coolDamp * 0.25),
         delay: 400,
       },
       {
@@ -80,7 +104,8 @@ export function AmbientGlow({ status }: AmbientGlowProps) {
         top: height * 0.06,
         duration: dur(9000),
         drift: 28,
-        op: 0.38 * intensity,
+        // Pink is boosted by warmth trait
+        op: Math.min(0.75, 0.38 * intensity + warmBoost * 0.3),
         delay: 900,
       },
       {
@@ -91,11 +116,11 @@ export function AmbientGlow({ status }: AmbientGlowProps) {
         top: height * 0.72,
         duration: dur(9500),
         drift: 24,
-        op: 0.3 * intensity,
+        op: Math.max(0.1, 0.3 * intensity - coolDamp * 0.2),
         delay: 1300,
       },
     ],
-    [width, height, blue, purple, pink, intensity, speed],
+    [width, height, blue, purple, pink, intensity, speed, warmBoost, coolDamp],
   );
 
   return (

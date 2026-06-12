@@ -93,6 +93,18 @@ export interface CompanionSelf {
   ageHours: number;
 }
 
+export interface CompanionSelfSnapshot {
+  capturedAt: string;
+  interactions: number;
+  drives: CompanionDrive[];
+  traits: CompanionTrait[];
+  interests: CompanionInterest[];
+}
+
+export interface CompanionSelfHistory {
+  snapshots: CompanionSelfSnapshot[];
+}
+
 export interface ApiError {
   error: string;
 }

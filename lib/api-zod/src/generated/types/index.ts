@@ -11,6 +11,8 @@ export * from './checkInInput';
 export * from './companionDrive';
 export * from './companionInterest';
 export * from './companionSelf';
+export * from './companionSelfHistory';
+export * from './companionSelfSnapshot';
 export * from './companionTrait';
 export * from './conversation';
 export * from './conversationInput';

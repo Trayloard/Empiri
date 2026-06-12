@@ -125,6 +125,35 @@ export const GetCompanionSelfResponse = zod.object({
 
 
 /**
+ * Returns the timeline of inner-self snapshots (drives, traits, and emerging curiosities) captured over the life of the conversation, oldest first.
+ * @summary Get how the companion has grown over time
+ */
+export const GetCompanionSelfHistoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCompanionSelfHistoryResponse = zod.object({
+  "snapshots": zod.array(zod.object({
+  "capturedAt": zod.coerce.date(),
+  "interactions": zod.number(),
+  "drives": zod.array(zod.object({
+  "key": zod.string(),
+  "level": zod.number(),
+  "striving": zod.number()
+})),
+  "traits": zod.array(zod.object({
+  "key": zod.string(),
+  "value": zod.number()
+})),
+  "interests": zod.array(zod.object({
+  "topic": zod.string(),
+  "affinity": zod.number()
+}))
+}))
+})
+
+
+/**
  * @summary Transcribe recorded audio into text
  */
 export const TranscribeAudioBody = zod.object({

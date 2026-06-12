@@ -23,6 +23,7 @@ import type {
   ApiError,
   CheckInInput,
   CompanionSelf,
+  CompanionSelfHistory,
   Conversation,
   ConversationInput,
   HealthStatus,
@@ -483,6 +484,84 @@ export function useGetCompanionSelf<TData = Awaited<ReturnType<typeof getCompani
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCompanionSelfQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCompanionSelfHistoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/conversations/${id}/self/history`
+}
+
+/**
+ * Returns the timeline of inner-self snapshots (drives, traits, and emerging curiosities) captured over the life of the conversation, oldest first.
+ * @summary Get how the companion has grown over time
+ */
+export const getCompanionSelfHistory = async (id: number, options?: RequestInit): Promise<CompanionSelfHistory> => {
+
+  return customFetch<CompanionSelfHistory>(getGetCompanionSelfHistoryUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompanionSelfHistoryQueryKey = (id: number,) => {
+    return [
+    `/api/conversations/${id}/self/history`
+    ] as const;
+    }
+
+
+export const getGetCompanionSelfHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getCompanionSelfHistory>>, TError = ErrorType<ApiError>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanionSelfHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompanionSelfHistoryQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompanionSelfHistory>>> = ({ signal }) => getCompanionSelfHistory(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompanionSelfHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCompanionSelfHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getCompanionSelfHistory>>>
+export type GetCompanionSelfHistoryQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get how the companion has grown over time
+ */
+
+export function useGetCompanionSelfHistory<TData = Awaited<ReturnType<typeof getCompanionSelfHistory>>, TError = ErrorType<ApiError>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanionSelfHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCompanionSelfHistoryQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

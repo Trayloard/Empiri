@@ -6,11 +6,17 @@ import { GlowBlob } from "@/components/GlowBlob";
 import { useColors } from "@/hooks/useColors";
 import type { CompanionStatus } from "@/contexts/CompanionContext";
 import type { MoodLabel } from "@/lib/mood";
+import {
+  NEUTRAL_INFLUENCE,
+  type TraitInfluence,
+} from "@/lib/traitInfluence";
 
 interface CompanionOrbProps {
   status: CompanionStatus;
   mood?: MoodLabel;
   size?: number;
+  /** Personality-derived influence — layered on top of mood/activity dynamics. */
+  traits?: TraitInfluence;
 }
 
 interface Dynamics {
@@ -47,16 +53,32 @@ export function CompanionOrb({
   status,
   mood = "content",
   size = 120,
+  traits = NEUTRAL_INFLUENCE,
 }: CompanionOrbProps) {
   const colors = useColors();
   const reduceMotion = useReducedMotion();
 
-  const dyn = ACTIVE_DYNAMICS[status] ?? MOOD_DYNAMICS[mood];
+  const baseDyn = ACTIVE_DYNAMICS[status] ?? MOOD_DYNAMICS[mood];
+
+  // Layer trait influence on top of mood/activity dynamics.
+  // All adjustments stay subtle — they shift perception, not override it.
+  const dyn: Dynamics = {
+    speed: baseDyn.speed * (1 + traits.livelinessBoost * 0.6),
+    intensity: Math.min(1, baseDyn.intensity + traits.glowBoost),
+    drift: baseDyn.drift * (1 + traits.livelinessBoost * 0.5),
+    coreBoost: Math.min(1.35, baseDyn.coreBoost + traits.glowBoost * 0.5),
+  };
+
   const dur = (mult: number) => Math.round((BASE_DURATION / dyn.speed) * mult);
   const [blue, purple, pink, orange] = colors.spectrum;
 
   // A faded companion cools toward blue/violet; an awake one glows warm.
-  const warm = dyn.intensity >= 0.85;
+  // A high-warmth personality lowers the threshold for warm tones.
+  const warmThreshold = 0.85 - traits.warmthShift * 1.5;
+  const warm = dyn.intensity >= warmThreshold;
+
+  // Warm-tone opacity boost from personality (additive, clamped at 1).
+  const warmBoost = traits.warmthShift * 0.4;
 
   const wrap = size * 1.85;
 
@@ -86,7 +108,8 @@ export function CompanionOrb({
         delay: 0,
         drift: 16,
         scaleTo: 1.16,
-        op: 0.9 * dyn.intensity,
+        // Cool blues recede slightly when warmth trait is high
+        op: Math.max(0.3, 0.9 * dyn.intensity - warmBoost * 0.5),
         innerStop: 55,
       },
       {
@@ -99,7 +122,7 @@ export function CompanionOrb({
         delay: 300,
         drift: 18,
         scaleTo: 1.2,
-        op: 0.9 * dyn.intensity,
+        op: Math.max(0.35, 0.9 * dyn.intensity - warmBoost * 0.25),
         innerStop: 55,
       },
       {
@@ -112,7 +135,7 @@ export function CompanionOrb({
         delay: 600,
         drift: 17,
         scaleTo: 1.18,
-        op: (warm ? 0.85 : 0.5) * dyn.intensity,
+        op: Math.min(1, (warm ? 0.85 : 0.5) * dyn.intensity + warmBoost),
         innerStop: 55,
       },
       {
@@ -125,11 +148,11 @@ export function CompanionOrb({
         delay: 900,
         drift: 15,
         scaleTo: 1.16,
-        op: (warm ? 0.7 : 0.32) * dyn.intensity,
+        op: Math.min(1, (warm ? 0.7 : 0.32) * dyn.intensity + warmBoost * 0.8),
         innerStop: 55,
       },
     ],
-    [size, blue, purple, pink, orange, warm, dyn.intensity],
+    [size, blue, purple, pink, orange, warm, warmBoost, dyn.intensity],
   );
 
   return (

@@ -168,6 +168,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /conversations/{id}/self/history:
+    get:
+      operationId: getCompanionSelfHistory
+      tags: [companion]
+      summary: Get how the companion has grown over time
+      description: Returns the timeline of inner-self snapshots (drives, traits, and emerging curiosities) captured over the life of the conversation, oldest first.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The companion's inner-self snapshot timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionSelfHistory"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /voice/transcribe:
     post:
       operationId: transcribeAudio
@@ -405,6 +430,41 @@ components:
         - narrative
         - interactions
         - ageHours
+    CompanionSelfSnapshot:
+      type: object
+      properties:
+        capturedAt:
+          type: string
+          format: date-time
+        interactions:
+          type: integer
+        drives:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionDrive"
+        traits:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionTrait"
+        interests:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionInterest"
+      required:
+        - capturedAt
+        - interactions
+        - drives
+        - traits
+        - interests
+    CompanionSelfHistory:
+      type: object
+      properties:
+        snapshots:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionSelfSnapshot"
+      required:
+        - snapshots
     ApiError:
       type: object
       properties:

@@ -31,6 +31,10 @@ import Svg, { Path } from "react-native-svg";
 
 import { FONTS } from "@/constants/fonts";
 
+import { GrowthTimeline } from "./GrowthTimeline";
+
+type SheetMode = "mind" | "growth";
+
 interface InnerSelfSheetProps {
   visible: boolean;
   conversationId: number | null;
@@ -456,6 +460,16 @@ export function InnerSelfSheet({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState<GNode | null>(null);
+  const [mode, setMode] = useState<SheetMode>("mind");
+
+  const switchMode = (next: SheetMode) => {
+    if (next === mode) return;
+    if (Platform.OS !== "web") {
+      Haptics.selectionAsync().catch(() => {});
+    }
+    setSelected(null);
+    setMode(next);
+  };
 
   useEffect(() => {
     if (!visible || conversationId == null) return;
@@ -477,9 +491,12 @@ export function InnerSelfSheet({
     };
   }, [visible, conversationId]);
 
-  // Reset the open detail card whenever the map is dismissed.
+  // Reset the open detail card and view mode whenever the sheet is dismissed.
   useEffect(() => {
-    if (!visible) setSelected(null);
+    if (!visible) {
+      setSelected(null);
+      setMode("mind");
+    }
   }, [visible]);
 
   // One shared heartbeat drives every node's glow.
@@ -583,71 +600,126 @@ export function InnerSelfSheet({
           </View>
         </View>
 
-        <View style={styles.caption}>
-          <Text style={styles.captionTitle}>EMPIRI&apos;S MIND</Text>
-          <Text style={styles.captionSub}>tap a node to look closer</Text>
+        <View style={styles.segmentWrap}>
+          <View style={styles.segment}>
+            {(["mind", "growth"] as SheetMode[]).map((m) => {
+              const active = mode === m;
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => switchMode(m)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={m === "mind" ? "Mind map" : "How I've grown"}
+                  testID={`mode-${m}`}
+                  style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                >
+                  <Feather
+                    name={m === "mind" ? "share-2" : "trending-up"}
+                    size={13}
+                    color={active ? "#0A0B12" : "rgba(255,255,255,0.6)"}
+                  />
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      active && styles.segmentTextActive,
+                    ]}
+                  >
+                    {m === "mind" ? "MIND" : "GROWTH"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        {loading || conversationId == null ? (
-          <View style={styles.statePad}>
-            <ActivityIndicator color="#B58CFF" />
-          </View>
-        ) : error || !self || !graph ? (
-          <View style={styles.statePad}>
-            <Feather name="cloud-off" size={28} color="rgba(255,255,255,0.5)" />
-            <Text style={styles.stateText}>Couldn&apos;t peek inside just now.</Text>
-          </View>
-        ) : (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingBottom: insets.bottom + (selected ? 260 : 48) },
-            ]}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={{ width: graph.width, height: graph.height }}>
-              <Svg
-                width={graph.width}
-                height={graph.height}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              >
-                {wires.map((w) => (
-                  <Path
-                    key={`glow-${w.key}`}
-                    d={w.d}
-                    stroke={w.color}
-                    strokeOpacity={0.08}
-                    strokeWidth={w.spine ? 7 : 5}
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                ))}
-                {wires.map((w) => (
-                  <Path
-                    key={w.key}
-                    d={w.d}
-                    stroke={w.color}
-                    strokeOpacity={w.spine ? 0.5 : 0.28}
-                    strokeWidth={w.spine ? 2 : 1.4}
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                ))}
-              </Svg>
-
-              {graph.nodes.map((n) => (
-                <NodeView
-                  key={n.id}
-                  node={n}
-                  pulse={pulse}
-                  reduceMotion={reduceMotion}
-                  onPress={setSelected}
-                />
-              ))}
+        {mode === "mind" ? (
+          <>
+            <View style={styles.caption}>
+              <Text style={styles.captionTitle}>EMPIRI&apos;S MIND</Text>
+              <Text style={styles.captionSub}>tap a node to look closer</Text>
             </View>
-          </ScrollView>
+
+            {loading || conversationId == null ? (
+              <View style={styles.statePad}>
+                <ActivityIndicator color="#B58CFF" />
+              </View>
+            ) : error || !self || !graph ? (
+              <View style={styles.statePad}>
+                <Feather
+                  name="cloud-off"
+                  size={28}
+                  color="rgba(255,255,255,0.5)"
+                />
+                <Text style={styles.stateText}>
+                  Couldn&apos;t peek inside just now.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={[
+                  styles.scrollContent,
+                  { paddingBottom: insets.bottom + (selected ? 260 : 48) },
+                ]}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={{ width: graph.width, height: graph.height }}>
+                  <Svg
+                    width={graph.width}
+                    height={graph.height}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                  >
+                    {wires.map((w) => (
+                      <Path
+                        key={`glow-${w.key}`}
+                        d={w.d}
+                        stroke={w.color}
+                        strokeOpacity={0.08}
+                        strokeWidth={w.spine ? 7 : 5}
+                        fill="none"
+                        strokeLinecap="round"
+                      />
+                    ))}
+                    {wires.map((w) => (
+                      <Path
+                        key={w.key}
+                        d={w.d}
+                        stroke={w.color}
+                        strokeOpacity={w.spine ? 0.5 : 0.28}
+                        strokeWidth={w.spine ? 2 : 1.4}
+                        fill="none"
+                        strokeLinecap="round"
+                      />
+                    ))}
+                  </Svg>
+
+                  {graph.nodes.map((n) => (
+                    <NodeView
+                      key={n.id}
+                      node={n}
+                      pulse={pulse}
+                      reduceMotion={reduceMotion}
+                      onPress={setSelected}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+          </>
+        ) : (
+          <>
+            <View style={styles.caption}>
+              <Text style={styles.captionTitle}>HOW I&apos;VE GROWN</Text>
+              <Text style={styles.captionSub}>my inner self, over time</Text>
+            </View>
+            <GrowthTimeline
+              conversationId={conversationId}
+              self={self}
+              bottomInset={insets.bottom}
+            />
+          </>
         )}
 
         {/* Detail card */}
@@ -781,6 +853,39 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1.5,
     color: "#5FE0C0",
+  },
+  segmentWrap: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  segment: {
+    flexDirection: "row",
+    padding: 3,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  segmentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    height: 30,
+    borderRadius: 12,
+  },
+  segmentBtnActive: {
+    backgroundColor: "#E7E9F5",
+  },
+  segmentText: {
+    fontFamily: MONO,
+    fontSize: 11,
+    letterSpacing: 1.5,
+    color: "rgba(255,255,255,0.6)",
+  },
+  segmentTextActive: {
+    color: "#0A0B12",
   },
   caption: {
     alignItems: "center",

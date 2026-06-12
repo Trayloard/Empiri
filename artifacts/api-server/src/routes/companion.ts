@@ -15,6 +15,7 @@ import {
   SendMessageBody,
 } from "@workspace/api-zod";
 import { loadOrCreateSelf, saveSelf } from "../lib/companionSelf";
+import { getSelfHistory, maybeSnapshotSelf } from "../lib/selfSnapshots";
 
 const router: IRouter = Router();
 
@@ -159,6 +160,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
   try {
     const evolved = evolve(self, deriveMessageSignal(content));
     await saveSelf(id, evolved);
+    await maybeSnapshotSelf(id, evolved);
   } catch (err) {
     req.log.error({ err }, "Failed to evolve companion self");
   }
@@ -250,7 +252,9 @@ router.post("/conversations/:id/checkin", async (req, res) => {
   // A check-in is Empiri reaching out, not the user feeding it: persist the
   // time-decay so striving keeps growing during quiet stretches (best-effort).
   try {
-    await saveSelf(id, project(self));
+    const projected = project(self);
+    await saveSelf(id, projected);
+    await maybeSnapshotSelf(id, projected);
   } catch (err) {
     req.log.error({ err }, "Failed to persist companion self decay");
   }
@@ -277,6 +281,28 @@ router.get("/conversations/:id/self", async (req, res) => {
 
   const self = await loadOrCreateSelf(id);
   res.json(summarizeSelf(self));
+});
+
+// See how the companion has grown: the timeline of inner-self snapshots
+// (drives, traits, emerging curiosities) captured over the life of the chat.
+router.get("/conversations/:id/self/history", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, id));
+  if (!conversation) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  const snapshots = await getSelfHistory(id);
+  res.json({ snapshots });
 });
 
 export default router;
