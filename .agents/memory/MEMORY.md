@@ -5,3 +5,4 @@
 - [video-js tsconfig DOM lib](video-js-scaffold-tsconfig-dom.md) — video artifact typecheck fails on window/document/audio; add `lib:["es2022","dom","dom.iterable"]` to the artifact tsconfig, not the base.
 - [Reanimated SharedValue type](reanimated-shared-value-type.md) — reanimated v4: import `type SharedValue` directly; `Animated.SharedValue` doesn't exist and fails tsc.
 - [Empiri evolving self](neurobrane-self.md) — persona is composed at request time from a server-persisted evolving self (lib/neurobrane + companion_selves), not a hardcoded prompt.
+- [Empiri check-in cadence vs bell](empiri-checkin-cadence.md) — keep cadence + notification bell as two persisted prefs; couple only at the off boundary; never merge into one.

@@ -41,8 +41,30 @@ const STAT_FLOOR = 5;
 const MOOD_BOOST = 30;
 const ENERGY_BOOST = 35;
 
-/** Hours of silence after which the companion proactively reaches out. */
-export const CHECK_IN_AFTER_HOURS = 6;
+/** How often Empiri proactively reaches out, chosen by the user. */
+export type CheckInCadence = "off" | "daily" | "frequent";
+
+/**
+ * Hours of silence after which the companion reaches out, per cadence. `null`
+ * means "never" — Empiri waits for you to say hi first. `frequent` keeps the
+ * original "a few times a day" feel.
+ */
+const CADENCE_HOURS: Record<CheckInCadence, number | null> = {
+  off: null,
+  daily: 24,
+  frequent: 6,
+};
+
+/** Hours threshold for a cadence, or `null` when proactive outreach is off. */
+export function cadenceHours(cadence: CheckInCadence): number | null {
+  return CADENCE_HOURS[cadence];
+}
+
+/** The cadence assumed before the user has chosen one (matches the original feel). */
+export const DEFAULT_CADENCE: CheckInCadence = "frequent";
+
+/** Hours of silence after which the companion proactively reaches out (the "frequent" cadence). */
+export const CHECK_IN_AFTER_HOURS = CADENCE_HOURS.frequent as number;
 
 function clamp(value: number, min = 0, max = 100): number {
   return Math.min(max, Math.max(min, value));
@@ -107,12 +129,18 @@ export function registerInteraction(
   };
 }
 
-/** Whether enough time has passed to warrant a proactive check-in. */
+/**
+ * Whether enough quiet time has passed to warrant a proactive check-in, given
+ * the user's chosen cadence. An "off" cadence never checks in.
+ */
 export function shouldCheckIn(
   state: CompanionMoodState,
+  cadence: CheckInCadence,
   now: number = Date.now(),
 ): boolean {
-  return (now - state.lastInteraction) / HOUR_MS >= CHECK_IN_AFTER_HOURS;
+  const hours = cadenceHours(cadence);
+  if (hours == null) return false;
+  return (now - state.lastInteraction) / HOUR_MS >= hours;
 }
 
 /** A short, human description of the mood for prompts/UI copy. */

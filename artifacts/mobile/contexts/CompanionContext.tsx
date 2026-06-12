@@ -27,11 +27,13 @@ import React, {
 import { Platform } from "react-native";
 
 import {
-  CHECK_IN_AFTER_HOURS,
+  cadenceHours,
   computeMood,
+  DEFAULT_CADENCE,
   freshMoodState,
   registerInteraction,
   shouldCheckIn,
+  type CheckInCadence,
   type CompanionMoodState,
   type ComputedMood,
 } from "@/lib/mood";
@@ -63,6 +65,7 @@ interface CompanionContextValue {
   status: CompanionStatus;
   voiceEnabled: boolean;
   notificationsEnabled: boolean;
+  checkInCadence: CheckInCadence;
   mood: ComputedMood;
   conversationId: number | null;
   initializing: boolean;
@@ -76,6 +79,7 @@ interface CompanionContextValue {
   stopListening: () => Promise<void>;
   toggleVoice: () => void;
   toggleNotifications: () => Promise<void>;
+  setCheckInCadence: (cadence: CheckInCadence) => Promise<void>;
   retryInit: () => void;
   dismissError: () => void;
 }
@@ -88,6 +92,7 @@ const CONVERSATION_KEY = "empiri.conversationId";
 const VOICE_KEY = "empiri.voiceEnabled";
 const MOOD_KEY = "empiri.moodState";
 const NOTIF_KEY = "empiri.notificationsEnabled";
+const CADENCE_KEY = "empiri.checkInCadence";
 
 const NUDGE_BODY = "I've been thinking about you — come say hi when you can. 🧡";
 
@@ -122,6 +127,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(true);
   const [notificationsEnabled, setNotificationsEnabled] =
     useState<boolean>(false);
+  const [checkInCadence, setCheckInCadenceState] =
+    useState<CheckInCadence>(DEFAULT_CADENCE);
   const [moodState, setMoodState] = useState<CompanionMoodState>(() =>
     freshMoodState(),
   );
@@ -139,6 +146,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const failedTurnRef = useRef<FailedTurn | null>(null);
   const moodStateRef = useRef<CompanionMoodState>(moodState);
   const notificationsEnabledRef = useRef<boolean>(notificationsEnabled);
+  const checkInCadenceRef = useRef<CheckInCadence>(checkInCadence);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   // Keep refs in sync so timers/callbacks always see the latest values.
@@ -148,6 +156,9 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     notificationsEnabledRef.current = notificationsEnabled;
   }, [notificationsEnabled]);
+  useEffect(() => {
+    checkInCadenceRef.current = checkInCadence;
+  }, [checkInCadence]);
 
   const applyMoodState = useCallback((next: CompanionMoodState) => {
     moodStateRef.current = next;
@@ -162,7 +173,10 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     const next = registerInteraction(moodStateRef.current);
     applyMoodState(next);
     if (notificationsEnabledRef.current) {
-      scheduleNudge(NUDGE_BODY, CHECK_IN_AFTER_HOURS).catch(() => {});
+      const hours = cadenceHours(checkInCadenceRef.current);
+      if (hours != null) {
+        scheduleNudge(NUDGE_BODY, hours).catch(() => {});
+      }
     }
   }, [applyMoodState]);
 
@@ -213,6 +227,16 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       setNotificationsEnabled(notifOn);
       notificationsEnabledRef.current = notifOn;
 
+      const storedCadence = await AsyncStorage.getItem(CADENCE_KEY);
+      const cadence: CheckInCadence =
+        storedCadence === "off" ||
+        storedCadence === "daily" ||
+        storedCadence === "frequent"
+          ? storedCadence
+          : DEFAULT_CADENCE;
+      setCheckInCadenceState(cadence);
+      checkInCadenceRef.current = cadence;
+
       const loadedMood =
         parseMoodState(await AsyncStorage.getItem(MOOD_KEY)) ?? freshMoodState();
       moodStateRef.current = loadedMood;
@@ -243,7 +267,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       if (
         conversationIdRef.current != null &&
         history.length > 0 &&
-        shouldCheckIn(loadedMood)
+        shouldCheckIn(loadedMood, cadence)
       ) {
         try {
           const current = computeMood(loadedMood);
@@ -430,6 +454,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
   const toggleNotifications = useCallback(async () => {
     if (notificationsEnabledRef.current) {
+      // Bell off: stop OS nudges. The cadence (and in-app greeting) is untouched.
       setNotificationsEnabled(false);
       notificationsEnabledRef.current = false;
       AsyncStorage.setItem(NOTIF_KEY, "false").catch(() => {});
@@ -437,6 +462,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Bell on: ask permission first and only mutate state once it's granted.
     const granted = await requestNotificationPermission();
     if (!granted) {
       setError(
@@ -447,7 +473,49 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     setNotificationsEnabled(true);
     notificationsEnabledRef.current = true;
     AsyncStorage.setItem(NOTIF_KEY, "true").catch(() => {});
-    await scheduleNudge(NUDGE_BODY, CHECK_IN_AFTER_HOURS);
+
+    // If outreach had been switched off, turning the bell on restores a
+    // sensible cadence so the toggle and the setting never contradict.
+    let cadence = checkInCadenceRef.current;
+    if (cadence === "off") {
+      cadence = DEFAULT_CADENCE;
+      checkInCadenceRef.current = cadence;
+      setCheckInCadenceState(cadence);
+      AsyncStorage.setItem(CADENCE_KEY, cadence).catch(() => {});
+    }
+    const hours = cadenceHours(cadence);
+    if (hours != null) {
+      await scheduleNudge(NUDGE_BODY, hours);
+    }
+  }, []);
+
+  // Let the user tune how often Empiri reaches out. The cadence drives both the
+  // in-app greeting threshold (on next open) and the OS nudge interval. "Off"
+  // disables proactive outreach and switches the bell off to stay consistent.
+  const setCheckInCadence = useCallback(async (next: CheckInCadence) => {
+    checkInCadenceRef.current = next;
+    setCheckInCadenceState(next);
+    AsyncStorage.setItem(CADENCE_KEY, next).catch(() => {});
+
+    if (next === "off") {
+      if (notificationsEnabledRef.current) {
+        setNotificationsEnabled(false);
+        notificationsEnabledRef.current = false;
+        AsyncStorage.setItem(NOTIF_KEY, "false").catch(() => {});
+      }
+      await cancelNudges();
+      return;
+    }
+
+    // Re-arm the OS nudge at the new interval only when the bell is on. Keep the
+    // time already spent away so changing cadence doesn't reset the clock.
+    if (notificationsEnabledRef.current) {
+      const hours = cadenceHours(next);
+      if (hours != null) {
+        const hoursAway = computeMood(moodStateRef.current).hoursAway;
+        await scheduleNudge(NUDGE_BODY, Math.max(0, hours - hoursAway));
+      }
+    }
   }, []);
 
   const retryInit = useCallback(() => {
@@ -463,6 +531,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         status,
         voiceEnabled,
         notificationsEnabled,
+        checkInCadence,
         mood,
         conversationId,
         initializing,
@@ -476,6 +545,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         stopListening,
         toggleVoice,
         toggleNotifications,
+        setCheckInCadence,
         retryInit,
         dismissError,
       }}

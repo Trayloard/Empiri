@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AmbientGlow } from "@/components/AmbientGlow";
 import { ChatInput } from "@/components/ChatInput";
+import { CheckInSettingsSheet } from "@/components/CheckInSettingsSheet";
 import { CompanionOrb } from "@/components/CompanionOrb";
 import { InnerSelfSheet } from "@/components/InnerSelfSheet";
 import { MessageBubble, RetryBubble, TypingBubble } from "@/components/MessageBubble";
@@ -86,6 +87,7 @@ export default function CompanionScreen() {
     status,
     voiceEnabled,
     notificationsEnabled,
+    checkInCadence,
     mood,
     conversationId,
     initializing,
@@ -99,12 +101,14 @@ export default function CompanionScreen() {
     stopListening,
     toggleVoice,
     toggleNotifications,
+    setCheckInCadence,
     retryInit,
     dismissError,
   } = useCompanion();
 
   const traits = useCompanionTraits(conversationId);
   const [peekVisible, setPeekVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
 
   // First-launch "wake up": the presence blooms into view, then settles into
   // its resting breathing state. Reduce-motion shows it calm and instant.
@@ -172,6 +176,13 @@ export default function CompanionScreen() {
     setPeekVisible(true);
   };
 
+  const handleOpenSettings = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setSettingsVisible(true);
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
@@ -208,6 +219,29 @@ export default function CompanionScreen() {
                 notificationsEnabled ? colors.statusAccent : colors.mutedForeground
               }
             />
+          </Pressable>
+
+          <Pressable
+            onPress={handleOpenSettings}
+            style={({ pressed }) => [
+              styles.settingsToggle,
+              {
+                backgroundColor: colors.glass,
+                borderColor: colors.glassBorder,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+            testID="check-in-settings-button"
+            accessibilityRole="button"
+            accessibilityLabel="Check-in settings"
+            hitSlop={8}
+          >
+            <BlurView
+              intensity={24}
+              tint={colors.blurTint}
+              style={StyleSheet.absoluteFill}
+            />
+            <Feather name="settings" size={18} color={colors.mutedForeground} />
           </Pressable>
 
           <Pressable
@@ -347,6 +381,13 @@ export default function CompanionScreen() {
         conversationId={conversationId}
         onClose={() => setPeekVisible(false)}
       />
+
+      <CheckInSettingsSheet
+        visible={settingsVisible}
+        cadence={checkInCadence}
+        onSelect={setCheckInCadence}
+        onClose={() => setSettingsVisible(false)}
+      />
     </View>
   );
 }
@@ -373,6 +414,18 @@ const styles = StyleSheet.create({
   notifToggle: {
     position: "absolute",
     left: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    zIndex: 2,
+  },
+  settingsToggle: {
+    position: "absolute",
+    left: 66,
     width: 42,
     height: 42,
     borderRadius: 21,
