@@ -1,6 +1,12 @@
-import React, { useMemo } from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
-import { useReducedMotion } from "react-native-reanimated";
+import React, { useEffect, useMemo } from "react";
+import { StyleSheet, useWindowDimensions } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { GlowBlob } from "@/components/GlowBlob";
 import { useColors } from "@/hooks/useColors";
@@ -25,6 +31,20 @@ export function AmbientGlow({ status }: AmbientGlowProps) {
   const intensity = active ? 1 : 0.6;
   const speed = active ? (status === "listening" ? 2.2 : 1.8) : 1;
   const dur = (base: number) => Math.round(base / speed);
+
+  // On cold start the ambient field blooms in so the app wakes up gently.
+  const enter = useSharedValue(reduceMotion ? 1 : 0);
+  useEffect(() => {
+    if (reduceMotion) {
+      enter.value = 1;
+      return;
+    }
+    enter.value = withTiming(1, {
+      duration: 1500,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [enter, reduceMotion]);
+  const enterStyle = useAnimatedStyle(() => ({ opacity: enter.value }));
 
   const [blue, purple, pink] = colors.ambient;
 
@@ -79,7 +99,9 @@ export function AmbientGlow({ status }: AmbientGlowProps) {
   );
 
   return (
-    <View style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
+    <Animated.View
+      style={[StyleSheet.absoluteFill, { pointerEvents: "none" }, enterStyle]}
+    >
       {blobs.map((b) => (
         <GlowBlob
           key={b.id}
@@ -96,6 +118,6 @@ export function AmbientGlow({ status }: AmbientGlowProps) {
           style={{ left: b.left, top: b.top }}
         />
       ))}
-    </View>
+    </Animated.View>
   );
 }

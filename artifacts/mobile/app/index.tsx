@@ -3,7 +3,7 @@ import type { Message } from "@workspace/api-client-react";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { StatusBar } from "expo-status-bar";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +15,13 @@ import {
   useColorScheme,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AmbientGlow } from "@/components/AmbientGlow";
@@ -22,6 +29,7 @@ import { ChatInput } from "@/components/ChatInput";
 import { CompanionOrb } from "@/components/CompanionOrb";
 import { InnerSelfSheet } from "@/components/InnerSelfSheet";
 import { MessageBubble, RetryBubble, TypingBubble } from "@/components/MessageBubble";
+import { PresenceStatusLine } from "@/components/PresenceStatusLine";
 import { FONTS } from "@/constants/fonts";
 import { useCompanion } from "@/contexts/CompanionContext";
 import { useColors } from "@/hooks/useColors";
@@ -40,6 +48,14 @@ function moodLabel(mood: MoodLabel): string {
     case "sleepy":
       return "A bit sleepy…";
   }
+}
+
+function welcomeGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 5) return "Hello, night owl";
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
 }
 
 function statusLabel(
@@ -87,6 +103,27 @@ export default function CompanionScreen() {
   } = useCompanion();
 
   const [peekVisible, setPeekVisible] = useState(false);
+
+  // First-launch "wake up": the presence blooms into view, then settles into
+  // its resting breathing state. Reduce-motion shows it calm and instant.
+  const reduceMotion = useReducedMotion();
+  const bloom = useSharedValue(reduceMotion ? 1 : 0);
+  useEffect(() => {
+    if (reduceMotion) {
+      bloom.value = 1;
+      return;
+    }
+    bloom.value = withTiming(1, {
+      duration: 1100,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [bloom, reduceMotion]);
+  const presenceStyle = useAnimatedStyle(() => ({
+    opacity: bloom.value,
+    transform: [{ scale: 0.72 + bloom.value * 0.28 }],
+  }));
+
+  const greeting = useMemo(() => welcomeGreeting(), []);
 
   const topPad = Platform.OS === "web" ? 24 : insets.top + 8;
   const bottomPad = Platform.OS === "web" ? 20 : insets.bottom + 6;
@@ -196,19 +233,25 @@ export default function CompanionScreen() {
             />
           </Pressable>
 
-          <Pressable
-            onPress={handleOpenPeek}
-            testID="inner-self-button"
-            accessibilityRole="button"
-            accessibilityLabel="Peek inside Empiri"
-            hitSlop={8}
-          >
-            <CompanionOrb status={status} mood={mood.label} size={120} />
-          </Pressable>
-          <Text style={[styles.name, { color: colors.foreground }]}>Empiri</Text>
-          <Text style={[styles.status, { color: colors.statusAccent }]}>
-            {statusLabel(status, mood.label)}
-          </Text>
+          <Animated.View style={[styles.presence, presenceStyle]}>
+            <Pressable
+              onPress={handleOpenPeek}
+              testID="inner-self-button"
+              accessibilityRole="button"
+              accessibilityLabel="Peek inside Empiri"
+              hitSlop={8}
+            >
+              <CompanionOrb status={status} mood={mood.label} size={120} />
+            </Pressable>
+            <Text style={[styles.name, { color: colors.foreground }]}>
+              Empiri
+            </Text>
+          </Animated.View>
+          <PresenceStatusLine
+            greeting={greeting}
+            statusText={statusLabel(status, mood.label)}
+            color={colors.statusAccent}
+          />
         </View>
 
         {/* Conversation */}
@@ -337,16 +380,14 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     zIndex: 2,
   },
+  presence: {
+    alignItems: "center",
+  },
   name: {
     fontSize: 26,
     fontFamily: FONTS.bold,
     letterSpacing: -0.4,
     marginTop: 4,
-  },
-  status: {
-    fontSize: 14,
-    fontFamily: FONTS.medium,
-    marginTop: 3,
   },
   center: {
     flex: 1,
