@@ -130,6 +130,11 @@ describe("unauthenticated requests", () => {
     const res = await request(app).get(`/api/conversations/${convAId}/self/history`);
     expect(res.status).toBe(401);
   });
+
+  it("GET /conversations/:id/memory → 401 without auth", async () => {
+    const res = await request(app).get(`/api/conversations/${convAId}/memory`);
+    expect(res.status).toBe(401);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -173,6 +178,13 @@ describe("cross-user ownership enforcement", () => {
       .set("Authorization", `Bearer ${tokenB}`);
     expect(res.status).toBe(404);
   });
+
+  it("GET /conversations/:id/memory → 404 for user B accessing user A's conversation", async () => {
+    const res = await request(app)
+      .get(`/api/conversations/${convAId}/memory`)
+      .set("Authorization", `Bearer ${tokenB}`);
+    expect(res.status).toBe(404);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -202,6 +214,15 @@ describe("owner can access their own conversation", () => {
       .set("Authorization", `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("snapshots");
+  });
+
+  it("GET /conversations/:id/memory → 200 for the owner (null summary when none yet)", async () => {
+    const res = await request(app)
+      .get(`/api/conversations/${convAId}/memory`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("summary");
+    expect(res.body.summary).toBeNull();
   });
 
   it("POST /conversations → 201 creates a conversation owned by the caller", async () => {

@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import {
+  getCompanionMemory,
   getCompanionSelf,
   type CompanionInterest,
   type CompanionSelf,
@@ -34,7 +35,25 @@ import { FONTS } from "@/constants/fonts";
 
 import { GrowthTimeline } from "./GrowthTimeline";
 
-type SheetMode = "mind" | "growth";
+type SheetMode = "mind" | "growth" | "memory";
+
+// Tab presentation for the three inner-self views (mind map, growth timeline,
+// and the rolling memory recap).
+const MODE_ICON: Record<SheetMode, React.ComponentProps<typeof Feather>["name"]> = {
+  mind: "share-2",
+  growth: "trending-up",
+  memory: "book-open",
+};
+const MODE_LABEL: Record<SheetMode, string> = {
+  mind: "MIND",
+  growth: "GROWTH",
+  memory: "MEMORY",
+};
+const MODE_A11Y: Record<SheetMode, string> = {
+  mind: "Mind map",
+  growth: "How I've grown",
+  memory: "What I remember",
+};
 
 interface InnerSelfSheetProps {
   visible: boolean;
@@ -732,6 +751,9 @@ export function InnerSelfSheet({
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState<GNode | null>(null);
   const [mode, setMode] = useState<SheetMode>("mind");
+  const [memory, setMemory] = useState<string | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryError, setMemoryError] = useState(false);
 
   const switchMode = (next: SheetMode) => {
     if (next === mode) return;
@@ -756,6 +778,28 @@ export function InnerSelfSheet({
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, conversationId]);
+
+  // Empiri's rolling memory of earlier messages (read-only). Fetched alongside
+  // the self so the Memory tab is ready the moment it's opened.
+  useEffect(() => {
+    if (!visible || conversationId == null) return;
+    let cancelled = false;
+    setMemoryLoading(true);
+    setMemoryError(false);
+    getCompanionMemory(conversationId)
+      .then((data) => {
+        if (!cancelled) setMemory(data.summary ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setMemoryError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setMemoryLoading(false);
       });
     return () => {
       cancelled = true;
@@ -873,7 +917,7 @@ export function InnerSelfSheet({
 
         <View style={styles.segmentWrap}>
           <View style={styles.segment}>
-            {(["mind", "growth"] as SheetMode[]).map((m) => {
+            {(["mind", "growth", "memory"] as SheetMode[]).map((m) => {
               const active = mode === m;
               return (
                 <Pressable
@@ -881,12 +925,12 @@ export function InnerSelfSheet({
                   onPress={() => switchMode(m)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
-                  accessibilityLabel={m === "mind" ? "Mind map" : "How I've grown"}
+                  accessibilityLabel={MODE_A11Y[m]}
                   testID={`mode-${m}`}
                   style={[styles.segmentBtn, active && styles.segmentBtnActive]}
                 >
                   <Feather
-                    name={m === "mind" ? "share-2" : "trending-up"}
+                    name={MODE_ICON[m]}
                     size={13}
                     color={active ? "#0A0B12" : "rgba(255,255,255,0.6)"}
                   />
@@ -896,7 +940,7 @@ export function InnerSelfSheet({
                       active && styles.segmentTextActive,
                     ]}
                   >
-                    {m === "mind" ? "MIND" : "GROWTH"}
+                    {MODE_LABEL[m]}
                   </Text>
                 </Pressable>
               );
@@ -979,7 +1023,7 @@ export function InnerSelfSheet({
               </ScrollView>
             )}
           </>
-        ) : (
+        ) : mode === "growth" ? (
           <>
             <View style={styles.caption}>
               <Text style={styles.captionTitle}>HOW I&apos;VE GROWN</Text>
@@ -990,6 +1034,59 @@ export function InnerSelfSheet({
               self={self}
               bottomInset={insets.bottom}
             />
+          </>
+        ) : (
+          <>
+            <View style={styles.caption}>
+              <Text style={styles.captionTitle}>WHAT I REMEMBER</Text>
+              <Text style={styles.captionSub}>the gist of our earlier talks</Text>
+            </View>
+
+            {memoryLoading || conversationId == null ? (
+              <View style={styles.statePad}>
+                <ActivityIndicator color="#B58CFF" />
+              </View>
+            ) : memoryError ? (
+              <View style={styles.statePad}>
+                <Feather
+                  name="cloud-off"
+                  size={28}
+                  color="rgba(255,255,255,0.5)"
+                />
+                <Text style={styles.stateText}>
+                  Couldn&apos;t recall just now.
+                </Text>
+              </View>
+            ) : !memory ? (
+              <View style={styles.statePad}>
+                <Feather
+                  name="book-open"
+                  size={28}
+                  color="rgba(255,255,255,0.45)"
+                />
+                <Text style={styles.stateText}>
+                  Nothing to remember yet. As we talk more, I&apos;ll keep the
+                  gist of our earlier conversations here.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={[
+                  styles.memoryContent,
+                  { paddingBottom: insets.bottom + 48 },
+                ]}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.memoryCard}>
+                  <Text style={styles.memoryText}>{memory}</Text>
+                </View>
+                <Text style={styles.memoryFootnote}>
+                  A gentle recap Empiri keeps so our longer talks stay
+                  connected.
+                </Text>
+              </ScrollView>
+            )}
           </>
         )}
 
@@ -1142,7 +1239,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 16,
+    paddingHorizontal: 13,
     height: 30,
     borderRadius: 12,
   },
@@ -1194,6 +1291,33 @@ const styles = StyleSheet.create({
   scrollContent: {
     alignItems: "center",
     paddingTop: 6,
+  },
+  memoryContent: {
+    paddingTop: 6,
+    paddingHorizontal: 22,
+  },
+  memoryCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(110,168,255,0.28)",
+    backgroundColor: "rgba(110,168,255,0.06)",
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+  },
+  memoryText: {
+    fontFamily: FONTS.regular,
+    fontSize: 15.5,
+    lineHeight: 24,
+    color: "rgba(231,233,245,0.92)",
+  },
+  memoryFootnote: {
+    fontFamily: FONTS.regular,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: "rgba(255,255,255,0.4)",
+    textAlign: "center",
+    marginTop: 16,
+    paddingHorizontal: 12,
   },
   node: {
     position: "absolute",

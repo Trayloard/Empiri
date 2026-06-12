@@ -334,4 +334,13 @@ router.get("/conversations/:id/self/history", async (req, res) => {
   res.json({ snapshots });
 });
 
+// What the companion remembers: the rolling context summary of earlier
+// messages that have slid out of the live context window. Read-only.
+router.get("/conversations/:id/memory", async (req, res) => {
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
+
+  res.json({ summary: conversation.contextSummary ?? null });
+});
+
 export default router;

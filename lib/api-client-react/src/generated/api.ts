@@ -24,6 +24,7 @@ import type {
   AuthUserEnvelope,
   BeginBrowserLoginParams,
   CheckInInput,
+  CompanionMemory,
   CompanionSelf,
   CompanionSelfHistory,
   Conversation,
@@ -1032,6 +1033,84 @@ export function useGetCompanionSelfHistory<TData = Awaited<ReturnType<typeof get
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCompanionSelfHistoryQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCompanionMemoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/conversations/${id}/memory`
+}
+
+/**
+ * Returns the rolling context summary of earlier messages that have slid out of the live window, or null if nothing has been summarised yet.
+ * @summary Get what the companion remembers about the conversation
+ */
+export const getCompanionMemory = async (id: number, options?: RequestInit): Promise<CompanionMemory> => {
+
+  return customFetch<CompanionMemory>(getGetCompanionMemoryUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompanionMemoryQueryKey = (id: number,) => {
+    return [
+    `/api/conversations/${id}/memory`
+    ] as const;
+    }
+
+
+export const getGetCompanionMemoryQueryOptions = <TData = Awaited<ReturnType<typeof getCompanionMemory>>, TError = ErrorType<ApiError>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanionMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompanionMemoryQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompanionMemory>>> = ({ signal }) => getCompanionMemory(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompanionMemory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCompanionMemoryQueryResult = NonNullable<Awaited<ReturnType<typeof getCompanionMemory>>>
+export type GetCompanionMemoryQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get what the companion remembers about the conversation
+ */
+
+export function useGetCompanionMemory<TData = Awaited<ReturnType<typeof getCompanionMemory>>, TError = ErrorType<ApiError>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanionMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCompanionMemoryQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

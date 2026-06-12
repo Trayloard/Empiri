@@ -235,6 +235,19 @@ export const GetCompanionSelfHistoryResponse = zod.object({
 
 
 /**
+ * Returns the rolling context summary of earlier messages that have slid out of the live window, or null if nothing has been summarised yet.
+ * @summary Get what the companion remembers about the conversation
+ */
+export const GetCompanionMemoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCompanionMemoryResponse = zod.object({
+  "summary": zod.string().nullable().describe('The rolling context summary of earlier messages, or null if nothing has been summarised yet.')
+})
+
+
+/**
  * @summary Transcribe recorded audio into text
  */
 export const TranscribeAudioBody = zod.object({

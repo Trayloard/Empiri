@@ -347,6 +347,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /conversations/{id}/memory:
+    get:
+      operationId: getCompanionMemory
+      tags: [companion]
+      summary: Get what the companion remembers about the conversation
+      description: Returns the rolling context summary of earlier messages that have slid out of the live window, or null if nothing has been summarised yet.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The companion's current memory of earlier messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionMemory"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /voice/transcribe:
     post:
       operationId: transcribeAudio
@@ -701,6 +732,14 @@ components:
             $ref: "#/components/schemas/CompanionSelfSnapshot"
       required:
         - snapshots
+    CompanionMemory:
+      type: object
+      properties:
+        summary:
+          type: [string, 'null']
+          description: The rolling context summary of earlier messages, or null if nothing has been summarised yet.
+      required:
+        - summary
     ApiError:
       type: object
       properties:

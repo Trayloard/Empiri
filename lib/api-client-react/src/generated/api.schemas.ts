@@ -150,6 +150,14 @@ export interface CompanionSelfHistory {
   snapshots: CompanionSelfSnapshot[];
 }
 
+export interface CompanionMemory {
+  /**
+     * The rolling context summary of earlier messages, or null if nothing has been summarised yet.
+     * @nullable
+     */
+  summary: string | null;
+}
+
 export interface ApiError {
   error: string;
 }

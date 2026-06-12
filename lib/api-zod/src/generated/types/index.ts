@@ -14,6 +14,7 @@ export * from './beginBrowserLoginParams';
 export * from './checkInInput';
 export * from './companionDrive';
 export * from './companionInterest';
+export * from './companionMemory';
 export * from './companionSelf';
 export * from './companionSelfHistory';
 export * from './companionSelfSnapshot';
