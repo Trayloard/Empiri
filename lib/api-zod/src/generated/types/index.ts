@@ -7,6 +7,7 @@
  */
 
 export * from './apiError';
+export * from './checkInInput';
 export * from './conversation';
 export * from './conversationInput';
 export * from './healthStatus';

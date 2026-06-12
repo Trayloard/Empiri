@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
+  companionCheckIn,
   createConversation,
   listMessages,
   sendMessage,
@@ -25,6 +26,21 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 
+import {
+  CHECK_IN_AFTER_HOURS,
+  computeMood,
+  freshMoodState,
+  registerInteraction,
+  shouldCheckIn,
+  type CompanionMoodState,
+  type ComputedMood,
+} from "@/lib/mood";
+import {
+  cancelNudges,
+  requestNotificationPermission,
+  scheduleNudge,
+} from "@/lib/notifications";
+
 export type CompanionStatus =
   | "idle"
   | "thinking"
@@ -36,6 +52,8 @@ interface CompanionContextValue {
   messages: Message[];
   status: CompanionStatus;
   voiceEnabled: boolean;
+  notificationsEnabled: boolean;
+  mood: ComputedMood;
   initializing: boolean;
   initError: string | null;
   error: string | null;
@@ -44,6 +62,7 @@ interface CompanionContextValue {
   startListening: () => Promise<void>;
   stopListening: () => Promise<void>;
   toggleVoice: () => void;
+  toggleNotifications: () => Promise<void>;
   retryInit: () => void;
   dismissError: () => void;
 }
@@ -54,52 +73,82 @@ const CompanionContext = createContext<CompanionContextValue | undefined>(
 
 const CONVERSATION_KEY = "empiri.conversationId";
 const VOICE_KEY = "empiri.voiceEnabled";
+const MOOD_KEY = "empiri.moodState";
+const NOTIF_KEY = "empiri.notificationsEnabled";
+
+const NUDGE_BODY = "I've been thinking about you — come say hi when you can. 🧡";
 
 function tempId(): number {
   return -Math.floor(Math.random() * 1_000_000_000);
+}
+
+function parseMoodState(raw: string | null): CompanionMoodState | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<CompanionMoodState>;
+    if (
+      typeof parsed.baseMood === "number" &&
+      typeof parsed.baseEnergy === "number" &&
+      typeof parsed.lastInteraction === "number"
+    ) {
+      return {
+        baseMood: parsed.baseMood,
+        baseEnergy: parsed.baseEnergy,
+        lastInteraction: parsed.lastInteraction,
+      };
+    }
+  } catch {
+    // fall through
+  }
+  return null;
 }
 
 export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<CompanionStatus>("idle");
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(true);
+  const [notificationsEnabled, setNotificationsEnabled] =
+    useState<boolean>(false);
+  const [moodState, setMoodState] = useState<CompanionMoodState>(() =>
+    freshMoodState(),
+  );
+  const [mood, setMood] = useState<ComputedMood>(() =>
+    computeMood(freshMoodState()),
+  );
   const [initializing, setInitializing] = useState<boolean>(true);
   const [initError, setInitError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState<boolean>(false);
 
   const conversationIdRef = useRef<number | null>(null);
+  const moodStateRef = useRef<CompanionMoodState>(moodState);
+  const notificationsEnabledRef = useRef<boolean>(notificationsEnabled);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
-  const initialize = useCallback(async () => {
-    setInitializing(true);
-    setInitError(null);
-    try {
-      const storedVoice = await AsyncStorage.getItem(VOICE_KEY);
-      if (storedVoice !== null) setVoiceEnabled(storedVoice === "true");
+  // Keep refs in sync so timers/callbacks always see the latest values.
+  useEffect(() => {
+    moodStateRef.current = moodState;
+  }, [moodState]);
+  useEffect(() => {
+    notificationsEnabledRef.current = notificationsEnabled;
+  }, [notificationsEnabled]);
 
-      const storedId = await AsyncStorage.getItem(CONVERSATION_KEY);
-      if (storedId) {
-        const id = Number(storedId);
-        conversationIdRef.current = id;
-        const existing = await listMessages(id);
-        setMessages(existing);
-      } else {
-        const conversation = await createConversation({ title: "Empiri" });
-        conversationIdRef.current = conversation.id;
-        await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
-        setMessages([]);
-      }
-    } catch {
-      setInitError("Couldn't reach Empiri. Check your connection and retry.");
-    } finally {
-      setInitializing(false);
-    }
+  const applyMoodState = useCallback((next: CompanionMoodState) => {
+    moodStateRef.current = next;
+    setMoodState(next);
+    setMood(computeMood(next));
+    AsyncStorage.setItem(MOOD_KEY, JSON.stringify(next)).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
+  // Lift the companion's spirits whenever the user actually engages, and
+  // re-arm the "miss you" nudge from this fresh moment of contact.
+  const touchInteraction = useCallback(() => {
+    const next = registerInteraction(moodStateRef.current);
+    applyMoodState(next);
+    if (notificationsEnabledRef.current) {
+      scheduleNudge(NUDGE_BODY, CHECK_IN_AFTER_HOURS).catch(() => {});
+    }
+  }, [applyMoodState]);
 
   const playSpeech = useCallback(async (text: string) => {
     try {
@@ -127,6 +176,91 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Speech is best-effort; the text reply is already shown.
     }
+  }, []);
+
+  // Stable ref so initialize() can play the check-in greeting without
+  // depending on playSpeech's identity.
+  const playSpeechRef = useRef(playSpeech);
+  useEffect(() => {
+    playSpeechRef.current = playSpeech;
+  }, [playSpeech]);
+
+  const initialize = useCallback(async () => {
+    setInitializing(true);
+    setInitError(null);
+    try {
+      const storedVoice = await AsyncStorage.getItem(VOICE_KEY);
+      if (storedVoice !== null) setVoiceEnabled(storedVoice === "true");
+
+      const storedNotif = await AsyncStorage.getItem(NOTIF_KEY);
+      const notifOn = storedNotif === "true";
+      setNotificationsEnabled(notifOn);
+      notificationsEnabledRef.current = notifOn;
+
+      const loadedMood =
+        parseMoodState(await AsyncStorage.getItem(MOOD_KEY)) ?? freshMoodState();
+      moodStateRef.current = loadedMood;
+      setMoodState(loadedMood);
+      setMood(computeMood(loadedMood));
+
+      let history: Message[] = [];
+      const storedId = await AsyncStorage.getItem(CONVERSATION_KEY);
+      if (storedId) {
+        const id = Number(storedId);
+        conversationIdRef.current = id;
+        history = await listMessages(id);
+        setMessages(history);
+      } else {
+        const conversation = await createConversation({ title: "Empiri" });
+        conversationIdRef.current = conversation.id;
+        await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
+        setMessages([]);
+      }
+
+      setInitializing(false);
+
+      // After enough quiet time, let the companion greet the user first. It
+      // speaks from its current (faded) mood — the lift only comes once the
+      // user replies — so the arc feels real.
+      if (
+        conversationIdRef.current != null &&
+        history.length > 0 &&
+        shouldCheckIn(loadedMood)
+      ) {
+        try {
+          const current = computeMood(loadedMood);
+          const greeting = await companionCheckIn(conversationIdRef.current, {
+            hoursAway: current.hoursAway,
+            mood: current.label,
+            missingYou: current.missingYou,
+          });
+          setMessages((prev) => [...prev, greeting]);
+          if (voiceEnabled) {
+            setStatus("speaking");
+            await playSpeechRef.current(greeting.content);
+            setStatus("idle");
+          }
+        } catch {
+          // A failed check-in is silent — the user can still start the chat.
+        }
+      }
+    } catch {
+      setInitError("Couldn't reach Empiri. Check your connection and retry.");
+      setInitializing(false);
+    }
+  }, [voiceEnabled]);
+
+  useEffect(() => {
+    initialize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Let the mood drift visibly while the app stays open.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMood(computeMood(moodStateRef.current));
+    }, 60_000);
+    return () => clearInterval(interval);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -165,6 +299,9 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           result.assistantMessage,
         ]);
 
+        // A real exchange happened — the companion perks up.
+        touchInteraction();
+
         if (voiceEnabled) {
           setStatus("speaking");
           await playSpeech(result.assistantMessage.content);
@@ -176,7 +313,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         setStatus("idle");
       }
     },
-    [voiceEnabled, playSpeech, refresh],
+    [voiceEnabled, playSpeech, refresh, touchInteraction],
   );
 
   const startListening = useCallback(async () => {
@@ -239,6 +376,28 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const toggleNotifications = useCallback(async () => {
+    if (notificationsEnabledRef.current) {
+      setNotificationsEnabled(false);
+      notificationsEnabledRef.current = false;
+      AsyncStorage.setItem(NOTIF_KEY, "false").catch(() => {});
+      await cancelNudges();
+      return;
+    }
+
+    const granted = await requestNotificationPermission();
+    if (!granted) {
+      setError(
+        "Turn on notifications in your settings to get gentle check-ins from Empiri.",
+      );
+      return;
+    }
+    setNotificationsEnabled(true);
+    notificationsEnabledRef.current = true;
+    AsyncStorage.setItem(NOTIF_KEY, "true").catch(() => {});
+    await scheduleNudge(NUDGE_BODY, CHECK_IN_AFTER_HOURS);
+  }, []);
+
   const retryInit = useCallback(() => {
     initialize();
   }, [initialize]);
@@ -251,6 +410,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         messages,
         status,
         voiceEnabled,
+        notificationsEnabled,
+        mood,
         initializing,
         initError,
         error,
@@ -259,6 +420,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         startListening,
         stopListening,
         toggleVoice,
+        toggleNotifications,
         retryInit,
         dismissError,
       }}

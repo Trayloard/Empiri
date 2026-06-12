@@ -37,6 +37,15 @@ export interface SendMessageResult {
   assistantMessage: Message;
 }
 
+export interface CheckInInput {
+  /** Approximate hours since the user last interacted */
+  hoursAway: number;
+  /** The companion's current mood label (e.g. sleepy, happy, bright) */
+  mood: string;
+  /** How much the companion has been missing the user, 0-100 */
+  missingYou?: number;
+}
+
 export interface TranscribeInput {
   /** Base64-encoded audio data */
   audio: string;

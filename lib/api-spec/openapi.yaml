@@ -107,6 +107,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /conversations/{id}/checkin:
+    post:
+      operationId: companionCheckIn
+      tags: [companion]
+      summary: Generate a proactive companion check-in greeting
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckInInput"
+      responses:
+        "200":
+          description: The persisted proactive greeting from the companion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: The companion failed to generate a greeting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /voice/transcribe:
     post:
       operationId: transcribeAudio
@@ -229,6 +265,21 @@ components:
       required:
         - userMessage
         - assistantMessage
+    CheckInInput:
+      type: object
+      properties:
+        hoursAway:
+          type: number
+          description: Approximate hours since the user last interacted
+        mood:
+          type: string
+          description: The companion's current mood label (e.g. sleepy, happy, bright)
+        missingYou:
+          type: number
+          description: How much the companion has been missing the user, 0-100
+      required:
+        - hoursAway
+        - mood
     TranscribeInput:
       type: object
       properties:

@@ -21,6 +21,7 @@ import type {
 
 import type {
   ApiError,
+  CheckInInput,
   Conversation,
   ConversationInput,
   HealthStatus,
@@ -341,6 +342,78 @@ export const useSendMessage = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSendMessageMutationOptions(options));
+    }
+
+export const getCompanionCheckInUrl = (id: number,) => {
+
+
+
+
+  return `/api/conversations/${id}/checkin`
+}
+
+/**
+ * @summary Generate a proactive companion check-in greeting
+ */
+export const companionCheckIn = async (id: number,
+    checkInInput: CheckInInput, options?: RequestInit): Promise<Message> => {
+
+  return customFetch<Message>(getCompanionCheckInUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      checkInInput,)
+  }
+);}
+
+
+
+
+export const getCompanionCheckInMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof companionCheckIn>>, TError,{id: number;data: BodyType<CheckInInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof companionCheckIn>>, TError,{id: number;data: BodyType<CheckInInput>}, TContext> => {
+
+const mutationKey = ['companionCheckIn'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof companionCheckIn>>, {id: number;data: BodyType<CheckInInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  companionCheckIn(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompanionCheckInMutationResult = NonNullable<Awaited<ReturnType<typeof companionCheckIn>>>
+    export type CompanionCheckInMutationBody = BodyType<CheckInInput>
+    export type CompanionCheckInMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Generate a proactive companion check-in greeting
+ */
+export const useCompanionCheckIn = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof companionCheckIn>>, TError,{id: number;data: BodyType<CheckInInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof companionCheckIn>>,
+        TError,
+        {id: number;data: BodyType<CheckInInput>},
+        TContext
+      > => {
+      return useMutation(getCompanionCheckInMutationOptions(options));
     }
 
 export const getTranscribeAudioUrl = () => {

@@ -75,6 +75,28 @@ export const SendMessageResponse = zod.object({
 
 
 /**
+ * @summary Generate a proactive companion check-in greeting
+ */
+export const CompanionCheckInParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CompanionCheckInBody = zod.object({
+  "hoursAway": zod.number().describe('Approximate hours since the user last interacted'),
+  "mood": zod.string().describe('The companion\'s current mood label (e.g. sleepy, happy, bright)'),
+  "missingYou": zod.number().optional().describe('How much the companion has been missing the user, 0-100')
+})
+
+export const CompanionCheckInResponse = zod.object({
+  "id": zod.number(),
+  "conversationId": zod.number(),
+  "role": zod.string(),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Transcribe recorded audio into text
  */
 export const TranscribeAudioBody = zod.object({

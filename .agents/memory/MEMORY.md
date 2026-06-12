@@ -1,2 +1,3 @@
 - [Voice on Expo mobile](voice-on-expo.md) — record with expo-audio + base64 to your own OpenAI STT/TTS endpoints; MediaRecorder web libs don't work in RN; native-first, web degrades.
 - [Monorepo typecheck gotchas](monorepo-typecheck-gotchas.md) — root `pnpm run typecheck` fails pre-existing in mockup-sandbox (duplicate @types/react); rebuild libs before trusting per-package typecheck.
+- [Companion DB schema drift](companion-db-schema-drift.md) — API 500 on conversation insert? isolated-env DB has columns not in Drizzle schema; run `pnpm --filter @workspace/db run push`.

@@ -39,6 +39,12 @@
         {
           "microphonePermission": "Empiri uses your microphone so you can talk to your companion by voice."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#FF7A59"
+        }
       ]
     ],
     "experiments": {

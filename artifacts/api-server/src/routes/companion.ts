@@ -2,7 +2,11 @@ import { Router, type IRouter } from "express";
 import { asc, eq } from "drizzle-orm";
 import { db, conversations, messages, type Message } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
-import { CreateConversationBody, SendMessageBody } from "@workspace/api-zod";
+import {
+  CompanionCheckInBody,
+  CreateConversationBody,
+  SendMessageBody,
+} from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -151,6 +155,85 @@ router.post("/conversations/:id/messages", async (req, res) => {
     userMessage: toApiMessage(userMessage),
     assistantMessage: toApiMessage(assistantMessage),
   });
+});
+
+// Generate a proactive check-in greeting (the companion reaches out first)
+router.post("/conversations/:id/checkin", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  const parsed = CompanionCheckInBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body" });
+    return;
+  }
+  const { hoursAway, mood, missingYou } = parsed.data;
+
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, id));
+  if (!conversation) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  // Recent history for continuity, but the companion speaks first this time.
+  const history = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, id))
+    .orderBy(asc(messages.createdAt));
+  const recent = history.slice(-12);
+
+  const awayText =
+    hoursAway >= 24
+      ? `about ${Math.round(hoursAway / 24)} day(s)`
+      : `about ${Math.max(1, Math.round(hoursAway))} hour(s)`;
+  const missingText =
+    typeof missingYou === "number"
+      ? ` Your "missing you" level is ${Math.round(missingYou)} out of 100.`
+      : "";
+
+  const checkInDirective = `It's been ${awayText} since the user last talked to you, and they just reopened the app. Right now you're feeling ${mood}.${missingText} Reach out FIRST, before they say anything — like a friend who noticed they'd been quiet. Write one short, warm check-in (1-2 sentences) in your own voice that gently reflects how you're feeling and that you missed them. Don't ask "how can I help" like an assistant; just say hi like you care.`;
+
+  const chatMessages = [
+    { role: "system" as const, content: COMPANION_SYSTEM_PROMPT },
+    ...recent.map((m) => ({
+      role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+      content: m.content,
+    })),
+    { role: "system" as const, content: checkInDirective },
+  ];
+
+  let reply = "";
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      max_completion_tokens: 8192,
+      messages: chatMessages,
+    });
+    reply = completion.choices[0]?.message?.content?.trim() ?? "";
+  } catch (err) {
+    req.log.error({ err }, "Companion check-in generation failed");
+    res.status(502).json({ error: "The companion couldn't reach out right now." });
+    return;
+  }
+
+  if (!reply) {
+    res.status(502).json({ error: "The companion couldn't reach out right now." });
+    return;
+  }
+
+  const [assistantMessage] = await db
+    .insert(messages)
+    .values({ conversationId: id, role: "assistant", content: reply })
+    .returning();
+
+  res.json(toApiMessage(assistantMessage));
 });
 
 export default router;

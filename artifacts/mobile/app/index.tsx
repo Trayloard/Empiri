@@ -21,9 +21,26 @@ import { CompanionOrb } from "@/components/CompanionOrb";
 import { MessageBubble, TypingBubble } from "@/components/MessageBubble";
 import { useCompanion } from "@/contexts/CompanionContext";
 import { useColors } from "@/hooks/useColors";
+import type { MoodLabel } from "@/lib/mood";
+
+function moodLabel(mood: MoodLabel): string {
+  switch (mood) {
+    case "bright":
+      return "Feeling bright ✨";
+    case "happy":
+      return "Happy you're here";
+    case "content":
+      return "Here for you";
+    case "low":
+      return "Missing you a little";
+    case "sleepy":
+      return "A bit sleepy…";
+  }
+}
 
 function statusLabel(
   status: ReturnType<typeof useCompanion>["status"],
+  mood: MoodLabel,
 ): string {
   switch (status) {
     case "listening":
@@ -35,7 +52,7 @@ function statusLabel(
     case "speaking":
       return "Speaking…";
     default:
-      return "Here for you";
+      return moodLabel(mood);
   }
 }
 
@@ -47,6 +64,8 @@ export default function CompanionScreen() {
     messages,
     status,
     voiceEnabled,
+    notificationsEnabled,
+    mood,
     initializing,
     initError,
     error,
@@ -55,6 +74,7 @@ export default function CompanionScreen() {
     startListening,
     stopListening,
     toggleVoice,
+    toggleNotifications,
     retryInit,
     dismissError,
   } = useCompanion();
@@ -83,6 +103,13 @@ export default function CompanionScreen() {
     toggleVoice();
   };
 
+  const handleToggleNotifications = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    toggleNotifications();
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
@@ -93,6 +120,29 @@ export default function CompanionScreen() {
       >
         {/* Header with the companion presence */}
         <View style={[styles.header, { paddingTop: topPad }]}>
+          <Pressable
+            onPress={handleToggleNotifications}
+            style={({ pressed }) => [
+              styles.notifToggle,
+              {
+                backgroundColor: notificationsEnabled
+                  ? colors.secondary
+                  : colors.muted,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+            testID="notifications-toggle"
+            hitSlop={8}
+          >
+            <Feather
+              name={notificationsEnabled ? "bell" : "bell-off"}
+              size={18}
+              color={
+                notificationsEnabled ? colors.primary : colors.mutedForeground
+              }
+            />
+          </Pressable>
+
           <Pressable
             onPress={handleToggleVoice}
             style={({ pressed }) => [
@@ -112,10 +162,10 @@ export default function CompanionScreen() {
             />
           </Pressable>
 
-          <CompanionOrb status={status} size={120} />
+          <CompanionOrb status={status} mood={mood.label} size={120} />
           <Text style={[styles.name, { color: colors.foreground }]}>Empiri</Text>
           <Text style={[styles.status, { color: colors.mutedForeground }]}>
-            {statusLabel(status)}
+            {statusLabel(status, mood.label)}
           </Text>
         </View>
 
@@ -221,6 +271,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 1,
+  },
+  notifToggle: {
+    position: "absolute",
+    left: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
   },
   name: {
     fontSize: 24,

@@ -1,7 +1,10 @@
 import React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import {
+  companionCheckIn,
   createConversation,
   listMessages,
   sendMessage,
@@ -55,8 +58,19 @@ jest.mock("expo-file-system/legacy", () => ({
   deleteAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Notifications are best-effort and pull in native modules; stub them.
+jest.mock("expo-notifications", () => ({
+  setNotificationHandler: jest.fn(),
+  getPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
+  cancelAllScheduledNotificationsAsync: jest.fn().mockResolvedValue(undefined),
+  scheduleNotificationAsync: jest.fn().mockResolvedValue(undefined),
+  SchedulableTriggerInputTypes: { TIME_INTERVAL: "timeInterval" },
+}));
+
 // Fully mock the data client so we can drive success/failure deterministically.
 jest.mock("@workspace/api-client-react", () => ({
+  companionCheckIn: jest.fn(),
   createConversation: jest.fn(),
   listMessages: jest.fn(),
   sendMessage: jest.fn(),
@@ -69,6 +83,8 @@ const mockCreateConversation =
 const mockListMessages =
   listMessages as jest.MockedFunction<typeof listMessages>;
 const mockSendMessage = sendMessage as jest.MockedFunction<typeof sendMessage>;
+const mockCompanionCheckIn =
+  companionCheckIn as jest.MockedFunction<typeof companionCheckIn>;
 
 function makeMessage(
   id: number,
@@ -179,5 +195,65 @@ describe("CompanionContext failed-reply handling", () => {
     expect(assistantMessages[0].content).toBe("Hey! So good to see you.");
     expect(result.current.error).toBeNull();
     expect(result.current.status).toBe("idle");
+  });
+});
+
+describe("CompanionContext proactive check-in", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  afterEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it("greets the user first after a long absence", async () => {
+    // Existing conversation with prior history, last touched a day ago.
+    await AsyncStorage.setItem("empiri.conversationId", "1");
+    await AsyncStorage.setItem("empiri.voiceEnabled", "false");
+    await AsyncStorage.setItem(
+      "empiri.moodState",
+      JSON.stringify({
+        baseMood: 100,
+        baseEnergy: 100,
+        lastInteraction: Date.now() - DAY_MS,
+      }),
+    );
+    mockListMessages.mockResolvedValue([makeMessage(1, "user", "earlier hi")]);
+    mockCompanionCheckIn.mockResolvedValue(
+      makeMessage(2, "assistant", "I missed you — how have you been?"),
+    );
+
+    const { result } = await renderReadyCompanion();
+
+    await waitFor(() =>
+      expect(
+        result.current.messages.some(
+          (m) => m.content === "I missed you — how have you been?",
+        ),
+      ).toBe(true),
+    );
+    expect(mockCompanionCheckIn).toHaveBeenCalledTimes(1);
+    // The companion still reads as faded until the user replies.
+    expect(["sleepy", "low"]).toContain(result.current.mood.label);
+  });
+
+  it("does not reach out when the user was here recently", async () => {
+    await AsyncStorage.setItem("empiri.conversationId", "1");
+    await AsyncStorage.setItem(
+      "empiri.moodState",
+      JSON.stringify({
+        baseMood: 100,
+        baseEnergy: 100,
+        lastInteraction: Date.now() - 60 * 1000,
+      }),
+    );
+    mockListMessages.mockResolvedValue([makeMessage(1, "user", "earlier hi")]);
+
+    await renderReadyCompanion();
+
+    expect(mockCompanionCheckIn).not.toHaveBeenCalled();
   });
 });
