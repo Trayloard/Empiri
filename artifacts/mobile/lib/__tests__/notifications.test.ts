@@ -71,3 +71,21 @@ describe("scheduleNudgeInSeconds (dev-only shortcut)", () => {
     expect(mockSchedule).not.toHaveBeenCalled();
   });
 });
+
+describe("scheduleNudgeInSeconds (production guard)", () => {
+  // In a production build Metro sets __DEV__=false and tree-shakes the callers,
+  // but this guard is the last line of defence inside the function itself: even
+  // if a caller forgets its own gate, the 60s production floor can never be
+  // bypassed in a release build.
+  it("is a complete no-op when __DEV__ is false, so the 60s production floor is never bypassable", async () => {
+    const original = (global as any).__DEV__;
+    (global as any).__DEV__ = false;
+    try {
+      await scheduleNudgeInSeconds("miss you", 5);
+      expect(mockSchedule).not.toHaveBeenCalled();
+      expect(mockCancel).not.toHaveBeenCalled();
+    } finally {
+      (global as any).__DEV__ = original;
+    }
+  });
+});
