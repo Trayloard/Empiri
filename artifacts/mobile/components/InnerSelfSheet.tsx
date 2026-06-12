@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import {
   getCompanionSelf,
+  type CompanionInterest,
   type CompanionSelf,
 } from "@workspace/api-client-react";
 import * as Haptics from "expo-haptics";
@@ -174,6 +175,247 @@ function affinityPhrase(v: number): string {
   return "A budding curiosity";
 }
 
+// ── Visual-only grouping of curiosities ──────────────────────────────────
+// Closely related interests (e.g. "galaxies", "astronomy", "stars") are shown
+// together under a single theme so the curiosities surface reads as coherent
+// instead of repetitive. This is a display-time clustering only — the
+// underlying interests stay individual; nothing about how they're stored,
+// weighted, or how Empiri's personality forms changes. A small curated keyword
+// map catches semantic neighbours; a shared singular/plural root catches the
+// rest. Anything matching nothing is shown on its own, exactly as before.
+const INTEREST_THEMES: { label: string; keywords: string[] }[] = [
+  {
+    label: "Space",
+    keywords: [
+      "space", "cosmos", "cosmic", "galaxy", "galaxies", "galactic",
+      "astronomy", "astronomer", "astrophysics", "star", "stars", "stellar",
+      "planet", "planets", "planetary", "nebula", "nebulae", "universe",
+      "orbit", "comet", "asteroid", "moon", "mars", "jupiter", "saturn",
+      "telescope", "constellation", "supernova", "black hole",
+    ],
+  },
+  {
+    label: "Music",
+    keywords: [
+      "music", "musical", "song", "songs", "melody", "guitar", "piano",
+      "drums", "band", "album", "albums", "jazz", "classical", "lyric",
+      "lyrics", "instrument", "singing", "composer", "concert",
+    ],
+  },
+  {
+    label: "Food",
+    keywords: [
+      "cooking", "cook", "recipe", "recipes", "baking", "bake", "food",
+      "foods", "cuisine", "kitchen", "chef", "dish", "meal", "meals",
+      "pasta", "dessert", "coffee", "tea",
+    ],
+  },
+  {
+    label: "Nature",
+    keywords: [
+      "nature", "forest", "forests", "mountain", "mountains", "ocean",
+      "sea", "river", "rivers", "hiking", "wildlife", "plant", "plants",
+      "garden", "gardening", "flower", "flowers", "tree", "trees",
+    ],
+  },
+  {
+    label: "Animals",
+    keywords: [
+      "animal", "animals", "dog", "dogs", "cat", "cats", "pet", "pets",
+      "bird", "birds", "horse", "horses",
+    ],
+  },
+  {
+    label: "Tech",
+    keywords: [
+      "technology", "tech", "computer", "computers", "coding", "code",
+      "programming", "software", "robot", "robots", "robotics", "gadget",
+      "gadgets", "internet",
+    ],
+  },
+  {
+    label: "Art",
+    keywords: [
+      "art", "arts", "painting", "paint", "drawing", "draw", "sketch",
+      "sculpture", "design", "illustration", "museum", "gallery", "artist",
+      "photography", "photo", "photos",
+    ],
+  },
+  {
+    label: "Books",
+    keywords: [
+      "book", "books", "reading", "novel", "novels", "literature", "poetry",
+      "poem", "poems", "author", "writing", "story", "stories",
+    ],
+  },
+  {
+    label: "Film",
+    keywords: [
+      "film", "films", "movie", "movies", "cinema", "director", "actor",
+      "actors", "anime",
+    ],
+  },
+  {
+    label: "Travel",
+    keywords: [
+      "travel", "traveling", "travelling", "trip", "trips", "journey",
+      "adventure", "adventures", "backpacking", "country", "countries",
+      "city", "cities", "culture", "cultures",
+    ],
+  },
+  {
+    label: "Sports",
+    keywords: [
+      "sport", "sports", "fitness", "gym", "running", "workout", "soccer",
+      "football", "basketball", "tennis", "yoga", "exercise", "cycling",
+      "swimming", "climbing",
+    ],
+  },
+  {
+    label: "Games",
+    keywords: [
+      "game", "games", "gaming", "videogame", "videogames", "chess",
+      "puzzle", "puzzles",
+    ],
+  },
+  {
+    label: "Science",
+    keywords: [
+      "science", "physics", "chemistry", "biology", "mathematics", "math",
+      "maths", "geology", "research", "experiment", "experiments",
+    ],
+  },
+  {
+    label: "History",
+    keywords: [
+      "history", "historical", "ancient", "civilization", "civilisation",
+      "empire", "empires", "archaeology", "mythology",
+    ],
+  },
+  {
+    label: "Mind",
+    keywords: [
+      "philosophy", "psychology", "mind", "consciousness", "meditation",
+      "mindfulness", "spirituality", "emotion", "emotions",
+    ],
+  },
+];
+
+// Light singular/plural normaliser used both for keyword matching and the
+// shared-root fallback (galaxies→galaxy, stars→star). Deliberately simple.
+function singularize(w: string): string {
+  if (w.length > 4 && w.endsWith("ies")) return `${w.slice(0, -3)}y`;
+  if (w.length > 4 && w.endsWith("ses")) return w.slice(0, -2);
+  if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) {
+    return w.slice(0, -1);
+  }
+  return w;
+}
+
+// Find the theme a topic belongs to, matching whole words (singular/plural
+// aware) so "art" never swallows "start". Multi-word keywords match by
+// substring. Returns null when nothing fits.
+function themeFor(topic: string): string | null {
+  const norm = topic.toLowerCase().trim();
+  const words = norm.split(/[^a-z0-9]+/).filter(Boolean);
+  const forms = new Set<string>();
+  for (const w of words) {
+    forms.add(w);
+    forms.add(singularize(w));
+  }
+  for (const theme of INTEREST_THEMES) {
+    for (const kw of theme.keywords) {
+      if (kw.includes(" ")) {
+        if (norm.includes(kw)) return theme.label;
+      } else if (forms.has(kw) || forms.has(singularize(kw))) {
+        return theme.label;
+      }
+    }
+  }
+  return null;
+}
+
+type InterestItem =
+  | { kind: "single"; orig: number; topic: string; affinity: number }
+  | {
+      kind: "theme";
+      label: string;
+      members: { topic: string; affinity: number }[];
+    };
+
+// Blend member affinities into one "combined weight" so a cluster glows at
+// least as strongly as its strongest curiosity, with extra members nudging it
+// brighter (diminishing returns) — never past the 0–100 ceiling.
+function combinedWeight(members: { affinity: number }[]): number {
+  const sorted = members.map((m) => clamp(m.affinity)).sort((a, b) => b - a);
+  let v = sorted[0] ?? 0;
+  for (let i = 1; i < sorted.length; i++) v += sorted[i] * 0.35;
+  return clamp(v);
+}
+
+// Cluster interests for display: curated themes first, then a shared-root
+// fallback for plain singular/plural pairs. A bucket only becomes a theme when
+// it holds 2+ members; everything else (including lone theme matches) stays an
+// individual curiosity, preserving the original ordering.
+function groupInterests(interests: CompanionInterest[]): InterestItem[] {
+  const keys: (string | null)[] = interests.map((it) => themeFor(it.topic));
+
+  const rootOf = (t: string): string => {
+    const first =
+      t.toLowerCase().trim().split(/[^a-z0-9]+/).filter(Boolean)[0] ?? "";
+    return singularize(first);
+  };
+  const rootCounts: Record<string, number> = {};
+  interests.forEach((it, i) => {
+    if (keys[i] != null) return;
+    const r = rootOf(it.topic);
+    if (r.length >= 3) rootCounts[r] = (rootCounts[r] ?? 0) + 1;
+  });
+  interests.forEach((it, i) => {
+    if (keys[i] != null) return;
+    const r = rootOf(it.topic);
+    if (r.length >= 3 && (rootCounts[r] ?? 0) >= 2) keys[i] = `root:${r}`;
+  });
+
+  const order: string[] = [];
+  const buckets = new Map<string, number[]>();
+  keys.forEach((k, i) => {
+    const bk = k ?? `solo:${i}`;
+    const list = buckets.get(bk);
+    if (list) {
+      list.push(i);
+    } else {
+      buckets.set(bk, [i]);
+      order.push(bk);
+    }
+  });
+
+  const items: InterestItem[] = [];
+  for (const bk of order) {
+    const idxs = buckets.get(bk) ?? [];
+    if (idxs.length < 2 || bk.startsWith("solo:")) {
+      for (const i of idxs) {
+        items.push({
+          kind: "single",
+          orig: i,
+          topic: interests[i].topic,
+          affinity: interests[i].affinity,
+        });
+      }
+      continue;
+    }
+    const members = idxs
+      .map((i) => ({
+        topic: interests[i].topic,
+        affinity: interests[i].affinity,
+      }))
+      .sort((a, b) => b.affinity - a.affinity);
+    const label = bk.startsWith("root:") ? titleCase(members[0].topic) : bk;
+    items.push({ kind: "theme", label, members });
+  }
+  return items;
+}
+
 // Lay the self out as a vertical spine of category hubs (YOU → DRIVES →
 // TRAITS → INTERESTS → VOICE) with their values branching into two side
 // columns below each hub. The centre stays clear so the spine wires never
@@ -320,18 +562,46 @@ function buildGraph(self: CompanionSelf, fullWidth: number): Graph {
           ? "The things that have caught Empiri's eye, grown from what you talk about."
           : "Nothing here yet — Empiri's curiosities grow as you chat.",
     },
-    self.interests.map((it, idx) => ({
-      id: `interest-${idx}`,
-      label: it.topic.toUpperCase(),
-      value: clamp(it.affinity),
-      detail: {
-        title: it.topic,
-        role: "Curiosity · caught its eye",
-        blurb: "Something you've talked about that's started to matter to Empiri.",
-        valueLabel: affinityPhrase(it.affinity),
-        valuePct: clamp(it.affinity),
-      },
-    })),
+    groupInterests(self.interests).map((item) => {
+      if (item.kind === "single") {
+        return {
+          id: `interest-${item.orig}`,
+          label: item.topic.toUpperCase(),
+          value: clamp(item.affinity),
+          detail: {
+            title: item.topic,
+            role: "Curiosity · caught its eye",
+            blurb:
+              "Something you've talked about that's started to matter to Empiri.",
+            valueLabel: affinityPhrase(item.affinity),
+            valuePct: clamp(item.affinity),
+          },
+        };
+      }
+      const value = combinedWeight(item.members);
+      const slug = item.label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const shown = item.members.slice(0, 6);
+      const lines = shown.map(
+        (m) => `${m.topic.toUpperCase()} · ${affinityPhrase(m.affinity)}`,
+      );
+      if (item.members.length > shown.length) {
+        lines.push(`+${item.members.length - shown.length} more`);
+      }
+      return {
+        id: `interest-theme-${slug}`,
+        label: `${item.label.toUpperCase()} ·${item.members.length}`,
+        value,
+        detail: {
+          title: item.label,
+          role: `Theme · ${item.members.length} curiosities`,
+          blurb:
+            "A few related things you keep coming back to, gathered into one curiosity.",
+          valueLabel: affinityPhrase(value),
+          valuePct: value,
+          lines,
+        },
+      };
+    }),
   );
 
   const vTop = bottom + BAND_GAP;
