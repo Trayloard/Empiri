@@ -41,6 +41,7 @@ import {
   cancelNudges,
   requestNotificationPermission,
   scheduleNudge,
+  scheduleNudgeInSeconds,
 } from "@/lib/notifications";
 import { useAuth } from "@/lib/auth";
 
@@ -84,6 +85,12 @@ interface CompanionContextValue {
   retryInit: () => void;
   dismissError: () => void;
   signOut: () => Promise<void>;
+  /** DEV-only: fire the proactive check-in greeting immediately, ignoring the
+   * time-away threshold. No-op in production builds. */
+  devTriggerCheckIn: () => Promise<void>;
+  /** DEV-only: schedule a notification nudge a few seconds out instead of hours.
+   * No-op in production builds. */
+  devScheduleNudgeSoon: () => Promise<void>;
 }
 
 const CompanionContext = createContext<CompanionContextValue | undefined>(
@@ -218,6 +225,33 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     playSpeechRef.current = playSpeech;
   }, [playSpeech]);
 
+  // Fetch and present a proactive greeting for the companion's current mood.
+  // Shared by the time-based check-in on launch and the dev-only "check in now"
+  // shortcut, so both paths stay in lockstep.
+  const runCheckIn = useCallback(
+    async (state: CompanionMoodState) => {
+      const convId = conversationIdRef.current;
+      if (convId == null) return;
+      try {
+        const current = computeMood(state);
+        const greeting = await companionCheckIn(convId, {
+          hoursAway: current.hoursAway,
+          mood: current.label,
+          missingYou: current.missingYou,
+        });
+        setMessages((prev) => [...prev, greeting]);
+        if (voiceEnabled) {
+          setStatus("speaking");
+          await playSpeechRef.current(greeting.content);
+          setStatus("idle");
+        }
+      } catch {
+        // A failed check-in is silent — the user can still start the chat.
+      }
+    },
+    [voiceEnabled],
+  );
+
   const initialize = useCallback(async () => {
     setInitializing(true);
     setInitError(null);
@@ -272,28 +306,13 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         history.length > 0 &&
         shouldCheckIn(loadedMood, cadence)
       ) {
-        try {
-          const current = computeMood(loadedMood);
-          const greeting = await companionCheckIn(conversationIdRef.current, {
-            hoursAway: current.hoursAway,
-            mood: current.label,
-            missingYou: current.missingYou,
-          });
-          setMessages((prev) => [...prev, greeting]);
-          if (voiceEnabled) {
-            setStatus("speaking");
-            await playSpeechRef.current(greeting.content);
-            setStatus("idle");
-          }
-        } catch {
-          // A failed check-in is silent — the user can still start the chat.
-        }
+        await runCheckIn(loadedMood);
       }
     } catch {
       setInitError("Couldn't reach Empiri. Check your connection and retry.");
       setInitializing(false);
     }
-  }, [voiceEnabled]);
+  }, [runCheckIn]);
 
   useEffect(() => {
     // Wait for auth to finish loading. Only initialize when signed in.
@@ -527,6 +546,23 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // DEV-ONLY QA shortcuts. On-device verification of the proactive flows is slow
+  // because both depend on real elapsed time (hours of backgrounding). These
+  // fire the greeting immediately and queue a nudge seconds out. Everything is
+  // gated on `__DEV__`, so the bodies are dead-code-eliminated from production
+  // builds and never wired into the production UI.
+  const devTriggerCheckIn = useCallback(async () => {
+    if (!__DEV__) return;
+    await runCheckIn(moodStateRef.current);
+  }, [runCheckIn]);
+
+  const devScheduleNudgeSoon = useCallback(async () => {
+    if (!__DEV__) return;
+    const granted = await requestNotificationPermission();
+    if (!granted) return;
+    await scheduleNudgeInSeconds(NUDGE_BODY);
+  }, []);
+
   const retryInit = useCallback(() => {
     initialize();
   }, [initialize]);
@@ -587,6 +623,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         retryInit,
         dismissError,
         signOut,
+        devTriggerCheckIn,
+        devScheduleNudgeSoon,
       }}
     >
       {children}

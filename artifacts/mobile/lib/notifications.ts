@@ -63,13 +63,14 @@ export async function cancelNudges(): Promise<void> {
 }
 
 /**
- * Schedule a single "miss you" nudge `afterHours` from now. Cancels any
- * previously scheduled one first so we never stack duplicates.
+ * Schedule a single nudge `seconds` from now. Cancels any previously scheduled
+ * one first so we never stack duplicates. Shared by the real cadence nudge and
+ * the dev-only "soon" shortcut.
  */
-export async function scheduleNudge(
+async function scheduleNudgeAfterSeconds(
   body: string,
-  afterHours: number,
-  title = "Empiri",
+  seconds: number,
+  title: string,
 ): Promise<void> {
   if (!isSupported) return;
   ensureHandler();
@@ -80,10 +81,47 @@ export async function scheduleNudge(
       content: { title, body },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: Math.max(60, Math.round(afterHours * 3600)),
+        seconds,
       },
     });
   } catch {
     // best-effort
   }
+}
+
+/**
+ * Schedule a single "miss you" nudge `afterHours` from now. We never schedule
+ * sooner than a minute in production so the nudge stays a gentle "miss you",
+ * not a buzz moments after the user leaves.
+ */
+export async function scheduleNudge(
+  body: string,
+  afterHours: number,
+  title = "Empiri",
+): Promise<void> {
+  await scheduleNudgeAfterSeconds(
+    body,
+    Math.max(60, Math.round(afterHours * 3600)),
+    title,
+  );
+}
+
+/** Seconds out for the dev-only "nudge soon" QA shortcut. */
+export const DEV_NUDGE_SECONDS = 5;
+
+/**
+ * DEV-ONLY: schedule a nudge a few seconds out so the notification path can be
+ * verified on-device without waiting hours. Bypasses the production 60s floor.
+ * Only ever reached from `__DEV__`-gated callers, so it never fires in
+ * production builds.
+ */
+export async function scheduleNudgeInSeconds(
+  body: string,
+  seconds: number = DEV_NUDGE_SECONDS,
+  title = "Empiri",
+): Promise<void> {
+  // Defense-in-depth: even if a future caller forgets to gate this, it must
+  // never bypass the production 60s floor outside dev builds.
+  if (!__DEV__) return;
+  await scheduleNudgeAfterSeconds(body, Math.max(1, Math.round(seconds)), title);
 }

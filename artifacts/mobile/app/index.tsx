@@ -106,6 +106,8 @@ export default function CompanionScreen() {
     setCheckInCadence,
     retryInit,
     dismissError,
+    devTriggerCheckIn,
+    devScheduleNudgeSoon,
   } = useCompanion();
 
   const { isAuthenticated, isLoading: authLoading, login } = useAuth();
@@ -188,6 +190,23 @@ export default function CompanionScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setSettingsVisible(true);
+  };
+
+  // DEV-only QA shortcuts, surfaced inside the check-in sheet and stripped from
+  // production via `__DEV__` (here and in the sheet + context).
+  const handleDevCheckIn = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setSettingsVisible(false);
+    devTriggerCheckIn();
+  };
+
+  const handleDevNudge = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    devScheduleNudgeSoon();
   };
 
   if (authLoading) {
@@ -425,6 +444,8 @@ export default function CompanionScreen() {
         onSelect={setCheckInCadence}
         onClose={() => setSettingsVisible(false)}
         accent={accent}
+        onDevCheckIn={__DEV__ ? handleDevCheckIn : undefined}
+        onDevNudge={__DEV__ ? handleDevNudge : undefined}
       />
     </View>
   );
