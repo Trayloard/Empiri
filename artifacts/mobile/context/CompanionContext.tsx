@@ -23,7 +23,8 @@ export type CreatureState =
   | "thinking"
   | "responding"
   | "happy"
-  | "sleepy";
+  | "sleepy"
+  | "sad";
 
 export type Message = {
   id: string;
@@ -212,21 +213,41 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
         let fullContent = "";
+        let serverError = false;
+        let completed = false;
 
         if (reader) {
+          let buffer = "";
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split("\n");
+            // An SSE event can split across chunk boundaries, so accumulate
+            // and only parse whole lines (those followed by "\n"); keep the
+            // trailing partial buffered until the rest of it arrives.
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
 
             for (const line of lines) {
               if (line.startsWith("data: ")) {
                 const data = line.slice(6);
-                if (data === "[DONE]") break;
+                if (data === "[DONE]") {
+                  completed = true;
+                  break;
+                }
                 try {
-                  const parsed = JSON.parse(data) as { content?: string; done?: boolean };
+                  const parsed = JSON.parse(data) as {
+                    content?: string;
+                    done?: boolean;
+                    error?: string;
+                  };
+                  // The stream returns HTTP 200 even when the AI fails
+                  // mid-reply; the failure arrives as an `error` event.
+                  if (parsed.error) {
+                    serverError = true;
+                    break;
+                  }
                   if (parsed.content) {
                     fullContent += parsed.content;
                     setMessages((prev) =>
@@ -237,12 +258,23 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
                       )
                     );
                   }
-                  if (parsed.done) break;
+                  if (parsed.done) {
+                    completed = true;
+                    break;
+                  }
                 } catch {
                 }
               }
             }
+
+            if (serverError || completed) break;
           }
+        }
+
+        // A failure event — or a stream that ends without ever completing —
+        // must surface as an error, never a blank reply or a happy mood.
+        if (serverError || !completed) {
+          throw new Error("AI stream did not complete");
         }
 
         setCreatureState("happy");
@@ -254,12 +286,14 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
             m.id === assistantId
               ? {
                   ...m,
-                  content: "Hmm, something flickered... Try again? ✨",
+                  content:
+                    "I couldn't reach my thoughts just now — please try again in a moment. ✨",
                 }
               : m
           )
         );
-        setCreatureState("idle");
+        setCreatureState("sad");
+        setTimeout(() => setCreatureState("idle"), 3000);
       } finally {
         setIsStreaming(false);
       }

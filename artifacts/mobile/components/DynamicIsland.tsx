@@ -18,6 +18,7 @@ const STATE_LABELS: Record<CreatureState, string> = {
   responding: "Speaking...",
   happy: "Empiri  ✦",
   sleepy: "Zzz...",
+  sad: "Hmm...",
 };
 
 const PILL_WIDTHS: Record<CreatureState, number> = {
@@ -27,6 +28,7 @@ const PILL_WIDTHS: Record<CreatureState, number> = {
   responding: 260,
   happy: 230,
   sleepy: 200,
+  sad: 220,
 };
 
 type Props = {
@@ -49,6 +51,7 @@ export function DynamicIsland({ state, companionName }: Props) {
     responding: "#00E676",
     happy: "#FFD700",
     sleepy: "#4A90D9",
+    sad: "#64748B",
   };
 
   useEffect(() => {
@@ -113,6 +116,8 @@ export function DynamicIsland({ state, companionName }: Props) {
                       ? "#C084FC"
                       : state === "responding"
                       ? "#00E676"
+                      : state === "sad"
+                      ? "#94A3B8"
                       : "#FFD700",
                 },
               ]}
