@@ -27,5 +27,9 @@ and seedable, and the `defineBlock` registry lets future blocks snap in without 
 - The store row is created lazily (`loadOrCreateSelf`, race-safe via `onConflictDoNothing` + re-read).
   Evolve/save is best-effort and wrapped in try/catch so a personality-update failure never breaks
   a chat reply, voice, or check-in.
-- Interest extraction is a deliberately naive, deterministic keyword picker (prefers longer content
-  words over filler); a semantic extractor is a known future enhancement, not a bug.
+- Interest extraction is a **deterministic heuristic by design** — a scored keyword picker
+  (filler stoplists + a soft `-ing/-ed/-ly` verb/adverb penalty + a capitalization boost that
+  doubles as a German-noun detector, since German capitalizes all nouns). **Keep it pure: no
+  interaction-time LLM topic-tagging** — it would add per-message latency to the chat/voice path
+  and break the deterministic vitest suite that the whole lib relies on. A semantic/LLM extractor
+  remains a deliberate *future* option, not a bug.

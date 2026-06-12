@@ -74,14 +74,21 @@ describe("createSelf", () => {
 });
 
 describe("bounds are never violated", () => {
-  it("stays within bounds across many interactions and decays", () => {
+  it("stays within bounds across thousands of interactions and decays", () => {
     let self = createSelf(NEURO_PARAMS, undefined, T0);
     let now = T0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 5000; i++) {
       now += Math.floor(((i % 7) + 1) * 0.5 * HOUR);
       self = evolve(self, randomSignal(i), NEURO_PARAMS, now);
+      // Check on every step (drives/traits live state) and project forward so
+      // the time-decayed view is also asserted to stay clamped.
+      expect(everyScalarWithinBounds(self)).toBe(true);
       expect(everyScalarWithinBounds(project(self, NEURO_PARAMS, now))).toBe(true);
     }
+    // After thousands of varied interactions there is still real state to bound.
+    const summary = summarizeSelf(self, NEURO_PARAMS, now);
+    expect(summary.drives.length).toBeGreaterThan(0);
+    expect(summary.traits.length).toBeGreaterThan(0);
   });
 
   it("stays within bounds even with an aggressive learning rate", () => {
@@ -175,6 +182,128 @@ describe("evolve", () => {
   });
 });
 
+describe("deficit-relief reward loop", () => {
+  // A drive's reward is wasted against the ceiling once it is nearly satisfied,
+  // so the *realized* learning signal (the actual level/striving change from one
+  // identical interaction) must be larger for a hungrier (more deficient) drive.
+  const fullyFeedConnection: InteractionSignal = {
+    kind: "message",
+    connection: 1,
+    curiosity: 0,
+    novelty: 0,
+    expression: 0,
+    topics: [],
+    moodFactor: 1,
+  };
+
+  function reliefForConnection(startLevel: number): { gain: number; striving: number } {
+    const before = createSelf(NEURO_PARAMS, { drives: { connection: startLevel } }, T0);
+    const after = evolve(before, fullyFeedConnection, NEURO_PARAMS, T0);
+    const b = summarizeSelf(before, NEURO_PARAMS, T0).drives.find((d) => d.key === "connection")!;
+    const a = summarizeSelf(after, NEURO_PARAMS, T0).drives.find((d) => d.key === "connection")!;
+    return { gain: a.level - b.level, striving: b.striving - a.striving };
+  }
+
+  it("gives a hungrier drive a larger realized learning signal than a sated one", () => {
+    const hungry = reliefForConnection(10);
+    const sated = reliefForConnection(95);
+    // The sated drive's reward is clipped by the ceiling; the hungry one is not.
+    expect(hungry.gain).toBeGreaterThan(sated.gain);
+    // Relief = reduction in striving — the hungry drive is relieved more.
+    expect(hungry.striving).toBeGreaterThan(sated.striving);
+    // The sated drive still cannot exceed the upper bound.
+    const overfed = evolve(
+      createSelf(NEURO_PARAMS, { drives: { connection: 95 } }, T0),
+      fullyFeedConnection,
+      NEURO_PARAMS,
+      T0,
+    );
+    const level = summarizeSelf(overfed, NEURO_PARAMS, T0).drives.find((d) => d.key === "connection")!.level;
+    expect(level).toBeLessThanOrEqual(max);
+  });
+
+  it("realized relief grows monotonically as the drive gets hungrier", () => {
+    const veryHungry = reliefForConnection(0);
+    const mild = reliefForConnection(60);
+    const nearlyFull = reliefForConnection(99);
+    expect(veryHungry.gain).toBeGreaterThanOrEqual(mild.gain);
+    expect(mild.gain).toBeGreaterThanOrEqual(nearlyFull.gain);
+  });
+});
+
+describe("interests accumulate and the prune floor protects growing topics", () => {
+  const maxCount = NEURO_PARAMS.coreSelf.interest.maxCount;
+
+  function focused(topic: string): InteractionSignal {
+    return {
+      kind: "message",
+      connection: 1,
+      curiosity: 1,
+      novelty: 0.8,
+      expression: 0.5,
+      topics: [topic],
+      moodFactor: 1,
+    };
+  }
+
+  it("accumulates affinity for a repeatedly raised topic", () => {
+    let self = createSelf(NEURO_PARAMS, undefined, T0);
+    let now = T0;
+    let previous = 0;
+    for (let i = 0; i < 6; i++) {
+      now += HOUR;
+      self = evolve(self, focused("astronomy"), NEURO_PARAMS, now);
+      const affinity = summarizeSelf(self, NEURO_PARAMS, now).interests.find((i) => i.topic === "astronomy")!
+        .affinity;
+      // Each reinforcement leaves the topic stronger than the gentle hourly decay
+      // could erase, so affinity climbs turn over turn.
+      expect(affinity).toBeGreaterThan(previous);
+      previous = affinity;
+    }
+  });
+
+  it("never prunes a genuinely growing topic even when many rivals compete for the cap", () => {
+    let self = createSelf(NEURO_PARAMS, undefined, T0);
+    let now = T0;
+    // Build up a strong, real interest first.
+    for (let i = 0; i < 6; i++) {
+      now += HOUR;
+      self = evolve(self, focused("astronomy"), NEURO_PARAMS, now);
+    }
+    // Now flood it with far more brand-new rival topics than the cap, while still
+    // reinforcing the growing one each turn. The cap (maxCount) must drop the
+    // weak newcomers, never the topic that is actively growing.
+    for (let i = 0; i < maxCount * 3; i++) {
+      now += HOUR;
+      self = evolve(
+        self,
+        { ...focused("astronomy"), topics: ["astronomy", `rival${i}`] },
+        NEURO_PARAMS,
+        now,
+      );
+    }
+    const interests = summarizeSelf(self, NEURO_PARAMS, now).interests;
+    expect(interests.length).toBeLessThanOrEqual(maxCount);
+    const astronomy = interests.find((i) => i.topic === "astronomy");
+    expect(astronomy).toBeDefined();
+    expect(astronomy!.affinity).toBeGreaterThanOrEqual(NEURO_PARAMS.coreSelf.interest.surfaceThreshold);
+  });
+
+  it("does not let the gentle-forgetting floor delete an actively reinforced topic", () => {
+    let self = createSelf(NEURO_PARAMS, undefined, T0);
+    let now = T0;
+    // Long gaps between turns make decay aggressive, but a topic that is touched
+    // every turn must survive the affinity > 0.5 deletion filter.
+    for (let i = 0; i < 12; i++) {
+      now += 24 * HOUR;
+      self = evolve(self, focused("gardening"), NEURO_PARAMS, now);
+      const gardening = summarizeSelf(self, NEURO_PARAMS, now).interests.find((i) => i.topic === "gardening");
+      expect(gardening).toBeDefined();
+      expect(gardening!.affinity).toBeGreaterThan(0.5);
+    }
+  });
+});
+
 describe("hydrate (tolerant loading)", () => {
   it("falls back to a fresh self on garbage input", () => {
     expect(Object.keys(hydrate(null, NEURO_PARAMS, T0).blocks).length).toBeGreaterThan(0);
@@ -240,6 +369,37 @@ describe("deriveMessageSignal", () => {
     expect(topics).toContain("astronomy");
     expect(topics).not.toContain("totally");
     expect(topics).not.toContain("fascinated");
+  });
+
+  it("drops generic filler nouns and nominalized verbs, keeping the real subject", () => {
+    const topics = deriveMessageSignal(
+      "I keep thinking about the form of distant galaxies",
+    ).topics;
+    expect(topics).toContain("galaxies");
+    expect(topics).not.toContain("thinking");
+    expect(topics).not.toContain("form");
+  });
+
+  it("boosts a capitalized mid-sentence proper noun (a place or person) to the top", () => {
+    expect(deriveMessageSignal("we talked about Paris over coffee").topics[0]).toBe("paris");
+    expect(deriveMessageSignal("I had dinner with Hannah last night").topics[0]).toBe("hannah");
+  });
+
+  it("surfaces a capitalized German noun as the subject (nouns are capitalized in German)", () => {
+    const topics = deriveMessageSignal("Ich denke gerade viel über Galaxien nach").topics;
+    expect(topics).toContain("galaxien");
+    expect(topics).not.toContain("denke");
+  });
+
+  it("still lets a genuine -ing interest surface when nothing stronger competes", () => {
+    // The morphology penalty is a soft demotion, not an exclusion.
+    expect(deriveMessageSignal("I love gardening").topics).toContain("gardening");
+  });
+
+  it("ignores punctuation-only tokens such as dash dividers", () => {
+    const topics = deriveMessageSignal("my family means everything ---- to me").topics;
+    expect(topics).not.toContain("----");
+    expect(topics).toContain("family");
   });
 
   it("always feeds connection and stays within 0..1", () => {

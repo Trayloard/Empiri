@@ -56,7 +56,13 @@ const STOPWORDS = new Set([
   "super", "quite", "still", "around", "kind", "kinda", "sort", "sorta",
   // English generic verbs of speech / cognition
   "want", "wanted", "know", "knew", "think", "thought", "feel", "tell", "told",
-  "talk", "talking", "said", "says", "saying", "love", "loved", "need", "needed",
+  "talk", "talking", "talked", "said", "says", "saying", "love", "loved", "need",
+  "needed",
+  // English generic action verbs (base/3rd-person forms; -ing/-ed/-ly forms are
+  // caught by the morphology penalty in extractTopics rather than listed here).
+  "keep", "keeps", "make", "makes", "take", "takes", "give", "gives", "come",
+  "comes", "find", "finds", "look", "looks", "seem", "seems", "over",
+  "fascinate", "fascinates",
   // German structural / fillers
   "oder", "aber", "auch", "noch", "schon", "sehr", "mehr", "dann", "denn",
   "dass", "weil", "wenn", "wenns", "doch", "habe", "haben", "hatte", "hätte",
@@ -64,32 +70,100 @@ const STOPWORDS = new Set([
   "deine", "nicht", "etwas", "immer", "schön", "ganz", "über", "diese", "dieser",
   "total", "wirklich", "vielleicht", "eigentlich", "gerade", "heute", "morgen",
   "gestern", "machen", "gemacht", "reden", "sagen", "gesagt", "finde", "echt",
+  "viel", "viele", "nach", "durch", "ohne", "einfach",
 ]);
+
+// Words that survive the length filter but are generic "filler" nouns or
+// nominalized verbs — they read like topics ("form", "idea", "thinking") yet
+// name no real subject. Kept apart from STOPWORDS for readability; both sets
+// are excluded. This is the class the "growing curiosities" surface most wants
+// to drop so that genuine subjects (people, places, themes) shine through.
+const GENERIC_TERMS = new Set([
+  // English abstract / filler nouns
+  "form", "forms", "idea", "ideas", "way", "ways", "part", "parts", "type",
+  "types", "sense", "point", "points", "fact", "facts", "case", "cases", "lot",
+  "lots", "time", "times", "moment", "moments", "reason", "reasons", "example",
+  "examples", "people", "person", "matter", "matters",
+  // English nominalized cognition/speech verbs that escape the stopword list
+  "thinking", "wondering", "wanting", "trying", "guess", "mean", "means",
+  "meaning",
+  // German generic nouns / nominalized verbs (nouns are capitalized in German,
+  // so these would otherwise be boosted as proper subjects below)
+  "sache", "sachen", "ding", "dinge", "weise", "grund", "gründe", "denken",
+  "denke", "denkst", "gedanke", "gedanken", "frage", "fragen",
+]);
+
+/** True if the token at `index` begins a sentence (so capitalization there is
+ * not a proper-noun signal — it's just the start of a clause). */
+function isSentenceStart(text: string, index: number): boolean {
+  let i = index - 1;
+  while (i >= 0 && /\s/.test(text[i]!)) {
+    if (text[i] === "\n") return true; // a new line starts a fresh clause
+    i -= 1;
+  }
+  if (i < 0) return true;
+  return /[.!?;:]/.test(text[i]!);
+}
 
 /**
  * Extract up to `max` candidate topic keywords from a turn of text. Naive and
  * deterministic, but biased toward content: lower-cased letter-words of length
- * >= 4 that are not common filler, preferring longer (more content-bearing)
- * words, with first-occurrence order as the tiebreak. This favours nouns like
- * "astronomy" over fillers like "totally". The reinforcement loop does the rest
- * over time. (A semantic extractor is a deliberate future enhancement.)
+ * >= 4 that are not common filler. Rather than ranking on raw length alone, each
+ * candidate is scored so genuine subjects beat noise: a capitalized mid-sentence
+ * word is boosted (proper nouns like people/places in English, and ordinary nouns
+ * in German, where every noun is capitalized), while words that look like verbs or
+ * adverbs by their ending (-ing / -ed / -ly) are softly penalized — softly, so a
+ * real interest like "gardening" can still surface when nothing stronger competes.
+ * This favours subjects like "astronomy" or "Paris" over fillers like "thinking"
+ * or "totally". The reinforcement loop does the rest over time. (A semantic
+ * extractor is a deliberate future enhancement.)
  */
 export function extractTopics(text: string, max = 2): string[] {
-  const candidates = text
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}-]+/u)
-    .map((w, index) => ({ word: w.trim(), index }))
-    .filter((c) => c.word.length >= 4 && !STOPWORDS.has(c.word));
+  const source = text ?? "";
+  const tokenRe = /[\p{L}\p{N}-]+/gu;
+  const scored: { key: string; score: number; order: number }[] = [];
+  let match: RegExpExecArray | null;
+  let order = 0;
 
-  // Prefer longer words; keep first-occurrence order as the tiebreak.
-  candidates.sort((a, b) => b.word.length - a.word.length || a.index - b.index);
+  while ((match = tokenRe.exec(source)) !== null) {
+    const original = match[0];
+    const key = normalizeTopic(original);
+    order += 1;
+    // Require real content: long enough, at least one letter/digit (so dash
+    // dividers like "----" can't become a topic), and not common filler.
+    if (
+      key.length < 4 ||
+      !/[\p{L}\p{N}]/u.test(key) ||
+      STOPWORDS.has(key) ||
+      GENERIC_TERMS.has(key)
+    ) {
+      continue;
+    }
+
+    // Content bias, capped so a single very long word can't dwarf a strong
+    // proper-noun signal.
+    let score = Math.min(key.length, 14);
+
+    // Capitalized words that don't start a sentence are likely real subjects.
+    if (/^\p{Lu}/u.test(original) && !isSentenceStart(source, match.index)) {
+      score += 6;
+    }
+
+    // Verb/adverb-looking endings are demoted but not excluded.
+    if (/(?:ing|ed|ly)$/.test(key)) score -= 4;
+
+    scored.push({ key, score, order });
+  }
+
+  // Highest score wins; first-occurrence order is the deterministic tiebreak.
+  scored.sort((a, b) => b.score - a.score || a.order - b.order);
 
   const seen = new Set<string>();
   const topics: string[] = [];
-  for (const { word } of candidates) {
-    if (seen.has(word)) continue;
-    seen.add(word);
-    topics.push(word);
+  for (const { key } of scored) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    topics.push(key);
     if (topics.length >= max) break;
   }
   return topics;
