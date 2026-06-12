@@ -16,6 +16,12 @@ import {
 } from "@workspace/api-zod";
 import { loadOrCreateSelf, saveSelf } from "../lib/companionSelf";
 import { getSelfHistory, maybeSnapshotSelf } from "../lib/selfSnapshots";
+import {
+  buildContextMessages,
+  getIncrementalMessagesForSummarisation,
+  nextSummarizedCount,
+  shouldRefreshSummary,
+} from "../lib/contextWindow";
 
 const router: IRouter = Router();
 
@@ -121,14 +127,55 @@ router.post("/conversations/:id/messages", async (req, res) => {
     .where(eq(messages.conversationId, id))
     .orderBy(asc(messages.createdAt));
 
+  // Incrementally refresh the rolling context summary when new messages have
+  // slid past the window boundary since the last watermark.  The summariser
+  // only receives the bounded delta (not the full overflow) so cost stays
+  // constant per refresh regardless of conversation length.  Best-effort: a
+  // failed refresh never blocks the reply.
+  let contextSummary = conversation.contextSummary ?? null;
+  const lastSummarizedCount = conversation.contextSummaryMessageCount ?? null;
+  if (shouldRefreshSummary(history.length, lastSummarizedCount)) {
+    try {
+      const delta = getIncrementalMessagesForSummarisation(history, lastSummarizedCount);
+      const deltaText = delta
+        .map((m) => `${m.role === "assistant" ? "Empiri" : "User"}: ${m.content}`)
+        .join("\n");
+
+      const systemInstruction = contextSummary
+        ? `You are a memory assistant. Update the existing summary below by incorporating the new messages that follow. Keep the result to 100–150 words. Write in third person, e.g. "The user mentioned…".\n\nExisting summary:\n${contextSummary}`
+        : `You are a memory assistant. Summarise the following conversation excerpt into a concise paragraph (100–150 words) covering the main topics discussed, any personal details the user shared, and the overall emotional tone. Write in third person, e.g. "The user mentioned…".`;
+
+      const summaryCompletion = await openai.chat.completions.create({
+        model: "gpt-5-mini",
+        max_completion_tokens: 512,
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: deltaText },
+        ],
+      });
+      const newSummary = summaryCompletion.choices[0]?.message?.content?.trim() ?? null;
+      if (newSummary) {
+        contextSummary = newSummary;
+        // Advance the watermark only as far as we actually processed (delta.length),
+        // not all the way to the window start.  If the gap was larger than one batch,
+        // shouldRefreshSummary will still fire on the next turn and continue progress.
+        const newWatermark = nextSummarizedCount(lastSummarizedCount, delta.length);
+        await db
+          .update(conversations)
+          .set({ contextSummary: newSummary, contextSummaryMessageCount: newWatermark })
+          .where(eq(conversations.id, id));
+      }
+    } catch (err) {
+      req.log.error({ err }, "Failed to refresh context summary");
+    }
+  }
+
   // Compose the system prompt from this conversation's evolving inner self.
   const self = await loadOrCreateSelf(id);
+  const windowedMessages = buildContextMessages(history, contextSummary);
   const chatMessages = [
     { role: "system" as const, content: composePersona(self) },
-    ...history.map((m) => ({
-      role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
-      content: m.content,
-    })),
+    ...windowedMessages,
   ];
 
   let reply = "";
