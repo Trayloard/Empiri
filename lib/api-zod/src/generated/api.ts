@@ -97,13 +97,56 @@ export const LogoutMobileSessionResponse = zod.object({
 
 
 /**
- * @summary Load the authenticated user's conversation history
+ * @summary List the authenticated user's conversations
  */
-export const GetConversationHeader = zod.object({
+export const ListConversationsHeader = zod.object({
   "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
 })
 
-export const GetConversationResponse = zod.object({
+export const ListConversationsResponse = zod.object({
+  "conversations": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "createdAt": zod.number().describe('Unix timestamp in milliseconds.')
+}))
+})
+
+
+/**
+ * @summary Create a new conversation for the authenticated user
+ */
+export const CreateConversationHeader = zod.object({
+  "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
+})
+
+
+
+
+export const CreateConversationBody = zod.object({
+  "title": zod.string().min(1).optional()
+})
+
+export const CreateConversationResponse = zod.object({
+  "conversation": zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "createdAt": zod.number().describe('Unix timestamp in milliseconds.')
+})
+})
+
+
+/**
+ * @summary Load the messages for a specific conversation
+ */
+export const GetConversationMessagesParams = zod.object({
+  "conversationId": zod.coerce.number().describe('Numeric id of the conversation.')
+})
+
+export const GetConversationMessagesHeader = zod.object({
+  "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
+})
+
+export const GetConversationMessagesResponse = zod.object({
   "messages": zod.array(zod.object({
   "id": zod.string(),
   "role": zod.enum(['user', 'assistant']),
@@ -114,20 +157,12 @@ export const GetConversationResponse = zod.object({
 
 
 /**
- * @summary Delete the authenticated user's conversation history
+ * @summary Append a message to a specific conversation
  */
-export const ClearConversationHeader = zod.object({
-  "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
+export const SaveConversationMessageParams = zod.object({
+  "conversationId": zod.coerce.number().describe('Numeric id of the conversation.')
 })
 
-export const ClearConversationResponse = zod.object({
-  "success": zod.boolean()
-})
-
-
-/**
- * @summary Append a message to the authenticated user's conversation
- */
 export const SaveConversationMessageHeader = zod.object({
   "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
 })
@@ -147,6 +182,22 @@ export const SaveConversationMessageResponse = zod.object({
   "content": zod.string(),
   "timestamp": zod.number().describe('Unix timestamp in milliseconds.')
 })
+})
+
+
+/**
+ * @summary Delete a specific conversation and its messages
+ */
+export const DeleteConversationParams = zod.object({
+  "conversationId": zod.coerce.number().describe('Numeric id of the conversation.')
+})
+
+export const DeleteConversationHeader = zod.object({
+  "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
+})
+
+export const DeleteConversationResponse = zod.object({
+  "success": zod.boolean()
 })
 
 

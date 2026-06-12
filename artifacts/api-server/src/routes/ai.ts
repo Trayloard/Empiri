@@ -1,9 +1,9 @@
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, messages } from "@workspace/db";
+import { db, conversations, messages } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
 
-import { getOrCreateConversation } from "./conversations";
+import { DEFAULT_TITLE, getOwnedConversation } from "./conversations";
 
 const router: IRouter = Router();
 
@@ -16,9 +16,10 @@ router.post("/ai/chat", async (req: Request, res: Response) => {
     return;
   }
 
-  const { message, system } = req.body as {
+  const { message, system, conversationId } = req.body as {
     message?: unknown;
     system?: unknown;
+    conversationId?: unknown;
   };
 
   if (typeof message !== "string" || message.trim().length === 0) {
@@ -26,12 +27,23 @@ router.post("/ai/chat", async (req: Request, res: Response) => {
     return;
   }
 
+  if (typeof conversationId !== "number" || !Number.isInteger(conversationId)) {
+    res.status(400).json({ error: "conversationId is required" });
+    return;
+  }
+
+  // Ownership must be resolved with a plain JSON error BEFORE we switch the
+  // response into the SSE stream — otherwise a 404 can't be expressed cleanly.
+  const conversation = await getOwnedConversation(req.user.id, conversationId);
+  if (!conversation) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
   const systemPrompt =
     typeof system === "string" && system.trim().length > 0
       ? system
       : DEFAULT_SYSTEM_PROMPT;
-
-  const conversation = await getOrCreateConversation(req.user.id);
 
   // Persist the incoming user message first so the AI context is sourced from
   // the same persisted history the user sees (and stays coherent across
@@ -41,6 +53,15 @@ router.post("/ai/chat", async (req: Request, res: Response) => {
     role: "user",
     content: message,
   });
+
+  // Give brand-new conversations a meaningful label for the chat switcher,
+  // derived from the first thing the user says.
+  if (conversation.title === DEFAULT_TITLE) {
+    await db
+      .update(conversations)
+      .set({ title: message.trim().slice(0, 40) })
+      .where(eq(conversations.id, conversation.id));
+  }
 
   const history = await db
     .select()

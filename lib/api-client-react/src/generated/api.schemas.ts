@@ -67,6 +67,26 @@ export interface ConversationEnvelope {
   messages: ConversationMessage[];
 }
 
+export interface ConversationSummary {
+  id: number;
+  title: string;
+  /** Unix timestamp in milliseconds. */
+  createdAt: number;
+}
+
+export interface ConversationListEnvelope {
+  conversations: ConversationSummary[];
+}
+
+export interface ConversationDetailEnvelope {
+  conversation: ConversationSummary;
+}
+
+export interface CreateConversationRequest {
+  /** @minLength 1 */
+  title?: string;
+}
+
 export type SaveMessageRequestRole = typeof SaveMessageRequestRole[keyof typeof SaveMessageRequestRole];
 
 

@@ -144,17 +144,65 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LogoutSuccess'
-  /conversation:
+  /conversations:
     get:
       tags: [Conversations]
-      operationId: getConversation
-      summary: Load the authenticated user's conversation history
+      operationId: listConversations
+      summary: List the authenticated user's conversations
       parameters:
         - $ref: '#/components/parameters/AuthorizationSessionHeader'
         - $ref: '#/components/parameters/SessionCookie'
       responses:
         '200':
-          description: Conversation history loaded successfully.
+          description: Conversations listed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListEnvelope'
+        '401':
+          description: Not authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags: [Conversations]
+      operationId: createConversation
+      summary: Create a new conversation for the authenticated user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+      responses:
+        '200':
+          description: Conversation created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetailEnvelope'
+        '401':
+          description: Not authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /conversations/{conversationId}/messages:
+    get:
+      tags: [Conversations]
+      operationId: getConversationMessages
+      summary: Load the messages for a specific conversation
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - $ref: '#/components/parameters/ConversationIdPath'
+      responses:
+        '200':
+          description: Conversation messages loaded successfully.
           content:
             application/json:
               schema:
@@ -165,34 +213,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-    delete:
-      tags: [Conversations]
-      operationId: clearConversation
-      summary: Delete the authenticated user's conversation history
-      parameters:
-        - $ref: '#/components/parameters/AuthorizationSessionHeader'
-        - $ref: '#/components/parameters/SessionCookie'
-      responses:
-        '200':
-          description: Conversation history cleared.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ClearConversationSuccess'
-        '401':
-          description: Not authenticated.
+        '404':
+          description: Conversation not found.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-  /conversation/messages:
     post:
       tags: [Conversations]
       operationId: saveConversationMessage
-      summary: Append a message to the authenticated user's conversation
+      summary: Append a message to a specific conversation
       parameters:
         - $ref: '#/components/parameters/AuthorizationSessionHeader'
         - $ref: '#/components/parameters/SessionCookie'
+        - $ref: '#/components/parameters/ConversationIdPath'
       requestBody:
         required: true
         content:
@@ -214,6 +248,40 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           description: Not authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Conversation not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /conversations/{conversationId}:
+    delete:
+      tags: [Conversations]
+      operationId: deleteConversation
+      summary: Delete a specific conversation and its messages
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+        - $ref: '#/components/parameters/ConversationIdPath'
+      responses:
+        '200':
+          description: Conversation deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClearConversationSuccess'
+        '401':
+          description: Not authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Conversation not found.
           content:
             application/json:
               schema:
@@ -255,6 +323,13 @@ components:
       description: Browser session cookie.
       schema:
         type: string
+    ConversationIdPath:
+      name: conversationId
+      in: path
+      required: true
+      description: Numeric id of the conversation.
+      schema:
+        type: integer
   schemas:
     HealthStatus:
       type: object
@@ -341,6 +416,37 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ConversationMessage'
+    ConversationSummary:
+      type: object
+      required: [id, title, createdAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: integer
+          description: Unix timestamp in milliseconds.
+    ConversationListEnvelope:
+      type: object
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConversationSummary'
+    ConversationDetailEnvelope:
+      type: object
+      required: [conversation]
+      properties:
+        conversation:
+          $ref: '#/components/schemas/ConversationSummary'
+    CreateConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
     SaveMessageRequest:
       type: object
       required: [role, content]

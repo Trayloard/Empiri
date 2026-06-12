@@ -1,9 +1,11 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -22,12 +24,24 @@ import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/lib/auth";
 
 export default function HomeScreen() {
-  const { messages, creatureState, companionName, isStreaming, sendMessage, clearMessages } =
-    useCompanion();
+  const {
+    messages,
+    conversations,
+    activeConversationId,
+    creatureState,
+    companionName,
+    isStreaming,
+    sendMessage,
+    switchConversation,
+    newConversation,
+    deleteActiveConversation,
+  } = useCompanion();
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const router = useRouter();
   const listRef = useRef<FlatList<Message>>(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
   const firstName = user?.firstName?.trim() || null;
   const initial = (firstName || user?.email || "?").charAt(0).toUpperCase();
@@ -41,7 +55,19 @@ export default function HomeScreen() {
 
   const handleClear = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    clearMessages();
+    deleteActiveConversation();
+  };
+
+  const handleNewChat = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSwitcherOpen(false);
+    newConversation();
+  };
+
+  const handleSwitch = (id: number) => {
+    Haptics.selectionAsync();
+    setSwitcherOpen(false);
+    switchConversation(id);
   };
 
   const renderEmpty = () => (
@@ -85,12 +111,48 @@ export default function HomeScreen() {
           </Text>
         </TouchableOpacity>
         <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => setSwitcherOpen(true)}
+            style={styles.iconBtn}
+            disabled={isStreaming}
+            accessibilityRole="button"
+            accessibilityLabel="Switch conversation"
+          >
+            <Feather
+              name="message-square"
+              size={16}
+              color={isStreaming ? colors.border : colors.mutedForeground}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleNewChat}
+            style={styles.iconBtn}
+            disabled={isStreaming}
+            accessibilityRole="button"
+            accessibilityLabel="New chat"
+          >
+            <Feather
+              name="edit-3"
+              size={16}
+              color={isStreaming ? colors.border : colors.mutedForeground}
+            />
+          </TouchableOpacity>
           {messages.length > 0 && (
-            <TouchableOpacity onPress={handleClear} style={styles.clearBtn}>
-              <Feather name="trash-2" size={16} color={colors.mutedForeground} />
+            <TouchableOpacity
+              onPress={handleClear}
+              style={styles.iconBtn}
+              disabled={isStreaming}
+              accessibilityRole="button"
+              accessibilityLabel="Delete this chat"
+            >
+              <Feather
+                name="trash-2"
+                size={16}
+                color={isStreaming ? colors.border : colors.mutedForeground}
+              />
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={logout} style={styles.clearBtn}>
+          <TouchableOpacity onPress={logout} style={styles.iconBtn}>
             <Feather name="log-out" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
@@ -120,6 +182,90 @@ export default function HomeScreen() {
         />
         <ChatInput onSend={handleSend} disabled={isStreaming} />
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={switcherOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSwitcherOpen(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setSwitcherOpen(false)}
+        >
+          <Pressable
+            style={[
+              styles.sheet,
+              { backgroundColor: colors.background, paddingBottom: insets.bottom + 16 },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: colors.foreground }]}>
+                Your chats
+              </Text>
+              <TouchableOpacity
+                onPress={handleNewChat}
+                style={[styles.newChatBtn, { backgroundColor: colors.foreground }]}
+                disabled={isStreaming}
+                accessibilityRole="button"
+                accessibilityLabel="New chat"
+              >
+                <Feather name="plus" size={16} color={colors.background} />
+                <Text style={[styles.newChatText, { color: colors.background }]}>
+                  New
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={conversations}
+              keyExtractor={(c) => String(c.id)}
+              style={styles.convList}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => {
+                const active = item.id === activeConversationId;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.convRow,
+                      { borderColor: colors.border },
+                      active && { backgroundColor: colors.muted },
+                    ]}
+                    onPress={() => handleSwitch(item.id)}
+                    disabled={isStreaming}
+                    activeOpacity={0.7}
+                  >
+                    <Feather
+                      name="message-circle"
+                      size={16}
+                      color={active ? colors.foreground : colors.mutedForeground}
+                    />
+                    <Text
+                      style={[
+                        styles.convTitle,
+                        { color: active ? colors.foreground : colors.mutedForeground },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    {active && (
+                      <Feather name="check" size={16} color={colors.foreground} />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <Text style={[styles.convEmpty, { color: colors.mutedForeground }]}>
+                  No chats yet.
+                </Text>
+              }
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -165,7 +311,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  clearBtn: {
+  iconBtn: {
     padding: 4,
   },
   list: {
@@ -191,5 +337,69 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     lineHeight: 22,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  sheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    maxHeight: "70%",
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 12,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  newChatBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  newChatText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  convList: {
+    flexGrow: 0,
+  },
+  convRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 8,
+  },
+  convTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  convEmpty: {
+    textAlign: "center",
+    paddingVertical: 24,
+    fontSize: 14,
   },
 });
