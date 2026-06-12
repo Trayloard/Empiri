@@ -1,0 +1,2 @@
+- [Voice on Expo mobile](voice-on-expo.md) — record with expo-audio + base64 to your own OpenAI STT/TTS endpoints; MediaRecorder web libs don't work in RN; native-first, web degrades.
+- [Monorepo typecheck gotchas](monorepo-typecheck-gotchas.md) — root `pnpm run typecheck` fails pre-existing in mockup-sandbox (duplicate @types/react); rebuild libs before trusting per-package typecheck.
