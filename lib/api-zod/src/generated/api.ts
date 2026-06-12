@@ -205,7 +205,7 @@ export const GetCompanionSelfResponse = zod.object({
 
 
 /**
- * Returns the timeline of inner-self snapshots (drives, traits, and emerging curiosities) captured over the life of the conversation, oldest first.
+ * Returns the timeline of inner-self snapshots (drives, traits, and emerging curiosities) captured over the life of the conversation, oldest first. Capped to the most recent snapshots so very long-lived timelines stay fast.
  * @summary Get how the companion has grown over time
  */
 export const GetCompanionSelfHistoryParams = zod.object({

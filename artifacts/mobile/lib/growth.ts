@@ -121,12 +121,34 @@ export function firstSeenCuriosities(
   return [...seen.values()].sort((a, b) => b.at - a.at);
 }
 
-/** Build an SVG polyline `d` for a sparkline over the given box. */
+/**
+ * Normalized x positions (0..1) for each point along a *real* time axis, so a
+ * line drawn through them reflects the actual gaps between snapshots rather than
+ * even index spacing. Assumes points are oldest→newest (as buildTimeline emits).
+ * Degenerate inputs — none, one, or all-identical timestamps — fall back to even
+ * spacing so the chart stays drawable.
+ */
+export function timePositions(points: { at: number }[]): number[] {
+  const n = points.length;
+  if (n === 0) return [];
+  if (n === 1) return [0];
+  const first = points[0].at;
+  const last = points[n - 1].at;
+  const span = last - first;
+  if (!(span > 0)) return points.map((_, i) => i / (n - 1));
+  return points.map((p) => (p.at - first) / span);
+}
+
+/**
+ * Build an SVG polyline `d` for a sparkline over the given box. When `xs`
+ * (normalized 0..1 positions, one per value) is supplied the points honor a real
+ * time axis; otherwise they are spaced evenly by index.
+ */
 export function sparklinePath(
   values: number[],
   width: number,
   height: number,
-  opts: { min?: number; max?: number; pad?: number } = {},
+  opts: { min?: number; max?: number; pad?: number; xs?: number[] } = {},
 ): string {
   if (values.length === 0) return "";
   const pad = opts.pad ?? 2;
@@ -143,7 +165,9 @@ export function sparklinePath(
     // A flat segment keeps a lone reading visible instead of an empty box.
     return `M 0 ${y(values[0]).toFixed(2)} L ${width} ${y(values[0]).toFixed(2)}`;
   }
-  const x = (i: number) => (i / (n - 1)) * width;
+  const xsNorm = opts.xs && opts.xs.length === n ? opts.xs : null;
+  const x = (i: number) =>
+    (xsNorm ? Math.max(0, Math.min(1, xsNorm[i])) : i / (n - 1)) * width;
   let d = `M ${x(0).toFixed(2)} ${y(values[0]).toFixed(2)}`;
   for (let i = 1; i < n; i++) {
     d += ` L ${x(i).toFixed(2)} ${y(values[i]).toFixed(2)}`;
@@ -174,4 +198,51 @@ export function relativeWhen(
   }
   const w = Math.round(diff / week);
   return w <= 1 ? "a week ago" : `${w} weeks ago`;
+}
+
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/**
+ * Short, light label for a moment on the time axis: "today" for the current day,
+ * otherwise a compact calendar date like "Jun 5". Uses the device's local time
+ * since that's how the user reads the timeline.
+ */
+export function axisDateLabel(at: number, now: number = Date.now()): string {
+  const d = new Date(at);
+  const today = new Date(now);
+  if (
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+  ) {
+    return "today";
+  }
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+export interface AxisTick {
+  /** normalized 0..1 position along the time axis */
+  pos: number;
+  label: string;
+}
+
+/**
+ * Light endpoint labels for the time axis: the oldest point on the left and the
+ * present on the right ("now" when the live reading is included). Empty until
+ * there are at least two points to span.
+ */
+export function timeAxisTicks(
+  points: { at: number; isNow: boolean }[],
+  now: number = Date.now(),
+): AxisTick[] {
+  if (points.length < 2) return [];
+  const first = points[0];
+  const last = points[points.length - 1];
+  return [
+    { pos: 0, label: axisDateLabel(first.at, now) },
+    { pos: 1, label: last.isNow ? "now" : axisDateLabel(last.at, now) },
+  ];
 }

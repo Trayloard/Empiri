@@ -4,10 +4,13 @@ import type {
 } from "@workspace/api-client-react";
 
 import {
+  axisDateLabel,
   buildTimeline,
   firstSeenCuriosities,
   relativeWhen,
   sparklinePath,
+  timeAxisTicks,
+  timePositions,
   traitSeries,
 } from "../growth";
 
@@ -136,6 +139,88 @@ describe("sparklinePath", () => {
     const d = sparklinePath([0, 50, 100], 100, 40);
     expect((d.match(/L /g) || []).length).toBe(2);
     expect(d.startsWith("M ")).toBe(true);
+  });
+
+  it("spaces points by real time positions when xs is supplied", () => {
+    // xs places the middle point at 25% of the width, not the even-spacing 50%.
+    const d = sparklinePath([0, 50, 100], 100, 40, { xs: [0, 0.25, 1] });
+    expect(d).toContain("L 25.00 ");
+    expect(d).toContain("L 100.00 ");
+    expect(d).not.toContain("L 50.00 ");
+  });
+
+  it("falls back to even spacing when xs length doesn't match", () => {
+    const d = sparklinePath([0, 50, 100], 100, 40, { xs: [0, 1] });
+    expect(d).toContain("L 50.00 "); // even-spaced middle point
+  });
+});
+
+describe("timePositions", () => {
+  it("returns [] / [0] for empty and single inputs", () => {
+    expect(timePositions([])).toEqual([]);
+    expect(timePositions([{ at: NOW }])).toEqual([0]);
+  });
+
+  it("normalizes real gaps so uneven spacing is preserved", () => {
+    // points at 6h ago, 2h ago, now → spans 6h; middle sits at 4/6 = ~0.667
+    const pos = timePositions([
+      { at: NOW - 6 * HOUR },
+      { at: NOW - 2 * HOUR },
+      { at: NOW },
+    ]);
+    expect(pos[0]).toBe(0);
+    expect(pos[2]).toBe(1);
+    expect(pos[1]).toBeCloseTo(2 / 3, 5);
+    expect(pos[1]).not.toBeCloseTo(0.5, 5); // not even index spacing
+  });
+
+  it("falls back to even spacing when all timestamps are identical", () => {
+    const pos = timePositions([{ at: NOW }, { at: NOW }, { at: NOW }]);
+    expect(pos).toEqual([0, 0.5, 1]);
+  });
+});
+
+describe("axisDateLabel", () => {
+  it("labels the current day as today", () => {
+    expect(axisDateLabel(NOW, NOW)).toBe("today");
+  });
+
+  it("renders a compact calendar date for other days", () => {
+    const label = axisDateLabel(NOW - 5 * 24 * HOUR, NOW);
+    expect(label).not.toBe("today");
+    expect(label).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+  });
+});
+
+describe("timeAxisTicks", () => {
+  it("is empty until there are two points to span", () => {
+    expect(timeAxisTicks([])).toEqual([]);
+    expect(timeAxisTicks([{ at: NOW, isNow: true }])).toEqual([]);
+  });
+
+  it("labels the oldest point and the live present at the endpoints", () => {
+    const points = buildTimeline(
+      [snap(6, 2, { warmth: 50 }, []), snap(2, 8, { warmth: 60 }, [])],
+      live(12, { warmth: 70 }, []),
+      NOW,
+    );
+    const ticks = timeAxisTicks(points, NOW);
+    expect(ticks).toHaveLength(2);
+    expect(ticks[0].pos).toBe(0);
+    expect(ticks[1].pos).toBe(1);
+    expect(ticks[0].label).toBe(axisDateLabel(NOW - 6 * HOUR, NOW));
+    expect(ticks[1].label).toBe("now");
+  });
+
+  it("labels the right endpoint with a date when there is no live point", () => {
+    const points = buildTimeline(
+      [snap(48, 2, { warmth: 50 }, []), snap(24, 8, { warmth: 60 }, [])],
+      null,
+      NOW,
+    );
+    const ticks = timeAxisTicks(points, NOW);
+    expect(ticks[1].label).not.toBe("now");
+    expect(ticks[1].label).toBe(axisDateLabel(NOW - 24 * HOUR, NOW));
   });
 });
 

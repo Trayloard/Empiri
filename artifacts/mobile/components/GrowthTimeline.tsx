@@ -28,6 +28,8 @@ import {
   firstSeenCuriosities,
   relativeWhen,
   sparklinePath,
+  timeAxisTicks,
+  timePositions,
   traitSeries,
 } from "@/lib/growth";
 
@@ -102,11 +104,16 @@ export function GrowthTimeline({
   );
   const curiosities = useMemo(() => firstSeenCuriosities(points), [points]);
 
+  // Real time positions so irregular gaps between snapshots read truthfully,
+  // plus light endpoint labels for the span.
+  const xs = useMemo(() => timePositions(points), [points]);
+  const axisTicks = useMemo(() => timeAxisTicks(points), [points]);
+
   const interactionsPath = useMemo(() => {
     const vals = points.map((p) => p.interactions);
     const max = Math.max(1, ...vals);
-    return sparklinePath(vals, Math.max(1, chartW * 0.5), 44, { min: 0, max });
-  }, [points, chartW]);
+    return sparklinePath(vals, Math.max(1, chartW * 0.5), 44, { min: 0, max, xs });
+  }, [points, chartW, xs]);
 
   // Gentle entrance once the data lands; static when reduced motion is on.
   const fade = useSharedValue(reduceMotion ? 1 : 0);
@@ -182,7 +189,7 @@ export function GrowthTimeline({
                     return (
                       <Path
                         key={s.key}
-                        d={sparklinePath(s.values, chartW, chartH, { pad: 4 })}
+                        d={sparklinePath(s.values, chartW, chartH, { pad: 4, xs })}
                         stroke={meta.color}
                         strokeOpacity={0.92}
                         strokeWidth={2}
@@ -208,6 +215,15 @@ export function GrowthTimeline({
                   })}
                 </Svg>
               </View>
+
+              {axisTicks.length > 0 ? (
+                <View style={styles.axisRow}>
+                  <Text style={styles.axisLabel}>{axisTicks[0].label}</Text>
+                  <Text style={styles.axisLabel}>
+                    {axisTicks[axisTicks.length - 1].label}
+                  </Text>
+                </View>
+              ) : null}
 
               <View style={styles.legend}>
                 {TRAIT_META.map((t) => {
@@ -376,6 +392,16 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: "rgba(255,255,255,0.4)",
     marginTop: 5,
+  },
+  axisRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  axisLabel: {
+    fontFamily: MONO,
+    fontSize: 11,
+    color: "rgba(255,255,255,0.4)",
   },
   legend: {
     marginTop: 16,

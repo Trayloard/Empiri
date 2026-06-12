@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { companionSelfSnapshots, db } from "@workspace/db";
 import { summarizeSelf, type InnerSelf } from "@workspace/neurobrane";
 
@@ -71,15 +71,37 @@ export interface SelfHistoryPoint {
   interests: { topic: string; affinity: number; display: string }[];
 }
 
-/** The full snapshot timeline for a conversation, oldest first. */
+/**
+ * Cap on how many snapshots the timeline endpoint returns. Snapshots are
+ * throttled (at most every few hours / N interactions), so 200 covers a very
+ * long-lived chat while keeping the response small and the sparkline fast.
+ * Env-overridable to match the snapshot-throttle knobs in this file.
+ */
+const DEFAULT_HISTORY_LIMIT = 200;
+
+function historyLimit(): number {
+  const raw = Number(process.env.SELF_HISTORY_LIMIT);
+  return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : DEFAULT_HISTORY_LIMIT;
+}
+
+/**
+ * The snapshot timeline for a conversation, oldest first. Capped to the most
+ * recent `limit` snapshots so very old timelines stay fast — recent drift is
+ * what the growth view cares about, and buildTimeline re-sorts client-side.
+ */
 export async function getSelfHistory(
   conversationId: number,
+  limit: number = historyLimit(),
 ): Promise<SelfHistoryPoint[]> {
   const rows = await db
     .select()
     .from(companionSelfSnapshots)
     .where(eq(companionSelfSnapshots.conversationId, conversationId))
-    .orderBy(asc(companionSelfSnapshots.capturedAt));
+    .orderBy(desc(companionSelfSnapshots.capturedAt))
+    .limit(limit);
+
+  // Fetched newest-first to honor the cap; flip to oldest-first for the timeline.
+  rows.reverse();
 
   return rows.map((r) => ({
     capturedAt: r.capturedAt,
