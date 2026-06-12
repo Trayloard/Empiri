@@ -298,6 +298,15 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const result = await sendMessage(id, { content });
+
+        // The server already returns a 502 for an empty reply, but a 200 could
+        // still carry empty/whitespace-only assistant content. Treat that as a
+        // failed turn (friendly error, retryable) instead of appending a blank
+        // assistant bubble — the exact symptom of the original blank-bubble bug.
+        if (!result.assistantMessage?.content?.trim()) {
+          throw new Error("empty assistant reply");
+        }
+
         setMessages((prev) => [
           ...prev.filter((m) => m.id !== optimistic.id),
           result.userMessage,

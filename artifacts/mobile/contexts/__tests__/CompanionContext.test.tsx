@@ -173,6 +173,36 @@ describe("CompanionContext failed-reply handling", () => {
     expect(result.current.status).toBe("idle");
   });
 
+  it("treats a 200 response with empty assistant content as a failed turn (no blank bubble)", async () => {
+    // The request succeeds (200) but the assistant content is whitespace-only.
+    // It must be handled like any other failed turn, never appended as a bubble.
+    mockSendMessage.mockResolvedValueOnce({
+      userMessage: makeMessage(1, "user", "hello"),
+      assistantMessage: makeMessage(2, "assistant", "   "),
+    });
+
+    const { result } = await renderReadyCompanion();
+
+    await act(async () => {
+      await result.current.sendText("hello");
+    });
+
+    // A friendly error is shown instead of a silent blank bubble.
+    expect(result.current.error).toBe(FRIENDLY_ERROR);
+
+    // No assistant bubble appears, and no empty-content message slipped through.
+    expect(result.current.messages.some((m) => m.role === "assistant")).toBe(
+      false,
+    );
+    expect(
+      result.current.messages.every((m) => m.content.trim().length > 0),
+    ).toBe(true);
+
+    // The turn stays retryable and the companion returns to rest.
+    expect(result.current.failedTurn?.content).toBe("hello");
+    expect(result.current.status).toBe("idle");
+  });
+
   it("lets the user retry a failed turn without retyping, and succeeds on retry", async () => {
     // First attempt fails, the retry succeeds.
     mockSendMessage.mockRejectedValueOnce(new Error("AI unavailable"));
