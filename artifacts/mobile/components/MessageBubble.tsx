@@ -70,8 +70,16 @@ export function MessageBubble({ role, content }: MessageBubbleProps) {
   );
 }
 
-export function RetryBubble({ onRetry }: { onRetry: () => void }) {
+export function RetryBubble({
+  onRetry,
+  accent,
+}: {
+  onRetry: () => void;
+  /** Personality-derived accent; falls back to the static token. */
+  accent?: string;
+}) {
   const colors = useColors();
+  const tint = accent ?? colors.statusAccent;
   return (
     <View style={[styles.row, { justifyContent: "flex-start" }]}>
       <Pressable
@@ -96,8 +104,8 @@ export function RetryBubble({ onRetry }: { onRetry: () => void }) {
           tint={colors.blurTint}
           style={StyleSheet.absoluteFill}
         />
-        <Feather name="rotate-ccw" size={15} color={colors.statusAccent} />
-        <Text style={[styles.retryText, { color: colors.statusAccent }]}>
+        <Feather name="rotate-ccw" size={15} color={tint} />
+        <Text style={[styles.retryText, { color: tint }]}>
           Try again
         </Text>
       </Pressable>

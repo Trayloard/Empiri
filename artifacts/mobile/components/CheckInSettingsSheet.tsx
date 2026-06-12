@@ -20,6 +20,8 @@ interface CheckInSettingsSheetProps {
   cadence: CheckInCadence;
   onSelect: (cadence: CheckInCadence) => void;
   onClose: () => void;
+  /** Personality-derived accent; falls back to the static token. */
+  accent?: string;
 }
 
 interface CadenceOption {
@@ -57,9 +59,11 @@ export function CheckInSettingsSheet({
   cadence,
   onSelect,
   onClose,
+  accent,
 }: CheckInSettingsSheetProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const tint = accent ?? colors.statusAccent;
 
   const handleSelect = (next: CheckInCadence) => {
     if (Platform.OS !== "web") {
@@ -137,7 +141,7 @@ export function CheckInSettingsSheet({
                   style={({ pressed }) => [
                     styles.option,
                     {
-                      borderColor: active ? colors.statusAccent : colors.border,
+                      borderColor: active ? tint : colors.border,
                       backgroundColor: active ? colors.muted : "transparent",
                       opacity: pressed ? 0.7 : 1,
                     },
@@ -146,7 +150,7 @@ export function CheckInSettingsSheet({
                   <Feather
                     name={opt.icon}
                     size={20}
-                    color={active ? colors.statusAccent : colors.mutedForeground}
+                    color={active ? tint : colors.mutedForeground}
                     style={styles.optionIcon}
                   />
                   <View style={styles.optionText}>
@@ -168,7 +172,7 @@ export function CheckInSettingsSheet({
                     <Feather
                       name="check"
                       size={20}
-                      color={colors.statusAccent}
+                      color={tint}
                       testID={`cadence-selected-${opt.value}`}
                     />
                   ) : (

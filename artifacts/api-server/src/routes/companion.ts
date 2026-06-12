@@ -40,8 +40,13 @@ function toApiMessage(m: Message) {
   };
 }
 
-// Create a new conversation
+// Create a new conversation — requires a signed-in user
 router.post("/conversations", async (req, res) => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const parsed = CreateConversationBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request body" });
@@ -50,7 +55,7 @@ router.post("/conversations", async (req, res) => {
 
   const [conversation] = await db
     .insert(conversations)
-    .values({ title: parsed.data.title })
+    .values({ title: parsed.data.title, ownerId: req.user.id })
     .returning();
 
   res.status(201).json({
@@ -60,27 +65,48 @@ router.post("/conversations", async (req, res) => {
   });
 });
 
-// List messages in a conversation
-router.get("/conversations/:id/messages", async (req, res) => {
+/**
+ * Shared ownership check: look up the conversation by id and verify it belongs
+ * to the authenticated caller. Returns the conversation row on success, or
+ * writes the appropriate error response and returns null.
+ */
+async function requireOwnedConversation(
+  req: Parameters<Parameters<typeof router.get>[1]>[0],
+  res: Parameters<Parameters<typeof router.get>[1]>[1],
+): Promise<(typeof conversations.$inferSelect) | null> {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(404).json({ error: "Conversation not found" });
-    return;
+    return null;
+  }
+
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
   }
 
   const [conversation] = await db
     .select()
     .from(conversations)
     .where(eq(conversations.id, id));
-  if (!conversation) {
+
+  if (!conversation || conversation.ownerId !== req.user.id) {
     res.status(404).json({ error: "Conversation not found" });
-    return;
+    return null;
   }
+
+  return conversation;
+}
+
+// List messages in a conversation
+router.get("/conversations/:id/messages", async (req, res) => {
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
 
   const rows = await db
     .select()
     .from(messages)
-    .where(eq(messages.conversationId, id))
+    .where(eq(messages.conversationId, conversation.id))
     .orderBy(asc(messages.createdAt));
 
   res.json(rows.map(toApiMessage));
@@ -88,11 +114,10 @@ router.get("/conversations/:id/messages", async (req, res) => {
 
 // Send a text message and get the companion's reply
 router.post("/conversations/:id/messages", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
+
+  const id = conversation.id;
 
   const parsed = SendMessageBody.safeParse(req.body);
   if (!parsed.success) {
@@ -102,15 +127,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
   const content = parsed.data.content.trim();
   if (!content) {
     res.status(400).json({ error: "Message content is required" });
-    return;
-  }
-
-  const [conversation] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, id));
-  if (!conversation) {
-    res.status(404).json({ error: "Conversation not found" });
     return;
   }
 
@@ -220,11 +236,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
 // Generate a proactive check-in greeting (the companion reaches out first)
 router.post("/conversations/:id/checkin", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
+
+  const id = conversation.id;
 
   const parsed = CompanionCheckInBody.safeParse(req.body);
   if (!parsed.success) {
@@ -232,15 +247,6 @@ router.post("/conversations/:id/checkin", async (req, res) => {
     return;
   }
   const { hoursAway, mood, missingYou } = parsed.data;
-
-  const [conversation] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, id));
-  if (!conversation) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
 
   // Recent history for continuity, but the companion speaks first this time.
   const history = await db
@@ -311,44 +317,20 @@ router.post("/conversations/:id/checkin", async (req, res) => {
 
 // Peek at the companion's current inner self (drives, traits, interests, narrative)
 router.get("/conversations/:id/self", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
 
-  const [conversation] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, id));
-  if (!conversation) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
-
-  const self = await loadOrCreateSelf(id);
+  const self = await loadOrCreateSelf(conversation.id);
   res.json(summarizeSelf(self));
 });
 
 // See how the companion has grown: the timeline of inner-self snapshots
 // (drives, traits, emerging curiosities) captured over the life of the chat.
 router.get("/conversations/:id/self/history", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
 
-  const [conversation] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, id));
-  if (!conversation) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
-
-  const snapshots = await getSelfHistory(id);
+  const snapshots = await getSelfHistory(conversation.id);
   res.json({ snapshots });
 });
 

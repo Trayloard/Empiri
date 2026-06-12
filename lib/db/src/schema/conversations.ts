@@ -1,10 +1,12 @@
-import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { integer, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { usersTable } from "./auth";
 
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
+  ownerId: varchar("owner_id").references(() => usersTable.id),
   /** Condensed summary of messages that have slid out of the context window. */
   contextSummary: text("context_summary"),
   /**

@@ -33,8 +33,10 @@ import { MessageBubble, RetryBubble, TypingBubble } from "@/components/MessageBu
 import { PresenceStatusLine } from "@/components/PresenceStatusLine";
 import { FONTS } from "@/constants/fonts";
 import { useCompanion } from "@/contexts/CompanionContext";
+import { useAccentColor } from "@/hooks/useAccentColor";
 import { useColors } from "@/hooks/useColors";
 import { useCompanionTraits } from "@/hooks/useCompanionTraits";
+import { useAuth } from "@/lib/auth";
 import type { MoodLabel } from "@/lib/mood";
 
 function moodLabel(mood: MoodLabel): string {
@@ -106,7 +108,12 @@ export default function CompanionScreen() {
     dismissError,
   } = useCompanion();
 
+  const { isAuthenticated, isLoading: authLoading, login } = useAuth();
+
   const traits = useCompanionTraits(conversationId);
+  // The chrome accent gently follows Empiri's warmth (warmer → violet/pink,
+  // cooler → blue). Smoothing lives in the hook; derivation stays pure.
+  const accent = useAccentColor(traits.warmthShift);
   const [peekVisible, setPeekVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
 
@@ -183,6 +190,36 @@ export default function CompanionScreen() {
     setSettingsVisible(true);
   };
 
+  if (authLoading) {
+    return (
+      <View style={[styles.root, styles.center, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <View style={[styles.root, styles.center, { backgroundColor: colors.background }]}>
+        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+        <Text style={[styles.emptyTitle, { color: colors.foreground, marginBottom: 8 }]}>
+          Welcome to Empiri
+        </Text>
+        <Text style={[styles.emptyText, { color: colors.mutedForeground, marginBottom: 32 }]}>
+          Sign in to start your conversation.
+        </Text>
+        <Pressable
+          onPress={login}
+          style={[styles.retry, { backgroundColor: colors.primary }]}
+        >
+          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>
+            Sign in
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
@@ -216,7 +253,7 @@ export default function CompanionScreen() {
               name={notificationsEnabled ? "bell" : "bell-off"}
               size={18}
               color={
-                notificationsEnabled ? colors.statusAccent : colors.mutedForeground
+                notificationsEnabled ? accent : colors.mutedForeground
               }
             />
           </Pressable>
@@ -265,7 +302,7 @@ export default function CompanionScreen() {
             <Feather
               name={voiceEnabled ? "volume-2" : "volume-x"}
               size={18}
-              color={voiceEnabled ? colors.statusAccent : colors.mutedForeground}
+              color={voiceEnabled ? accent : colors.mutedForeground}
             />
           </Pressable>
 
@@ -286,7 +323,7 @@ export default function CompanionScreen() {
           <PresenceStatusLine
             greeting={greeting}
             statusText={statusLabel(status, mood.label)}
-            color={colors.statusAccent}
+            color={accent}
           />
         </View>
 
@@ -339,7 +376,7 @@ export default function CompanionScreen() {
                 status === "thinking" || status === "transcribing" ? (
                   <TypingBubble />
                 ) : failedTurn ? (
-                  <RetryBubble onRetry={handleRetry} />
+                  <RetryBubble onRetry={handleRetry} accent={accent} />
                 ) : null
               }
               contentContainerStyle={styles.listContent}
@@ -387,6 +424,7 @@ export default function CompanionScreen() {
         cadence={checkInCadence}
         onSelect={setCheckInCadence}
         onClose={() => setSettingsVisible(false)}
+        accent={accent}
       />
     </View>
   );

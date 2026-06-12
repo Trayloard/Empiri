@@ -6,3 +6,5 @@
 - [Reanimated SharedValue type](reanimated-shared-value-type.md) — reanimated v4: import `type SharedValue` directly; `Animated.SharedValue` doesn't exist and fails tsc.
 - [Empiri evolving self](neurobrane-self.md) — persona is composed at request time from a server-persisted evolving self (lib/neurobrane + companion_selves), not a hardcoded prompt.
 - [Empiri check-in cadence vs bell](empiri-checkin-cadence.md) — keep cadence + notification bell as two persisted prefs; couple only at the off boundary; never merge into one.
+- [Mobile test-suite pre-existing failures](mobile-test-suite-preexisting-failures.md) — CompanionContext proactive-check-in jest suite + auth.tsx 'nonce' typecheck fail deterministically, independent of UI work; don't block on them.
+- [Empiri auth ownership pattern](empiri-auth-ownership.md) — all conversation routes enforce owner_id == req.user.id via requireOwnedConversation(); cross-user access returns 404 not 403 to avoid leaking existence.

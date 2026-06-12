@@ -7,8 +7,9 @@ import {
   useFonts,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { setBaseUrl } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 import { Stack } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -17,9 +18,14 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CompanionProvider } from "@/contexts/CompanionContext";
+import { AuthProvider } from "@/lib/auth";
 
 // Expo bundles run outside the web proxy and need absolute URLs to reach the API.
-setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+const domain = process.env.EXPO_PUBLIC_DOMAIN;
+if (domain) setBaseUrl(`https://${domain}`);
+
+// Attach the session token as a Bearer header on every API call.
+setAuthTokenGetter(() => SecureStore.getItemAsync("auth_session_token"));
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -57,9 +63,11 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
-              <CompanionProvider>
-                <RootLayoutNav />
-              </CompanionProvider>
+              <AuthProvider>
+                <CompanionProvider>
+                  <RootLayoutNav />
+                </CompanionProvider>
+              </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>

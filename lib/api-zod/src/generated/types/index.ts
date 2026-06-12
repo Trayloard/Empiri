@@ -7,6 +7,10 @@
  */
 
 export * from './apiError';
+export * from './authorizationSessionHeaderParameter';
+export * from './authUser';
+export * from './authUserEnvelope';
+export * from './beginBrowserLoginParams';
 export * from './checkInInput';
 export * from './companionDrive';
 export * from './companionInterest';
@@ -16,9 +20,14 @@ export * from './companionSelfSnapshot';
 export * from './companionTrait';
 export * from './conversation';
 export * from './conversationInput';
+export * from './errorEnvelope';
+export * from './handleBrowserLoginCallbackParams';
 export * from './healthStatus';
+export * from './logoutSuccess';
 export * from './message';
 export * from './messageInput';
+export * from './mobileTokenExchangeRequest';
+export * from './mobileTokenExchangeSuccess';
 export * from './sendMessageResult';
 export * from './speechInput';
 export * from './speechResult';

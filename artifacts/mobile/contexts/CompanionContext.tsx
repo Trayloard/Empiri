@@ -42,6 +42,7 @@ import {
   requestNotificationPermission,
   scheduleNudge,
 } from "@/lib/notifications";
+import { useAuth } from "@/lib/auth";
 
 export type CompanionStatus =
   | "idle"
@@ -82,6 +83,7 @@ interface CompanionContextValue {
   setCheckInCadence: (cadence: CheckInCadence) => Promise<void>;
   retryInit: () => void;
   dismissError: () => void;
+  signOut: () => Promise<void>;
 }
 
 const CompanionContext = createContext<CompanionContextValue | undefined>(
@@ -122,6 +124,7 @@ function parseMoodState(raw: string | null): CompanionMoodState | null {
 }
 
 export function CompanionProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<CompanionStatus>("idle");
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(true);
@@ -293,9 +296,15 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   }, [voiceEnabled]);
 
   useEffect(() => {
+    // Wait for auth to finish loading. Only initialize when signed in.
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      setInitializing(false);
+      return;
+    }
     initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAuthenticated, authLoading]);
 
   // Let the mood drift visibly while the app stays open.
   useEffect(() => {
@@ -524,6 +533,35 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
   const dismissError = useCallback(() => setError(null), []);
 
+  // Tear down this device's per-relationship state on sign-out so a different
+  // account never inherits the previous user's conversation, mood, or pending
+  // nudges, then end the auth session.
+  const signOut = useCallback(async () => {
+    try {
+      await AsyncStorage.multiRemove([CONVERSATION_KEY, MOOD_KEY, NOTIF_KEY]);
+    } catch {
+      // Best-effort cleanup; signing out must still proceed.
+    }
+    await cancelNudges().catch(() => {});
+
+    conversationIdRef.current = null;
+    setConversationId(null);
+    setMessages([]);
+    failedTurnRef.current = null;
+    setFailedTurn(null);
+    setError(null);
+    setStatus("idle");
+    setNotificationsEnabled(false);
+    notificationsEnabledRef.current = false;
+
+    const fresh = freshMoodState();
+    moodStateRef.current = fresh;
+    setMoodState(fresh);
+    setMood(computeMood(fresh));
+
+    await logout();
+  }, [logout]);
+
   return (
     <CompanionContext.Provider
       value={{
@@ -548,6 +586,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         setCheckInCadence,
         retryInit,
         dismissError,
+        signOut,
       }}
     >
       {children}
