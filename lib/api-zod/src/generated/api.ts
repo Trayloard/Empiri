@@ -194,7 +194,8 @@ export const GetCompanionSelfResponse = zod.object({
   "value": zod.number()
 })),
   "interests": zod.array(zod.object({
-  "topic": zod.string(),
+  "topic": zod.string().describe('Normalized, lowercased key — stable for matching\/comparison.'),
+  "display": zod.string().describe('Best original casing for the topic (proper-noun aware), for display.'),
   "affinity": zod.number()
 })),
   "narrative": zod.array(zod.string()),
@@ -225,7 +226,8 @@ export const GetCompanionSelfHistoryResponse = zod.object({
   "value": zod.number()
 })),
   "interests": zod.array(zod.object({
-  "topic": zod.string(),
+  "topic": zod.string().describe('Normalized, lowercased key — stable for matching\/comparison.'),
+  "display": zod.string().describe('Best original casing for the topic (proper-noun aware), for display.'),
   "affinity": zod.number()
 }))
 }))

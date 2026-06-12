@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { NEURO_PARAMS } from "./params";
 import { enabledBlocks } from "./blocks/registry";
-import { clamp, extractTopics, round1 } from "./util";
+import { clamp, extractTopicsDetailed, round1 } from "./util";
 import { BASE_IDENTITY, INNER_HEADER, STYLE_RULES } from "./persona";
 
 const HOUR_MS = 3_600_000;
@@ -180,13 +180,16 @@ export function deriveMessageSignal(text: string, moodFactor = 1): InteractionSi
   const uniqueWords = new Set(words).size;
   const novelty = clamp(uniqueWords / 12, 0, 1);
 
+  const detailed = extractTopicsDetailed(trimmed, 2);
+
   return {
     kind: "message",
     connection: 1,
     curiosity: isQuestion ? 1 : clamp(0.3 + novelty * 0.4, 0, 1),
     novelty,
     expression: clamp(length / 200, 0, 1),
-    topics: extractTopics(trimmed, 2),
+    topics: detailed.map((t) => t.key),
+    topicDisplays: Object.fromEntries(detailed.map((t) => [t.key, t.display])),
     moodFactor: clamp(moodFactor, 0, 3),
   };
 }

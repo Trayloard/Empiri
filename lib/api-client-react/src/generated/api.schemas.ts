@@ -122,7 +122,10 @@ export interface CompanionTrait {
 }
 
 export interface CompanionInterest {
+  /** Normalized, lowercased key — stable for matching/comparison. */
   topic: string;
+  /** Best original casing for the topic (proper-noun aware), for display. */
+  display: string;
   affinity: number;
 }
 

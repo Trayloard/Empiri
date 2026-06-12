@@ -18,21 +18,21 @@ function snap(
   hoursAgo: number,
   interactions: number,
   traits: Record<string, number>,
-  interests: { topic: string; affinity: number }[],
+  interests: { topic: string; affinity: number; display?: string }[],
 ): CompanionSelfSnapshot {
   return {
     capturedAt: new Date(NOW - hoursAgo * HOUR).toISOString(),
     interactions,
     drives: [],
     traits: Object.entries(traits).map(([key, value]) => ({ key, value })),
-    interests,
+    interests: interests.map((it) => ({ ...it, display: it.display ?? it.topic })),
   };
 }
 
 function live(
   interactions: number,
   traits: Record<string, number>,
-  interests: { topic: string; affinity: number }[],
+  interests: { topic: string; affinity: number; display?: string }[],
 ): CompanionSelf {
   return {
     interactions,
@@ -40,7 +40,7 @@ function live(
     narrative: [],
     drives: [],
     traits: Object.entries(traits).map(([key, value]) => ({ key, value })),
-    interests,
+    interests: interests.map((it) => ({ ...it, display: it.display ?? it.topic })),
   };
 }
 

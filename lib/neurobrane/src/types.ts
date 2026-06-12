@@ -26,6 +26,12 @@ export interface InteractionSignal {
   expression: number;
   /** Topic keywords extracted from the turn (used to grow interests). */
   topics: string[];
+  /**
+   * Best original casing for each normalized topic key (proper-noun aware),
+   * for display only. Matching/dedup still use the normalized `topics`; absent
+   * for signals built without casing info, in which case the key is shown as-is.
+   */
+  topicDisplays?: Record<string, string>;
   /** External affect multiplier (e.g. derived from client mood); 1 = neutral. */
   moodFactor: number;
 }
@@ -174,8 +180,11 @@ export interface TraitSummary {
   value: number;
 }
 export interface InterestSummary {
+  /** Normalized, lowercased key — stable for matching and comparison. */
   topic: string;
   affinity: number;
+  /** Best original casing for the topic (proper-noun aware), for display. */
+  display: string;
 }
 
 /** What a single block contributes to the friendly summary. */

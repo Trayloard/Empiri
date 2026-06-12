@@ -68,7 +68,7 @@ export interface SelfHistoryPoint {
   interactions: number;
   drives: { key: string; level: number; striving: number }[];
   traits: { key: string; value: number }[];
-  interests: { topic: string; affinity: number }[];
+  interests: { topic: string; affinity: number; display: string }[];
 }
 
 /** The full snapshot timeline for a conversation, oldest first. */
@@ -86,6 +86,12 @@ export async function getSelfHistory(
     interactions: r.interactions,
     drives: r.summary.drives,
     traits: r.summary.traits,
-    interests: r.summary.interests,
+    // Older snapshots predate display casing; fall back to the key so the
+    // timeline always carries a non-empty display.
+    interests: r.summary.interests.map((it) => ({
+      topic: it.topic,
+      affinity: it.affinity,
+      display: it.display ?? it.topic,
+    })),
   }));
 }

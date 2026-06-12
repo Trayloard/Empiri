@@ -1,5 +1,12 @@
 import type { BlockDefinition, InterestSummary, TraitSummary } from "../types";
-import { clamp, hoursBetween, joinNatural, normalizeTopic, round1 } from "../util";
+import {
+  clamp,
+  hoursBetween,
+  joinNatural,
+  normalizeTopic,
+  preferredDisplay,
+  round1,
+} from "../util";
 
 /**
  * The "Neurobrane-11" core-self block: Empiri's enduring character. It holds
@@ -14,8 +21,11 @@ import { clamp, hoursBetween, joinNatural, normalizeTopic, round1 } from "../uti
 export const CORE_SELF_BLOCK_ID = "core-self";
 
 export interface Interest {
+  /** Normalized, lowercased key — all matching/dedup/decay key on this. */
   topic: string;
   affinity: number;
+  /** Best original casing for the topic (proper-noun aware), for display. */
+  display?: string;
 }
 
 export interface CoreSelfData {
@@ -64,6 +74,7 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
       .map((i) => ({
         topic: normalizeTopic(i.topic),
         affinity: clamp(i.affinity, params.bounds.min, params.bounds.max),
+        display: preferredDisplay(undefined, i.topic),
       }))
       .filter((i) => i.topic.length > 0)
       .slice(0, params.coreSelf.interest.maxCount);
@@ -91,6 +102,9 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
     for (const raw of signal.topics) {
       const topic = normalizeTopic(raw);
       if (!topic) continue;
+      // Display casing rides a separate channel; matching stays on the key, so
+      // "Paris" and "paris" reinforce the SAME interest, keeping the best casing.
+      const display = signal.topicDisplays?.[topic] ?? raw;
       const existing = interests.find((i) => i.topic === topic);
       if (existing) {
         existing.affinity = clamp(
@@ -98,10 +112,12 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
           min,
           max,
         );
+        existing.display = preferredDisplay(existing.display, display);
       } else {
         interests.push({
           topic,
           affinity: clamp(interest.noveltySeedAffinity * (0.5 + signal.novelty) * lr, min, max),
+          display: preferredDisplay(undefined, display),
         });
       }
     }
@@ -141,7 +157,7 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
 
     const lost = interest.decayPerHour * hrs;
     const interests = data.interests
-      .map((i) => ({ topic: i.topic, affinity: clamp(i.affinity - lost, min, max) }))
+      .map((i) => ({ ...i, affinity: clamp(i.affinity - lost, min, max) }))
       .filter((i) => i.affinity > 0.5);
 
     return { traits, interests, narrative: data.narrative };
@@ -178,7 +194,11 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
     }));
     const interests: InterestSummary[] = [...data.interests]
       .sort((a, b) => b.affinity - a.affinity)
-      .map((i) => ({ topic: i.topic, affinity: round1(i.affinity) }));
+      .map((i) => ({
+        topic: i.topic,
+        affinity: round1(i.affinity),
+        display: i.display ?? i.topic,
+      }));
     return { traits, interests, narrative: [...data.narrative] };
   },
 };

@@ -381,7 +381,11 @@ describe("deriveMessageSignal", () => {
   });
 
   it("boosts a capitalized mid-sentence proper noun (a place or person) to the top", () => {
-    expect(deriveMessageSignal("we talked about Paris over coffee").topics[0]).toBe("paris");
+    const paris = deriveMessageSignal("we talked about Paris over coffee");
+    expect(paris.topics[0]).toBe("paris");
+    // The matching key stays normalized, but the best original casing rides
+    // along on a separate channel for display.
+    expect(paris.topicDisplays?.paris).toBe("Paris");
     expect(deriveMessageSignal("I had dinner with Hannah last night").topics[0]).toBe("hannah");
   });
 
@@ -410,5 +414,75 @@ describe("deriveMessageSignal", () => {
       expect(v).toBeLessThanOrEqual(1);
     }
     expect(s.topics.length).toBeGreaterThan(0);
+  });
+});
+
+describe("interest display casing", () => {
+  it("reinforces one interest across mixed casing, keeping the capital", () => {
+    let self = createSelf(NEURO_PARAMS, undefined, T0);
+    let now = T0;
+    // First mentioned capitalized, then lowercase the next turn.
+    self = evolve(
+      self,
+      deriveMessageSignal("we talked about Paris over coffee"),
+      NEURO_PARAMS,
+      (now += HOUR),
+    );
+    self = evolve(
+      self,
+      deriveMessageSignal("i keep thinking about paris"),
+      NEURO_PARAMS,
+      (now += HOUR),
+    );
+
+    const summary = summarizeSelf(self, NEURO_PARAMS, now);
+    const paris = summary.interests.filter((i) => i.topic === "paris");
+    // Mixed casing did NOT split it — one interest, keyed on the normalized form.
+    expect(paris).toHaveLength(1);
+    // ...and the proper-noun casing is preserved for display.
+    expect(paris[0]?.display).toBe("Paris");
+  });
+
+  it("upgrades to the capitalized casing even when the lowercase form arrived first", () => {
+    let self = createSelf(NEURO_PARAMS, undefined, T0);
+    let now = T0;
+    self = evolve(
+      self,
+      deriveMessageSignal("i keep thinking about paris"),
+      NEURO_PARAMS,
+      (now += HOUR),
+    );
+    self = evolve(
+      self,
+      deriveMessageSignal("we talked about Paris over coffee"),
+      NEURO_PARAMS,
+      (now += HOUR),
+    );
+
+    const summary = summarizeSelf(self, NEURO_PARAMS, now);
+    const paris = summary.interests.filter((i) => i.topic === "paris");
+    expect(paris).toHaveLength(1);
+    expect(paris[0]?.display).toBe("Paris");
+  });
+
+  it("always exposes a non-empty display (falling back to the key)", () => {
+    // A signal built without casing info (no topicDisplays) shows the key.
+    const self = evolve(
+      createSelf(NEURO_PARAMS, undefined, T0),
+      {
+        kind: "message",
+        connection: 1,
+        curiosity: 0.5,
+        novelty: 0.5,
+        expression: 0.5,
+        topics: ["gardening"],
+        moodFactor: 1,
+      },
+      NEURO_PARAMS,
+      T0 + HOUR,
+    );
+    const summary = summarizeSelf(self, NEURO_PARAMS, T0 + HOUR);
+    const gardening = summary.interests.find((i) => i.topic === "gardening");
+    expect(gardening?.display).toBe("gardening");
   });
 });

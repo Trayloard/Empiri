@@ -626,10 +626,15 @@ components:
       properties:
         topic:
           type: string
+          description: Normalized, lowercased key — stable for matching/comparison.
+        display:
+          type: string
+          description: Best original casing for the topic (proper-noun aware), for display.
         affinity:
           type: number
       required:
         - topic
+        - display
         - affinity
     CompanionSelf:
       type: object

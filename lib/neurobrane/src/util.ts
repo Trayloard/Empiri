@@ -118,10 +118,24 @@ function isSentenceStart(text: string, index: number): boolean {
  * or "totally". The reinforcement loop does the rest over time. (A semantic
  * extractor is a deliberate future enhancement.)
  */
-export function extractTopics(text: string, max = 2): string[] {
+/** A topic candidate: a normalized matching `key` plus the best original
+ * `display` casing observed for it (proper-noun aware, for display only). */
+export interface ExtractedTopic {
+  key: string;
+  display: string;
+}
+
+/**
+ * Score-and-rank topic candidates, returning both the normalized `key` used for
+ * all matching/dedup/decay and the best original `display` casing. The display
+ * is taken from the highest-scored occurrence of each key, so a capitalized
+ * proper-noun mention ("Paris") naturally wins over a lowercase one ("paris").
+ */
+export function extractTopicsDetailed(text: string, max = 2): ExtractedTopic[] {
   const source = text ?? "";
   const tokenRe = /[\p{L}\p{N}-]+/gu;
-  const scored: { key: string; score: number; order: number }[] = [];
+  const scored: { key: string; display: string; score: number; order: number }[] =
+    [];
   let match: RegExpExecArray | null;
   let order = 0;
 
@@ -152,19 +166,48 @@ export function extractTopics(text: string, max = 2): string[] {
     // Verb/adverb-looking endings are demoted but not excluded.
     if (/(?:ing|ed|ly)$/.test(key)) score -= 4;
 
-    scored.push({ key, score, order });
+    scored.push({ key, display: original, score, order });
   }
 
   // Highest score wins; first-occurrence order is the deterministic tiebreak.
+  // Because a capitalized occurrence outscores a lowercase one of the same key,
+  // the first time we meet a key here it already carries the best casing.
   scored.sort((a, b) => b.score - a.score || a.order - b.order);
 
   const seen = new Set<string>();
-  const topics: string[] = [];
-  for (const { key } of scored) {
+  const topics: ExtractedTopic[] = [];
+  for (const { key, display } of scored) {
     if (seen.has(key)) continue;
     seen.add(key);
-    topics.push(key);
+    topics.push({ key, display });
     if (topics.length >= max) break;
   }
   return topics;
+}
+
+/**
+ * Extract up to `max` normalized topic keys from a turn of text. Thin wrapper
+ * over {@link extractTopicsDetailed} that keeps the long-standing key-only
+ * contract (matching/dedup/decay all key on these normalized forms).
+ */
+export function extractTopics(text: string, max = 2): string[] {
+  return extractTopicsDetailed(text, max).map((t) => t.key);
+}
+
+/**
+ * Choose the better display casing between what we already have and a new
+ * candidate: a casing carrying an uppercase letter (a proper-noun signal) wins
+ * over a plain lowercase one; otherwise the current display is kept. This way
+ * seeing "Paris" once locks in the capital even if "paris" arrives later, and
+ * the same topic never splits — matching stays on the normalized key.
+ */
+export function preferredDisplay(
+  current: string | undefined,
+  candidate: string,
+): string {
+  if (!current) return candidate;
+  const currentHasUpper = /\p{Lu}/u.test(current);
+  const candidateHasUpper = /\p{Lu}/u.test(candidate);
+  if (candidateHasUpper && !currentHasUpper) return candidate;
+  return current;
 }

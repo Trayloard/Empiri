@@ -336,7 +336,7 @@ function themeFor(topic: string): string | null {
 }
 
 type InterestItem =
-  | { kind: "single"; orig: number; topic: string; affinity: number }
+  | { kind: "single"; orig: number; topic: string; display: string; affinity: number }
   | {
       kind: "theme";
       label: string;
@@ -399,6 +399,7 @@ function groupInterests(interests: CompanionInterest[]): InterestItem[] {
           kind: "single",
           orig: i,
           topic: interests[i].topic,
+          display: interests[i].display,
           affinity: interests[i].affinity,
         });
       }
@@ -566,10 +567,10 @@ function buildGraph(self: CompanionSelf, fullWidth: number): Graph {
       if (item.kind === "single") {
         return {
           id: `interest-${item.orig}`,
-          label: item.topic.toUpperCase(),
+          label: item.display.toUpperCase(),
           value: clamp(item.affinity),
           detail: {
-            title: item.topic,
+            title: item.display,
             role: "Curiosity · caught its eye",
             blurb:
               "Something you've talked about that's started to matter to Empiri.",
