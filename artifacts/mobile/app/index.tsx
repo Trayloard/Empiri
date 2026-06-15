@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import type { Message } from "@workspace/api-client-react";
 import { BlurView } from "expo-blur";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useMemo, useState } from "react";
@@ -128,6 +129,7 @@ export default function CompanionScreen() {
     error,
     failedTurn,
     isRecording,
+    settings,
     sendText,
     retryMessage,
     startListening,
@@ -211,9 +213,16 @@ export default function CompanionScreen() {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPeekVisible(true);
   };
+  const router = useRouter();
+
   const handleOpenSettings = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSettingsVisible(true);
+  };
+
+  const handlePersonalize = () => {
+    setSettingsVisible(false);
+    router.push("/companion-settings");
   };
 
   const handleDevCheckIn = () => {
@@ -369,7 +378,7 @@ export default function CompanionScreen() {
             pointerEvents="none"
           >
             <BlurView intensity={28} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
-            <Text style={[styles.tooltipName, { color: accent }]}>Empiri</Text>
+            <Text style={[styles.tooltipName, { color: accent }]}>{settings?.companionName ?? "Empiri"}</Text>
             <Text style={[styles.tooltipStatus, { color: colors.mutedForeground }]} numberOfLines={1}>
               {orbStatusText}
             </Text>
@@ -405,6 +414,7 @@ export default function CompanionScreen() {
         onSelect={setCheckInCadence}
         onClose={() => setSettingsVisible(false)}
         accent={accent}
+        onPersonalize={handlePersonalize}
         onDevCheckIn={__DEV__ ? handleDevCheckIn : undefined}
         onDevNudge={__DEV__ ? handleDevNudge : undefined}
         onDevRegress={__DEV__ ? handleDevRegress : undefined}

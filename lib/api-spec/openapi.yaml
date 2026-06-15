@@ -408,6 +408,60 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /companion-settings:
+    get:
+      operationId: getCompanionSettings
+      tags: [companion]
+      summary: Get the companion personalisation settings for the current user
+      description: Returns stored settings, creating defaults on first call.
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        "200":
+          description: Current companion settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionSettings"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    put:
+      operationId: updateCompanionSettings
+      tags: [companion]
+      summary: Save companion personalisation settings
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanionSettingsInput"
+      responses:
+        "200":
+          description: Updated companion settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionSettings"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /voice/speech:
     post:
       operationId: synthesizeSpeech
@@ -740,6 +794,36 @@ components:
           description: The rolling context summary of earlier messages, or null if nothing has been summarised yet.
       required:
         - summary
+    CompanionSettings:
+      type: object
+      properties:
+        companionName:
+          type: string
+          description: The name the user has given their companion.
+        tone:
+          type: string
+          enum: [playful, calm, witty, wise, cheerful]
+          description: Conversation tone preset.
+        personalityNote:
+          type: string
+          description: A free-text note the user wants the companion to know about them.
+      required:
+        - companionName
+        - tone
+        - personalityNote
+    CompanionSettingsInput:
+      type: object
+      properties:
+        companionName:
+          type: string
+          minLength: 1
+          maxLength: 32
+        tone:
+          type: string
+          enum: [playful, calm, witty, wise, cheerful]
+        personalityNote:
+          type: string
+          maxLength: 500
     ApiError:
       type: object
       properties:

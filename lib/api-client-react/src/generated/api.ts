@@ -27,6 +27,8 @@ import type {
   CompanionMemory,
   CompanionSelf,
   CompanionSelfHistory,
+  CompanionSettings,
+  CompanionSettingsInput,
   Conversation,
   ConversationInput,
   ErrorEnvelope,
@@ -1194,6 +1196,155 @@ export const useTranscribeAudio = <TError = ErrorType<ApiError>,
       return useMutation(getTranscribeAudioMutationOptions(options));
     }
 
+export const getGetCompanionSettingsUrl = () => {
+
+
+
+
+  return `/api/companion-settings`
+}
+
+/**
+ * Returns stored settings, creating defaults on first call.
+ * @summary Get the companion personalisation settings for the current user
+ */
+export const getCompanionSettings = async ( options?: RequestInit): Promise<CompanionSettings> => {
+
+  return customFetch<CompanionSettings>(getGetCompanionSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompanionSettingsQueryKey = () => {
+    return [
+    `/api/companion-settings`
+    ] as const;
+    }
+
+
+export const getGetCompanionSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getCompanionSettings>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanionSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompanionSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompanionSettings>>> = ({ signal }) => getCompanionSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompanionSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCompanionSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getCompanionSettings>>>
+export type GetCompanionSettingsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get the companion personalisation settings for the current user
+ */
+
+export function useGetCompanionSettings<TData = Awaited<ReturnType<typeof getCompanionSettings>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanionSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCompanionSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateCompanionSettingsUrl = () => {
+
+
+
+
+  return `/api/companion-settings`
+}
+
+/**
+ * @summary Save companion personalisation settings
+ */
+export const updateCompanionSettings = async (companionSettingsInput: CompanionSettingsInput, options?: RequestInit): Promise<CompanionSettings> => {
+
+  return customFetch<CompanionSettings>(getUpdateCompanionSettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      companionSettingsInput,)
+  }
+);}
+
+
+
+
+export const getUpdateCompanionSettingsMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCompanionSettings>>, TError,{data: BodyType<CompanionSettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCompanionSettings>>, TError,{data: BodyType<CompanionSettingsInput>}, TContext> => {
+
+const mutationKey = ['updateCompanionSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCompanionSettings>>, {data: BodyType<CompanionSettingsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateCompanionSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCompanionSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateCompanionSettings>>>
+    export type UpdateCompanionSettingsMutationBody = BodyType<CompanionSettingsInput>
+    export type UpdateCompanionSettingsMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Save companion personalisation settings
+ */
+export const useUpdateCompanionSettings = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCompanionSettings>>, TError,{data: BodyType<CompanionSettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCompanionSettings>>,
+        TError,
+        {data: BodyType<CompanionSettingsInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateCompanionSettingsMutationOptions(options));
+    }
+
 export const getSynthesizeSpeechUrl = () => {
 
 
@@ -1250,18 +1401,6 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type SynthesizeSpeechMutationResult = NonNullable<Awaited<ReturnType<typeof synthesizeSpeech>>>
     export type SynthesizeSpeechMutationBody = BodyType<SpeechInput>
     export type SynthesizeSpeechMutationError = ErrorType<ApiError>
-
-/**
- * DEV-ONLY: roll Empiri's inner self back a few steps (halve interactions,
- * trim interests/narrative, nudge traits and drives toward baseline).
- * The server rejects this with 404 in production.
- */
-export const devRegressSelf = async (id: number, options?: RequestInit): Promise<{ ok: boolean; interactions: number }> => {
-  return customFetch<{ ok: boolean; interactions: number }>(
-    `/api/conversations/${id}/dev/regress`,
-    { ...options, method: 'POST' },
-  );
-};
 
     /**
  * @summary Convert text into spoken audio

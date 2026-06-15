@@ -261,6 +261,47 @@ export const TranscribeAudioResponse = zod.object({
 
 
 /**
+ * Returns stored settings, creating defaults on first call.
+ * @summary Get the companion personalisation settings for the current user
+ */
+export const GetCompanionSettingsHeader = zod.object({
+  "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
+})
+
+export const GetCompanionSettingsResponse = zod.object({
+  "companionName": zod.string().describe('The name the user has given their companion.'),
+  "tone": zod.enum(['playful', 'calm', 'witty', 'wise', 'cheerful']).describe('Conversation tone preset.'),
+  "personalityNote": zod.string().describe('A free-text note the user wants the companion to know about them.')
+})
+
+
+/**
+ * @summary Save companion personalisation settings
+ */
+export const UpdateCompanionSettingsHeader = zod.object({
+  "Authorization": zod.string().optional().describe('Opaque session token — `Bearer <sid>`.')
+})
+
+export const updateCompanionSettingsBodyCompanionNameMax = 32;
+
+export const updateCompanionSettingsBodyPersonalityNoteMax = 500;
+
+
+
+export const UpdateCompanionSettingsBody = zod.object({
+  "companionName": zod.string().min(1).max(updateCompanionSettingsBodyCompanionNameMax).optional(),
+  "tone": zod.enum(['playful', 'calm', 'witty', 'wise', 'cheerful']).optional(),
+  "personalityNote": zod.string().max(updateCompanionSettingsBodyPersonalityNoteMax).optional()
+})
+
+export const UpdateCompanionSettingsResponse = zod.object({
+  "companionName": zod.string().describe('The name the user has given their companion.'),
+  "tone": zod.enum(['playful', 'calm', 'witty', 'wise', 'cheerful']).describe('Conversation tone preset.'),
+  "personalityNote": zod.string().describe('A free-text note the user wants the companion to know about them.')
+})
+
+
+/**
  * @summary Convert text into spoken audio
  */
 

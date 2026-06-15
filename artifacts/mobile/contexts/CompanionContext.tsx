@@ -4,10 +4,14 @@ import {
   createConversation,
   devRegressSelf,
   fetchStream,
+  getCompanionSettings,
   listMessages,
   sendMessage,
   synthesizeSpeech,
   transcribeAudio,
+  updateCompanionSettings,
+  type CompanionSettings,
+  type CompanionSettingsInput,
   type Message,
 } from "@workspace/api-client-react";
 import {
@@ -98,6 +102,10 @@ interface CompanionContextValue {
    * early-relationship UX can be retested without creating a fresh conversation.
    * No-op in production builds. */
   devRegressSelf: () => Promise<void>;
+  /** The user's saved personalisation settings (name, tone, personality note). */
+  settings: CompanionSettings | null;
+  /** Persist a partial update to the companion settings. */
+  saveSettings: (patch: CompanionSettingsInput) => Promise<void>;
 }
 
 const CompanionContext = createContext<CompanionContextValue | undefined>(
@@ -158,6 +166,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [failedTurn, setFailedTurn] = useState<FailedTurn | null>(null);
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [settings, setSettings] = useState<CompanionSettings | null>(null);
 
   const conversationIdRef = useRef<number | null>(null);
   const failedTurnRef = useRef<FailedTurn | null>(null);
@@ -286,6 +295,14 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       moodStateRef.current = loadedMood;
       setMoodState(loadedMood);
       setMood(computeMood(loadedMood));
+
+      // Load personalisation settings (creates defaults on first call).
+      try {
+        const loadedSettings = await getCompanionSettings();
+        setSettings(loadedSettings);
+      } catch {
+        // Settings are cosmetic — a failure here must not block the app.
+      }
 
       let history: Message[] = [];
       const storedId = await AsyncStorage.getItem(CONVERSATION_KEY);
@@ -665,6 +682,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const saveSettings = useCallback(async (patch: CompanionSettingsInput) => {
+    const updated = await updateCompanionSettings(patch);
+    setSettings(updated);
+  }, []);
+
   const retryInit = useCallback(() => {
     initialize();
   }, [initialize]);
@@ -696,6 +718,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     moodStateRef.current = fresh;
     setMoodState(fresh);
     setMood(computeMood(fresh));
+    setSettings(null);
 
     await logout();
   }, [logout]);
@@ -728,6 +751,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         devTriggerCheckIn,
         devScheduleNudgeSoon,
         devRegressSelf: devRegressSelfFn,
+        settings,
+        saveSettings,
       }}
     >
       {children}

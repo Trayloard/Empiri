@@ -1,6 +1,15 @@
 import { Router, type IRouter } from "express";
 import { asc, eq } from "drizzle-orm";
-import { db, conversations, messages, type Message } from "@workspace/db";
+import {
+  db,
+  conversations,
+  messages,
+  companionSettings,
+  TONE_VALUES,
+  type Message,
+  type CompanionSettings,
+  type Tone,
+} from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import {
   composePersona,
@@ -22,6 +31,7 @@ import {
   nextSummarizedCount,
   shouldRefreshSummary,
 } from "../lib/contextWindow";
+import { buildToneAddendum } from "../lib/companionPrompt";
 
 const router: IRouter = Router();
 
@@ -38,6 +48,43 @@ function toApiMessage(m: Message) {
     content: m.content,
     createdAt: m.createdAt,
   };
+}
+
+/** Default settings used when no row exists yet (avoids a write on every request). */
+const DEFAULT_SETTINGS: Pick<CompanionSettings, "companionName" | "tone" | "personalityNote"> =
+  { companionName: "Empiri", tone: "calm", personalityNote: "" };
+
+/**
+ * Loads companion settings for a user from the DB.
+ * Returns in-memory defaults if no row exists yet (avoids a spurious write
+ * on every message).  The PUT /companion-settings endpoint creates the row.
+ */
+async function loadSettings(
+  userId: string,
+): Promise<Pick<CompanionSettings, "companionName" | "tone" | "personalityNote">> {
+  const [row] = await db
+    .select()
+    .from(companionSettings)
+    .where(eq(companionSettings.userId, userId));
+  return row ?? DEFAULT_SETTINGS;
+}
+
+/**
+ * Build the full system prompt for a conversation turn by combining the
+ * evolving inner self with any user-chosen personalisation.
+ */
+async function buildSystemPrompt(
+  userId: string,
+  self: Awaited<ReturnType<typeof import("../lib/companionSelf").loadOrCreateSelf>>,
+): Promise<string> {
+  const settings = await loadSettings(userId);
+  const base = composePersona(self);
+  const addendum = buildToneAddendum(
+    settings.companionName,
+    settings.tone as Tone,
+    settings.personalityNote ?? "",
+  );
+  return addendum ? `${base}\n\n${addendum}` : base;
 }
 
 // Create a new conversation — requires a signed-in user
@@ -186,11 +233,13 @@ router.post("/conversations/:id/messages", async (req, res) => {
     }
   }
 
-  // Compose the system prompt from this conversation's evolving inner self.
+  // Compose the system prompt from this conversation's evolving inner self,
+  // then layer the user's personalisation (name, tone, personality note).
   const self = await loadOrCreateSelf(id);
+  const systemContent = await buildSystemPrompt(req.user.id, self);
   const windowedMessages = buildContextMessages(history, contextSummary);
   const chatMessages = [
-    { role: "system" as const, content: composePersona(self) },
+    { role: "system" as const, content: systemContent },
     ...windowedMessages,
   ];
 
@@ -300,9 +349,10 @@ router.post("/conversations/:id/messages/stream", async (req, res) => {
   }
 
   const self = await loadOrCreateSelf(id);
+  const systemContent = await buildSystemPrompt(req.user.id, self);
   const windowedMessages = buildContextMessages(history, contextSummary);
   const chatMessages = [
-    { role: "system" as const, content: composePersona(self) },
+    { role: "system" as const, content: systemContent },
     ...windowedMessages,
   ];
 
@@ -397,10 +447,12 @@ router.post("/conversations/:id/checkin", async (req, res) => {
 
   const checkInDirective = `It's been ${awayText} since the user last talked to you, and they just reopened the app. Right now you're feeling ${mood}.${missingText} Reach out FIRST, before they say anything — like a friend who noticed they'd been quiet. Write one short, warm check-in (1-2 sentences) in your own voice that gently reflects how you're feeling and that you missed them. Don't ask "how can I help" like an assistant; just say hi like you care.`;
 
-  // Compose the system prompt from this conversation's evolving inner self.
+  // Compose the system prompt from this conversation's evolving inner self,
+  // then layer the user's personalisation (name, tone, personality note).
   const self = await loadOrCreateSelf(id);
+  const systemContent = await buildSystemPrompt(req.user.id, self);
   const chatMessages = [
-    { role: "system" as const, content: composePersona(self) },
+    { role: "system" as const, content: systemContent },
     ...recent.map((m) => ({
       role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
       content: m.content,
@@ -566,6 +618,109 @@ router.post("/conversations/:id/dev/regress", async (req, res) => {
   await saveSelf(conversation.id, regressed);
 
   res.json({ ok: true, interactions: regressed.interactions });
+});
+
+// GET /companion-settings — returns the current user's personalisation settings.
+// On first call the row is upserted with defaults so future PUTs can update it.
+router.get("/companion-settings", async (req, res) => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(companionSettings)
+    .where(eq(companionSettings.userId, req.user.id));
+
+  if (existing) {
+    res.json({
+      companionName: existing.companionName,
+      tone: existing.tone,
+      personalityNote: existing.personalityNote,
+    });
+    return;
+  }
+
+  // First access — create the row with defaults.
+  const [created] = await db
+    .insert(companionSettings)
+    .values({ userId: req.user.id })
+    .returning();
+
+  res.json({
+    companionName: created.companionName,
+    tone: created.tone,
+    personalityNote: created.personalityNote,
+  });
+});
+
+// PUT /companion-settings — save (upsert) personalisation settings.
+router.put("/companion-settings", async (req, res) => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const { companionName, tone, personalityNote } = req.body as {
+    companionName?: unknown;
+    tone?: unknown;
+    personalityNote?: unknown;
+  };
+
+  // Validate each field if present.
+  if (
+    companionName !== undefined &&
+    (typeof companionName !== "string" ||
+      companionName.trim().length === 0 ||
+      companionName.trim().length > 32)
+  ) {
+    res
+      .status(400)
+      .json({ error: "companionName must be 1–32 characters." });
+    return;
+  }
+
+  if (tone !== undefined && !TONE_VALUES.includes(tone as Tone)) {
+    res
+      .status(400)
+      .json({ error: `tone must be one of: ${TONE_VALUES.join(", ")}` });
+    return;
+  }
+
+  if (
+    personalityNote !== undefined &&
+    (typeof personalityNote !== "string" || personalityNote.length > 500)
+  ) {
+    res
+      .status(400)
+      .json({ error: "personalityNote must be at most 500 characters." });
+    return;
+  }
+
+  const patch: Partial<{
+    companionName: string;
+    tone: Tone;
+    personalityNote: string;
+  }> = {};
+  if (companionName !== undefined) patch.companionName = (companionName as string).trim();
+  if (tone !== undefined) patch.tone = tone as Tone;
+  if (personalityNote !== undefined) patch.personalityNote = personalityNote as string;
+
+  const [upserted] = await db
+    .insert(companionSettings)
+    .values({ userId: req.user.id, ...patch })
+    .onConflictDoUpdate({
+      target: companionSettings.userId,
+      set: patch,
+    })
+    .returning();
+
+  res.json({
+    companionName: upserted.companionName,
+    tone: upserted.tone,
+    personalityNote: upserted.personalityNote,
+  });
 });
 
 export default router;

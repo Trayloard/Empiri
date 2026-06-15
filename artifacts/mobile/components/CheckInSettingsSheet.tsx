@@ -23,6 +23,8 @@ interface CheckInSettingsSheetProps {
   onClose: () => void;
   /** Personality-derived accent; falls back to the static token. */
   accent?: string;
+  /** Navigate to the companion personalisation screen. */
+  onPersonalize?: () => void;
   /** DEV-only: fire a check-in greeting immediately (QA shortcut). */
   onDevCheckIn?: () => void;
   /** DEV-only: schedule a notification nudge a few seconds out (QA shortcut). */
@@ -67,6 +69,7 @@ export function CheckInSettingsSheet({
   onSelect,
   onClose,
   accent,
+  onPersonalize,
   onDevCheckIn,
   onDevNudge,
   onDevRegress,
@@ -196,6 +199,27 @@ export function CheckInSettingsSheet({
           <Text style={[styles.footnote, { color: colors.mutedForeground }]}>
             Turning check-ins off also pauses notifications.
           </Text>
+
+          {onPersonalize && (
+            <Pressable
+              onPress={onPersonalize}
+              accessibilityRole="button"
+              accessibilityLabel="Personalize your companion"
+              style={({ pressed }) => [
+                styles.personalizeRow,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: pressed ? colors.muted : "transparent",
+                },
+              ]}
+            >
+              <Feather name="sliders" size={16} color={tint} style={{ marginRight: 10 }} />
+              <Text style={[styles.personalizeLabel, { color: colors.foreground }]}>
+                Personalize your companion
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
+          )}
 
           {__DEV__ ? (
             <View
@@ -377,6 +401,20 @@ const styles = StyleSheet.create({
   devButtons: {
     flexDirection: "row",
     gap: 10,
+  },
+  personalizeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 8,
+  },
+  personalizeLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: FONTS.medium,
   },
   devButton: {
     flex: 1,

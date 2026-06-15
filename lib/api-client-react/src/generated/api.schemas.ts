@@ -158,6 +158,51 @@ export interface CompanionMemory {
   summary: string | null;
 }
 
+/**
+ * Conversation tone preset.
+ */
+export type CompanionSettingsTone = typeof CompanionSettingsTone[keyof typeof CompanionSettingsTone];
+
+
+export const CompanionSettingsTone = {
+  playful: 'playful',
+  calm: 'calm',
+  witty: 'witty',
+  wise: 'wise',
+  cheerful: 'cheerful',
+} as const;
+
+export interface CompanionSettings {
+  /** The name the user has given their companion. */
+  companionName: string;
+  /** Conversation tone preset. */
+  tone: CompanionSettingsTone;
+  /** A free-text note the user wants the companion to know about them. */
+  personalityNote: string;
+}
+
+export type CompanionSettingsInputTone = typeof CompanionSettingsInputTone[keyof typeof CompanionSettingsInputTone];
+
+
+export const CompanionSettingsInputTone = {
+  playful: 'playful',
+  calm: 'calm',
+  witty: 'witty',
+  wise: 'wise',
+  cheerful: 'cheerful',
+} as const;
+
+export interface CompanionSettingsInput {
+  /**
+     * @minLength 1
+     * @maxLength 32
+     */
+  companionName?: string;
+  tone?: CompanionSettingsInputTone;
+  /** @maxLength 500 */
+  personalityNote?: string;
+}
+
 export interface ApiError {
   error: string;
 }
