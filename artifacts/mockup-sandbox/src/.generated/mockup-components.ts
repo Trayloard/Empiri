@@ -5,5 +5,7 @@ export const modules: ModuleMap = {
   "./components/mockups/PresenceLumen.tsx": () => import("../components/mockups/PresenceLumen.tsx"),
   "./components/mockups/PresenceSpectrum.tsx": () => import("../components/mockups/PresenceSpectrum.tsx"),
   "./components/mockups/empiri-layout/VariantA.tsx": () => import("../components/mockups/empiri-layout/VariantA.tsx"),
-  "./components/mockups/empiri-layout/VariantB.tsx": () => import("../components/mockups/empiri-layout/VariantB.tsx")
+  "./components/mockups/empiri-layout/VariantB.tsx": () => import("../components/mockups/empiri-layout/VariantB.tsx"),
+  "./components/mockups/empiri-layout/VariantB2.tsx": () => import("../components/mockups/empiri-layout/VariantB2.tsx"),
+  "./components/mockups/empiri-layout/VariantB3.tsx": () => import("../components/mockups/empiri-layout/VariantB3.tsx")
 };
