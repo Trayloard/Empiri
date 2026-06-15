@@ -13,7 +13,9 @@ import {
   Text,
   View,
   useColorScheme,
+  useWindowDimensions,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, {
   Easing,
@@ -30,7 +32,6 @@ import { CheckInSettingsSheet } from "@/components/CheckInSettingsSheet";
 import { CompanionOrb } from "@/components/CompanionOrb";
 import { InnerSelfSheet } from "@/components/InnerSelfSheet";
 import { MessageBubble, RetryBubble, TypingBubble } from "@/components/MessageBubble";
-import { PresenceStatusLine } from "@/components/PresenceStatusLine";
 import { FONTS } from "@/constants/fonts";
 import { useCompanion } from "@/contexts/CompanionContext";
 import { useAccentColor } from "@/hooks/useAccentColor";
@@ -39,27 +40,17 @@ import { useCompanionTraits } from "@/hooks/useCompanionTraits";
 import { useAuth } from "@/lib/auth";
 import type { MoodLabel } from "@/lib/mood";
 
+const ORB_SIZE = 76;
+const ORB_R = ORB_SIZE / 2;
+
 function moodLabel(mood: MoodLabel): string {
   switch (mood) {
-    case "bright":
-      return "Feeling bright ✨";
-    case "happy":
-      return "Happy you're here";
-    case "content":
-      return "Here for you";
-    case "low":
-      return "Missing you a little";
-    case "sleepy":
-      return "A bit sleepy…";
+    case "bright":   return "Feeling bright ✨";
+    case "happy":    return "Happy you're here";
+    case "content":  return "Here for you";
+    case "low":      return "Missing you a little";
+    case "sleepy":   return "A bit sleepy…";
   }
-}
-
-function welcomeGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 5) return "Hello, night owl";
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
 }
 
 function statusLabel(
@@ -67,23 +58,62 @@ function statusLabel(
   mood: MoodLabel,
 ): string {
   switch (status) {
-    case "listening":
-      return "Listening…";
-    case "transcribing":
-      return "Got it…";
-    case "thinking":
-      return "Thinking…";
-    case "speaking":
-      return "Speaking…";
-    default:
-      return moodLabel(mood);
+    case "listening":   return "Listening…";
+    case "transcribing": return "Got it…";
+    case "thinking":    return "Thinking…";
+    case "speaking":    return "Speaking…";
+    default:            return moodLabel(mood);
   }
+}
+
+interface NavButtonProps {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  active?: boolean;
+  activeColor: string;
+  onPress: () => void;
+}
+
+function NavButton({ icon, label, active, activeColor, onPress }: NavButtonProps) {
+  const colors = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.navBtn, { opacity: pressed ? 0.65 : active ? 1 : 0.52 }]}
+    >
+      <View
+        style={[
+          styles.navBtnIcon,
+          {
+            backgroundColor: active ? `${activeColor}22` : colors.glass,
+            borderColor: active ? `${activeColor}55` : colors.glassBorder,
+          },
+        ]}
+      >
+        <BlurView
+          intensity={18}
+          tint={colors.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+        <Feather
+          name={icon}
+          size={19}
+          color={active ? activeColor : colors.mutedForeground}
+        />
+      </View>
+      <Text style={[styles.navBtnLabel, { color: active ? activeColor : colors.mutedForeground }]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
 export default function CompanionScreen() {
   const colors = useColors();
   const scheme = useColorScheme();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+
   const {
     messages,
     status,
@@ -114,106 +144,88 @@ export default function CompanionScreen() {
   const { isAuthenticated, isLoading: authLoading, login } = useAuth();
 
   const traits = useCompanionTraits(conversationId);
-  // The chrome accent gently follows Empiri's warmth (warmer → violet/pink,
-  // cooler → blue). Smoothing lives in the hook; derivation stays pure.
   const accent = useAccentColor(traits.warmthShift);
   const [peekVisible, setPeekVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
 
-  // First-launch "wake up": the presence blooms into view, then settles into
-  // its resting breathing state. Reduce-motion shows it calm and instant.
+  const topPad   = Platform.OS === "web" ? 24 : insets.top + 8;
+  const bottomPad = Platform.OS === "web" ? 20 : insets.bottom + 6;
+
+  // Floating orb position — default bottom-right, above the nav row.
+  const orbX = useSharedValue(width - ORB_R - 22);
+  const orbY = useSharedValue(height * 0.55);
+
+  // Update default x when width changes (orientation).
+  useEffect(() => {
+    orbX.value = width - ORB_R - 22;
+  }, [width, orbX]);
+
+  // Drag gesture — runs on the UI thread.
+  const [isDragging, setIsDragging] = useState(false);
+  const pan = Gesture.Pan()
+    .onBegin(() => {
+      "worklet";
+    })
+    .onChange((e) => {
+      "worklet";
+      orbX.value = Math.max(ORB_R + 4, Math.min(width - ORB_R - 4, orbX.value + e.changeX));
+      orbY.value = Math.max(topPad + ORB_R + 4, Math.min(height - 200, orbY.value + e.changeY));
+    });
+
+  // Bloom-in on mount — orb scales up from nothing.
   const reduceMotion = useReducedMotion();
   const bloom = useSharedValue(reduceMotion ? 1 : 0);
   useEffect(() => {
-    if (reduceMotion) {
-      bloom.value = 1;
-      return;
-    }
-    bloom.value = withTiming(1, {
-      duration: 1100,
-      easing: Easing.out(Easing.cubic),
-    });
+    if (reduceMotion) { bloom.value = 1; return; }
+    bloom.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
   }, [bloom, reduceMotion]);
-  const presenceStyle = useAnimatedStyle(() => ({
+
+  const orbAnimStyle = useAnimatedStyle(() => ({
+    position: "absolute",
+    left: orbX.value - ORB_R,
+    top:  orbY.value - ORB_R,
     opacity: bloom.value,
-    transform: [{ scale: 0.72 + bloom.value * 0.28 }],
+    transform: [{ scale: 0.6 + bloom.value * 0.4 }],
   }));
 
-  const greeting = useMemo(() => welcomeGreeting(), []);
-
-  const topPad = Platform.OS === "web" ? 24 : insets.top + 8;
-  const bottomPad = Platform.OS === "web" ? 20 : insets.bottom + 6;
-
   const reversed = useMemo(() => [...messages].reverse(), [messages]);
-  const busy =
-    status === "thinking" ||
-    status === "transcribing" ||
-    status === "speaking";
+  const busy = status === "thinking" || status === "transcribing" || status === "speaking";
 
   const handleMic = () => {
-    if (isRecording) {
-      stopListening();
-    } else {
-      startListening();
-    }
+    if (isRecording) stopListening(); else startListening();
   };
-
   const handleRetry = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     retryMessage();
   };
-
   const handleToggleVoice = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     toggleVoice();
   };
-
   const handleToggleNotifications = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     toggleNotifications();
   };
-
   const handleOpenPeek = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPeekVisible(true);
   };
-
   const handleOpenSettings = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSettingsVisible(true);
   };
 
-  // DEV-only QA shortcuts, surfaced inside the check-in sheet and stripped from
-  // production via `__DEV__` (here and in the sheet + context).
   const handleDevCheckIn = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSettingsVisible(false);
     devTriggerCheckIn();
   };
-
   const handleDevNudge = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     devScheduleNudgeSoon();
   };
-
   const handleDevRegress = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     devRegressSelf();
   };
 
@@ -235,160 +247,40 @@ export default function CompanionScreen() {
         <Text style={[styles.emptyText, { color: colors.mutedForeground, marginBottom: 32 }]}>
           Sign in to start your conversation.
         </Text>
-        <Pressable
-          onPress={login}
-          style={[styles.retry, { backgroundColor: colors.primary }]}
-        >
-          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>
-            Sign in
-          </Text>
+        <Pressable onPress={login} style={[styles.retry, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Sign in</Text>
         </Pressable>
       </View>
     );
   }
 
+  const orbStatusText = statusLabel(status, mood.label);
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <AmbientGlow status={status} traits={traits} />
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior="padding"
-        keyboardVerticalOffset={0}
-      >
-        {/* Header with the companion presence */}
-        <View style={[styles.header, { paddingTop: topPad }]}>
-          <Pressable
-            onPress={handleToggleNotifications}
-            style={({ pressed }) => [
-              styles.notifToggle,
-              {
-                backgroundColor: colors.glass,
-                borderColor: colors.glassBorder,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-            testID="notifications-toggle"
-            hitSlop={8}
-          >
-            <BlurView
-              intensity={24}
-              tint={colors.blurTint}
-              style={StyleSheet.absoluteFill}
-            />
-            <Feather
-              name={notificationsEnabled ? "bell" : "bell-off"}
-              size={18}
-              color={
-                notificationsEnabled ? accent : colors.mutedForeground
-              }
-            />
-          </Pressable>
 
-          <Pressable
-            onPress={handleOpenSettings}
-            style={({ pressed }) => [
-              styles.settingsToggle,
-              {
-                backgroundColor: colors.glass,
-                borderColor: colors.glassBorder,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-            testID="check-in-settings-button"
-            accessibilityRole="button"
-            accessibilityLabel="Check-in settings"
-            hitSlop={8}
-          >
-            <BlurView
-              intensity={24}
-              tint={colors.blurTint}
-              style={StyleSheet.absoluteFill}
-            />
-            <Feather name="settings" size={18} color={colors.mutedForeground} />
-          </Pressable>
-
-          <Pressable
-            onPress={handleToggleVoice}
-            style={({ pressed }) => [
-              styles.voiceToggle,
-              {
-                backgroundColor: colors.glass,
-                borderColor: colors.glassBorder,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-            testID="voice-toggle"
-            hitSlop={8}
-          >
-            <BlurView
-              intensity={24}
-              tint={colors.blurTint}
-              style={StyleSheet.absoluteFill}
-            />
-            <Feather
-              name={voiceEnabled ? "volume-2" : "volume-x"}
-              size={18}
-              color={voiceEnabled ? accent : colors.mutedForeground}
-            />
-          </Pressable>
-
-          <Animated.View style={[styles.presence, presenceStyle]}>
-            <Pressable
-              onPress={handleOpenPeek}
-              testID="inner-self-button"
-              accessibilityRole="button"
-              accessibilityLabel="Peek inside Empiri"
-              hitSlop={8}
-            >
-              <CompanionOrb status={status} mood={mood.label} size={120} traits={traits} />
-            </Pressable>
-            <Text style={[styles.name, { color: colors.foreground }]}>
-              Empiri
-            </Text>
-          </Animated.View>
-          <PresenceStatusLine
-            greeting={greeting}
-            statusText={statusLabel(status, mood.label)}
-            color={accent}
-          />
-        </View>
-
-        {/* Conversation */}
-        <View style={styles.flex}>
+      <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={0}>
+        {/* Chat — full height, top padding leaves room for status bar */}
+        <View style={[styles.flex, { paddingTop: topPad + 4 }]}>
           {initializing ? (
             <View style={styles.center}>
               <ActivityIndicator color={colors.primary} />
             </View>
           ) : initError ? (
             <View style={styles.center}>
-              <Feather
-                name="cloud-off"
-                size={36}
-                color={colors.mutedForeground}
-              />
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                {initError}
-              </Text>
-              <Pressable
-                onPress={retryInit}
-                style={[styles.retry, { backgroundColor: colors.primary }]}
-              >
-                <Text
-                  style={[styles.retryText, { color: colors.primaryForeground }]}
-                >
-                  Retry
-                </Text>
+              <Feather name="cloud-off" size={36} color={colors.mutedForeground} />
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{initError}</Text>
+              <Pressable onPress={retryInit} style={[styles.retry, { backgroundColor: colors.primary }]}>
+                <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Retry</Text>
               </Pressable>
             </View>
           ) : messages.length === 0 ? (
             <View style={styles.center}>
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                Say hi to Empiri
-              </Text>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Say hi to Empiri</Text>
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                Type a message or tap the mic to talk. I'm always here for a
-                chat.
+                Type a message or tap the mic to talk. I'm always here for a chat.
               </Text>
             </View>
           ) : (
@@ -418,10 +310,7 @@ export default function CompanionScreen() {
         {error ? (
           <Pressable
             onPress={dismissError}
-            style={[
-              styles.errorBanner,
-              { backgroundColor: colors.destructive },
-            ]}
+            style={[styles.errorBanner, { backgroundColor: colors.destructive }]}
           >
             <Feather name="alert-circle" size={15} color="#fff" />
             <Text style={styles.errorText}>{error}</Text>
@@ -429,7 +318,7 @@ export default function CompanionScreen() {
           </Pressable>
         ) : null}
 
-        {/* Input */}
+        {/* Input + bottom nav */}
         <View style={{ paddingBottom: bottomPad }}>
           <ChatInput
             onSend={sendText}
@@ -437,8 +326,71 @@ export default function CompanionScreen() {
             isRecording={isRecording}
             busy={busy}
           />
+          {/* Nav row — replaces scattered corner buttons */}
+          <View style={styles.navRow}>
+            <NavButton
+              icon={notificationsEnabled ? "bell" : "bell-off"}
+              label="Benachrichtigung"
+              active={notificationsEnabled}
+              activeColor={accent}
+              onPress={handleToggleNotifications}
+            />
+            <NavButton
+              icon={voiceEnabled ? "volume-2" : "volume-x"}
+              label="Stimme"
+              active={voiceEnabled}
+              activeColor={accent}
+              onPress={handleToggleVoice}
+            />
+            <NavButton
+              icon="settings"
+              label="Einstellungen"
+              active={false}
+              activeColor={accent}
+              onPress={handleOpenSettings}
+            />
+          </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Floating draggable orb — outside KAV so keyboard doesn't shift it */}
+      <GestureDetector gesture={pan}>
+        <Animated.View style={orbAnimStyle} pointerEvents="box-none">
+          {/* Tooltip pill — name + mood status */}
+          <View
+            style={[
+              styles.tooltip,
+              {
+                borderColor: `${accent}44`,
+                right: ORB_SIZE + 10,
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <BlurView intensity={28} tint={colors.blurTint} style={StyleSheet.absoluteFill} />
+            <Text style={[styles.tooltipName, { color: accent }]}>Empiri</Text>
+            <Text style={[styles.tooltipStatus, { color: colors.mutedForeground }]} numberOfLines={1}>
+              {orbStatusText}
+            </Text>
+          </View>
+
+          {/* Orb itself */}
+          <Pressable
+            onPress={handleOpenPeek}
+            testID="inner-self-button"
+            accessibilityRole="button"
+            accessibilityLabel="Peek inside Empiri"
+            hitSlop={10}
+          >
+            <CompanionOrb
+              status={status}
+              mood={mood.label}
+              size={ORB_SIZE}
+              traits={traits}
+            />
+          </Pressable>
+        </Animated.View>
+      </GestureDetector>
 
       <InnerSelfSheet
         visible={peekVisible}
@@ -463,100 +415,66 @@ export default function CompanionScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
-  header: {
-    alignItems: "center",
-    paddingBottom: 10,
-  },
-  voiceToggle: {
-    position: "absolute",
-    right: 18,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    zIndex: 2,
-  },
-  notifToggle: {
-    position: "absolute",
-    left: 18,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    zIndex: 2,
-  },
-  settingsToggle: {
-    position: "absolute",
-    left: 66,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    zIndex: 2,
-  },
-  presence: {
-    alignItems: "center",
-  },
-  name: {
-    fontSize: 26,
-    fontFamily: FONTS.bold,
-    letterSpacing: -0.4,
-    marginTop: 4,
-  },
   center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 40,
-    gap: 12,
+    flex: 1, alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 40, gap: 12,
   },
   emptyTitle: {
-    fontSize: 21,
-    fontFamily: FONTS.bold,
-    letterSpacing: -0.3,
+    fontSize: 21, fontFamily: FONTS.bold, letterSpacing: -0.3,
   },
   emptyText: {
-    fontSize: 15,
-    lineHeight: 21,
-    textAlign: "center",
-    fontFamily: FONTS.regular,
+    fontSize: 15, lineHeight: 21, textAlign: "center", fontFamily: FONTS.regular,
   },
   retry: {
-    marginTop: 6,
-    paddingHorizontal: 24,
-    paddingVertical: 11,
-    borderRadius: 22,
+    marginTop: 6, paddingHorizontal: 24, paddingVertical: 11, borderRadius: 22,
   },
   retryText: {
-    fontSize: 15,
-    fontFamily: FONTS.semibold,
+    fontSize: 15, fontFamily: FONTS.semibold,
   },
-  listContent: {
-    paddingVertical: 12,
-  },
+  listContent: { paddingVertical: 12 },
   errorBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginHorizontal: 14,
-    marginBottom: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginHorizontal: 14, marginBottom: 4,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14,
   },
   errorText: {
-    flex: 1,
-    color: "#fff",
-    fontSize: 13.5,
-    fontFamily: FONTS.medium,
+    flex: 1, color: "#fff", fontSize: 13.5, fontFamily: FONTS.medium,
+  },
+  // Bottom nav
+  navRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingTop: 6,
+    paddingBottom: 4,
+    paddingHorizontal: 10,
+  },
+  navBtn: {
+    flex: 1, alignItems: "center", gap: 4,
+  },
+  navBtnIcon: {
+    width: 48, height: 48, borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center", justifyContent: "center",
+    overflow: "hidden",
+  },
+  navBtnLabel: {
+    fontSize: 10.5, fontFamily: FONTS.medium,
+  },
+  // Floating orb tooltip
+  tooltip: {
+    position: "absolute",
+    top: 6,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    overflow: "hidden",
+    minWidth: 100,
+  },
+  tooltipName: {
+    fontSize: 12, fontFamily: FONTS.bold, letterSpacing: 0.1,
+  },
+  tooltipStatus: {
+    fontSize: 11, fontFamily: FONTS.regular, marginTop: 1,
   },
 });
