@@ -343,4 +343,99 @@ router.get("/conversations/:id/memory", async (req, res) => {
   res.json({ summary: conversation.contextSummary ?? null });
 });
 
+// DEV-ONLY: roll Empiri's inner self back a few steps without wiping it
+// completely. Useful for testing the early-relationship UX without creating a
+// fresh conversation. Only available when NODE_ENV !== "production".
+//
+// What "wind back" does:
+//   - interactions halved (rounded down)
+//   - every interest's affinity halved (interests that drop to 0 are removed)
+//   - the two most-recent narrative lines removed
+//   - each trait nudged 30 % of the way back toward its baseline
+//   - drive levels nudged 30 % of the way back toward their baseline
+//   - lastUpdatedAt reset to now so no extra time-decay fires on next load
+router.post("/conversations/:id/dev/regress", async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
+
+  const self = await loadOrCreateSelf(conversation.id);
+  const now = Date.now();
+
+  const regressedBlocks: typeof self.blocks = {};
+
+  for (const [blockId, envelope] of Object.entries(self.blocks)) {
+    if (blockId === "core-self") {
+      const data = envelope.data as {
+        traits: Record<string, number>;
+        interests: Array<{ topic: string; affinity: number; display?: string }>;
+        narrative: string[];
+      };
+
+      const traitBaselines: Record<string, number> = {
+        warmth: 70,
+        playfulness: 60,
+        curiosity: 55,
+        openness: 55,
+        calm: 50,
+      };
+
+      const traits: Record<string, number> = {};
+      for (const [key, value] of Object.entries(data.traits)) {
+        const baseline = traitBaselines[key] ?? 50;
+        traits[key] = value + (baseline - value) * 0.3;
+      }
+
+      const interests = data.interests
+        .map((i) => ({ ...i, affinity: i.affinity * 0.5 }))
+        .filter((i) => i.affinity > 0.5);
+
+      const narrative = data.narrative.slice(0, Math.max(0, data.narrative.length - 2));
+
+      regressedBlocks[blockId] = {
+        ...envelope,
+        lastUpdatedAt: now,
+        data: { traits, interests, narrative },
+      };
+    } else if (blockId === "drives") {
+      const data = envelope.data as { levels: Record<string, number> };
+
+      const driveBaselines: Record<string, number> = {
+        connection: 55,
+        curiosity: 50,
+        novelty: 45,
+        expression: 48,
+      };
+
+      const levels: Record<string, number> = {};
+      for (const [key, value] of Object.entries(data.levels)) {
+        const baseline = driveBaselines[key] ?? 50;
+        levels[key] = value + (baseline - value) * 0.3;
+      }
+
+      regressedBlocks[blockId] = {
+        ...envelope,
+        lastUpdatedAt: now,
+        data: { levels },
+      };
+    } else {
+      regressedBlocks[blockId] = { ...envelope, lastUpdatedAt: now };
+    }
+  }
+
+  const regressed = {
+    ...self,
+    interactions: Math.floor(self.interactions / 2),
+    blocks: regressedBlocks,
+  };
+
+  await saveSelf(conversation.id, regressed);
+
+  res.json({ ok: true, interactions: regressed.interactions });
+});
+
 export default router;

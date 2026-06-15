@@ -108,6 +108,7 @@ export default function CompanionScreen() {
     dismissError,
     devTriggerCheckIn,
     devScheduleNudgeSoon,
+    devRegressSelf,
   } = useCompanion();
 
   const { isAuthenticated, isLoading: authLoading, login } = useAuth();
@@ -207,6 +208,13 @@ export default function CompanionScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     devScheduleNudgeSoon();
+  };
+
+  const handleDevRegress = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    devRegressSelf();
   };
 
   if (authLoading) {
@@ -446,6 +454,7 @@ export default function CompanionScreen() {
         accent={accent}
         onDevCheckIn={__DEV__ ? handleDevCheckIn : undefined}
         onDevNudge={__DEV__ ? handleDevNudge : undefined}
+        onDevRegress={__DEV__ ? handleDevRegress : undefined}
       />
     </View>
   );

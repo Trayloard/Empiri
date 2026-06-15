@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   companionCheckIn,
   createConversation,
+  devRegressSelf,
   listMessages,
   sendMessage,
   synthesizeSpeech,
@@ -91,6 +92,11 @@ interface CompanionContextValue {
   /** DEV-only: schedule a notification nudge a few seconds out instead of hours.
    * No-op in production builds. */
   devScheduleNudgeSoon: () => Promise<void>;
+  /** DEV-only: roll Empiri's inner self back a few steps (halve interactions,
+   * trim interests/narrative, nudge traits and drives toward baseline) so the
+   * early-relationship UX can be retested without creating a fresh conversation.
+   * No-op in production builds. */
+  devRegressSelf: () => Promise<void>;
 }
 
 const CompanionContext = createContext<CompanionContextValue | undefined>(
@@ -563,6 +569,17 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     await scheduleNudgeInSeconds(NUDGE_BODY);
   }, []);
 
+  const devRegressSelfFn = useCallback(async () => {
+    if (!__DEV__) return;
+    const convId = conversationIdRef.current;
+    if (convId == null) return;
+    try {
+      await devRegressSelf(convId);
+    } catch {
+      // Best-effort: dev-only, failure is silent.
+    }
+  }, []);
+
   const retryInit = useCallback(() => {
     initialize();
   }, [initialize]);
@@ -625,6 +642,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         signOut,
         devTriggerCheckIn,
         devScheduleNudgeSoon,
+        devRegressSelf: devRegressSelfFn,
       }}
     >
       {children}

@@ -1251,6 +1251,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type SynthesizeSpeechMutationBody = BodyType<SpeechInput>
     export type SynthesizeSpeechMutationError = ErrorType<ApiError>
 
+/**
+ * DEV-ONLY: roll Empiri's inner self back a few steps (halve interactions,
+ * trim interests/narrative, nudge traits and drives toward baseline).
+ * The server rejects this with 404 in production.
+ */
+export const devRegressSelf = async (id: number, options?: RequestInit): Promise<{ ok: boolean; interactions: number }> => {
+  return customFetch<{ ok: boolean; interactions: number }>(
+    `/api/conversations/${id}/dev/regress`,
+    { ...options, method: 'POST' },
+  );
+};
+
     /**
  * @summary Convert text into spoken audio
  */

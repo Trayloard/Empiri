@@ -27,6 +27,8 @@ interface CheckInSettingsSheetProps {
   onDevCheckIn?: () => void;
   /** DEV-only: schedule a notification nudge a few seconds out (QA shortcut). */
   onDevNudge?: () => void;
+  /** DEV-only: roll Empiri's inner self back a few steps (QA shortcut). */
+  onDevRegress?: () => void;
 }
 
 interface CadenceOption {
@@ -67,6 +69,7 @@ export function CheckInSettingsSheet({
   accent,
   onDevCheckIn,
   onDevNudge,
+  onDevRegress,
 }: CheckInSettingsSheetProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -243,6 +246,27 @@ export function CheckInSettingsSheet({
                     style={[styles.devButtonText, { color: colors.foreground }]}
                   >
                     Nudge in {DEV_NUDGE_SECONDS}s
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={onDevRegress}
+                  disabled={!onDevRegress}
+                  testID="dev-trigger-regress"
+                  accessibilityRole="button"
+                  accessibilityLabel="Wind Empiri back a few steps"
+                  style={({ pressed }) => [
+                    styles.devButton,
+                    {
+                      borderColor: colors.border,
+                      opacity: !onDevRegress ? 0.4 : pressed ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <Feather name="rewind" size={15} color={tint} />
+                  <Text
+                    style={[styles.devButtonText, { color: colors.foreground }]}
+                  >
+                    Wind back
                   </Text>
                 </Pressable>
               </View>
