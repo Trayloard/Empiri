@@ -50,6 +50,7 @@ function moodLabel(mood: MoodLabel): string {
     case "content":  return "Here for you";
     case "low":      return "Missing you a little";
     case "sleepy":   return "A bit sleepy…";
+    case "sad":      return "Having a rough moment…";
   }
 }
 

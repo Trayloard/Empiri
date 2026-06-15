@@ -380,6 +380,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {
         setError("Empiri couldn't reply just now. Try again.");
+        setMood((prev) => ({ ...prev, label: "sad" }));
         const failed: FailedTurn = { messageId: optimistic.id, content };
         failedTurnRef.current = failed;
         setFailedTurn(failed);

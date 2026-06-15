@@ -8,7 +8,7 @@
  * pure function of elapsed time — making it deterministic and easy to test.
  */
 
-export type MoodLabel = "sleepy" | "low" | "content" | "happy" | "bright";
+export type MoodLabel = "sad" | "sleepy" | "low" | "content" | "happy" | "bright";
 
 /** Persisted snapshot — the stats *as of* the last interaction. */
 export interface CompanionMoodState {
@@ -156,5 +156,7 @@ export function moodDescription(label: MoodLabel): string {
       return "a little low and quiet";
     case "sleepy":
       return "sleepy and faded";
+    case "sad":
+      return "a little sad and withdrawn";
   }
 }

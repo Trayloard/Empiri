@@ -42,6 +42,8 @@ const MOOD_DYNAMICS: Record<MoodLabel, Dynamics> = {
   content: { speed: 0.9, intensity: 0.88, drift: 0.85, coreBoost: 0.9 },
   low: { speed: 0.65, intensity: 0.72, drift: 0.7, coreBoost: 0.78 },
   sleepy: { speed: 0.5, intensity: 0.58, drift: 0.55, coreBoost: 0.66 },
+  // Sad: dimmer and more still than sleepy — a quiet, withdrawn presence.
+  sad: { speed: 0.38, intensity: 0.48, drift: 0.42, coreBoost: 0.55 },
 };
 
 // Active states are unmistakable — the presence quickens and brightens.
