@@ -322,6 +322,33 @@ async function parseSuccessBody(
   }
 }
 
+/**
+ * Initiates a fetch with the configured base URL and auth token applied,
+ * returning the raw Response so the caller can consume the body as a stream.
+ * Unlike `customFetch`, this does NOT parse the body — use it for SSE or any
+ * other streaming response where you need to read `response.body` yourself.
+ */
+export async function fetchStream(
+  path: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  const url = _baseUrl ? `${_baseUrl}${path}` : path;
+  const headers = mergeHeaders(options.headers as HeadersInit | undefined);
+
+  if (options.body != null && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
+  if (_authTokenGetter && !headers.has("authorization")) {
+    const token = await _authTokenGetter();
+    if (token) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
+  }
+
+  return fetch(url, { ...options, headers });
+}
+
 export async function customFetch<T = unknown>(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},

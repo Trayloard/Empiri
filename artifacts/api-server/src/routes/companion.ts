@@ -234,6 +234,136 @@ router.post("/conversations/:id/messages", async (req, res) => {
   });
 });
 
+// Send a text message and stream the companion's reply as SSE.
+// Each delta arrives as:  data: {"delta":"..."}\n\n
+// On success the stream ends with: data: {"done":true,"userMessage":{...},"assistantMessage":{...}}\n\n
+// On error the stream ends with:   data: {"error":"..."}\n\n
+router.post("/conversations/:id/messages/stream", async (req, res) => {
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
+
+  const id = conversation.id;
+
+  const parsed = SendMessageBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Message content is required" });
+    return;
+  }
+  const content = parsed.data.content.trim();
+  if (!content) {
+    res.status(400).json({ error: "Message content is required" });
+    return;
+  }
+
+  const [userMessage] = await db
+    .insert(messages)
+    .values({ conversationId: id, role: "user", content })
+    .returning();
+
+  const history = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, id))
+    .orderBy(asc(messages.createdAt));
+
+  let contextSummary = conversation.contextSummary ?? null;
+  const lastSummarizedCount = conversation.contextSummaryMessageCount ?? null;
+  if (shouldRefreshSummary(history.length, lastSummarizedCount)) {
+    try {
+      const delta = getIncrementalMessagesForSummarisation(history, lastSummarizedCount);
+      const deltaText = delta
+        .map((m) => `${m.role === "assistant" ? "Empiri" : "User"}: ${m.content}`)
+        .join("\n");
+      const systemInstruction = contextSummary
+        ? `You are a memory assistant. Update the existing summary below by incorporating the new messages that follow. Keep the result to 100–150 words. Write in third person, e.g. "The user mentioned…".\n\nExisting summary:\n${contextSummary}`
+        : `You are a memory assistant. Summarise the following conversation excerpt into a concise paragraph (100–150 words) covering the main topics discussed, any personal details the user shared, and the overall emotional tone. Write in third person, e.g. "The user mentioned…".`;
+      const summaryCompletion = await openai.chat.completions.create({
+        model: "gpt-5-mini",
+        max_completion_tokens: 512,
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: deltaText },
+        ],
+      });
+      const newSummary = summaryCompletion.choices[0]?.message?.content?.trim() ?? null;
+      if (newSummary) {
+        contextSummary = newSummary;
+        const newWatermark = nextSummarizedCount(lastSummarizedCount, delta.length);
+        await db
+          .update(conversations)
+          .set({ contextSummary: newSummary, contextSummaryMessageCount: newWatermark })
+          .where(eq(conversations.id, id));
+      }
+    } catch (err) {
+      req.log.error({ err }, "Failed to refresh context summary (stream)");
+    }
+  }
+
+  const self = await loadOrCreateSelf(id);
+  const windowedMessages = buildContextMessages(history, contextSummary);
+  const chatMessages = [
+    { role: "system" as const, content: composePersona(self) },
+    ...windowedMessages,
+  ];
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  let reply = "";
+
+  try {
+    const stream = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      max_completion_tokens: 8192,
+      messages: chatMessages,
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content ?? "";
+      if (delta) {
+        reply += delta;
+        res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+      }
+    }
+  } catch (err) {
+    req.log.error({ err }, "Companion streaming reply failed");
+    res.write(`data: ${JSON.stringify({ error: "AI stream error" })}\n\n`);
+    res.end();
+    return;
+  }
+
+  if (!reply) {
+    res.write(`data: ${JSON.stringify({ error: "AI stream did not complete" })}\n\n`);
+    res.end();
+    return;
+  }
+
+  const [assistantMessage] = await db
+    .insert(messages)
+    .values({ conversationId: id, role: "assistant", content: reply })
+    .returning();
+
+  try {
+    const evolved = evolve(self, deriveMessageSignal(content));
+    await saveSelf(id, evolved);
+    await maybeSnapshotSelf(id, evolved);
+  } catch (err) {
+    req.log.error({ err }, "Failed to evolve companion self (stream)");
+  }
+
+  res.write(
+    `data: ${JSON.stringify({
+      done: true,
+      userMessage: toApiMessage(userMessage),
+      assistantMessage: toApiMessage(assistantMessage),
+    })}\n\n`,
+  );
+  res.end();
+});
+
 // Generate a proactive check-in greeting (the companion reaches out first)
 router.post("/conversations/:id/checkin", async (req, res) => {
   const conversation = await requireOwnedConversation(req, res);

@@ -3,6 +3,7 @@ import {
   companionCheckIn,
   createConversation,
   devRegressSelf,
+  fetchStream,
   listMessages,
   sendMessage,
   synthesizeSpeech,
@@ -348,6 +349,12 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   // user bubble (`optimistic`) is already in `messages`; on success we swap it
   // for the server's real pair, and on failure we leave it in place and mark
   // the turn as retryable.
+  //
+  // On web we use the SSE streaming endpoint with a line-buffer accumulator so
+  // partial SSE chunks (split across network packets) are never silently
+  // dropped. On React Native the ReadableStream API is not exposed, so we fall
+  // back to the regular REST endpoint. Either path routes errors through the
+  // same catch block which sets mood → "sad" and marks the turn as retryable.
   const deliver = useCallback(
     async (content: string, optimistic: Message, id: number) => {
       setError(null);
@@ -355,20 +362,97 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       setStatus("thinking");
 
       try {
-        const result = await sendMessage(id, { content });
+        let userMsg: Message;
+        let assistantMsg: Message;
 
-        // The server already returns a 502 for an empty reply, but a 200 could
-        // still carry empty/whitespace-only assistant content. Treat that as a
-        // failed turn (friendly error, retryable) instead of appending a blank
-        // assistant bubble — the exact symptom of the original blank-bubble bug.
-        if (!result.assistantMessage?.content?.trim()) {
+        if (Platform.OS === "web") {
+          // ── SSE streaming path ──────────────────────────────────────────────
+          const streamResponse = await fetchStream(
+            `/conversations/${id}/messages/stream`,
+            { method: "POST", body: JSON.stringify({ content }) },
+          );
+
+          if (!streamResponse.ok) {
+            throw new Error(`HTTP ${streamResponse.status}`);
+          }
+
+          const reader = streamResponse.body?.getReader();
+          if (!reader) {
+            throw new Error("ReadableStream not available");
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let serverError = false;
+          let completed = false;
+          let streamResult: {
+            userMessage: Message;
+            assistantMessage: Message;
+          } | null = null;
+
+          // Accumulate chunks into a line buffer so SSE events split across
+          // network packets are reassembled before parsing.
+          loop: while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? ""; // keep the last incomplete line
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              try {
+                const payload = JSON.parse(line.slice(6)) as {
+                  delta?: string;
+                  error?: string;
+                  done?: boolean;
+                  userMessage?: Message;
+                  assistantMessage?: Message;
+                };
+                if (payload.error) {
+                  serverError = true;
+                  break loop;
+                }
+                if (payload.done && payload.userMessage && payload.assistantMessage) {
+                  completed = true;
+                  streamResult = {
+                    userMessage: payload.userMessage,
+                    assistantMessage: payload.assistantMessage,
+                  };
+                  break loop;
+                }
+              } catch {
+                // Malformed SSE line — skip and continue
+              }
+            }
+          }
+
+          if (serverError || !completed || !streamResult) {
+            throw new Error("AI stream did not complete");
+          }
+
+          userMsg = streamResult.userMessage;
+          assistantMsg = streamResult.assistantMessage;
+        } else {
+          // ── React Native fallback ───────────────────────────────────────────
+          // ReadableStream is not exposed in RN; use the regular REST endpoint.
+          const result = await sendMessage(id, { content });
+          userMsg = result.userMessage;
+          assistantMsg = result.assistantMessage;
+        }
+
+        // The server returns 502 for an empty reply, but a 200/stream-done
+        // could still carry empty/whitespace-only content. Treat it as a
+        // failed turn (retryable) instead of appending a blank bubble.
+        if (!assistantMsg?.content?.trim()) {
           throw new Error("empty assistant reply");
         }
 
         setMessages((prev) => [
           ...prev.filter((m) => m.id !== optimistic.id),
-          result.userMessage,
-          result.assistantMessage,
+          userMsg,
+          assistantMsg,
         ]);
 
         // A real exchange happened — the companion perks up.
@@ -376,7 +460,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
         if (voiceEnabled) {
           setStatus("speaking");
-          await playSpeech(result.assistantMessage.content);
+          await playSpeech(assistantMsg.content);
         }
       } catch {
         setError("Empiri couldn't reply just now. Try again.");
