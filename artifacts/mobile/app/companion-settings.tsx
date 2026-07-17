@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FONTS } from "@/constants/fonts";
 import { useCompanion } from "@/contexts/CompanionContext";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/lib/auth";
 
 const TONE_OPTIONS = [
   {
@@ -59,6 +60,7 @@ export default function CompanionSettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { settings, saveSettings } = useCompanion();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [name, setName] = useState(settings?.companionName ?? "Empiri");
   const [tone, setTone] = useState<ToneValue>(
@@ -92,6 +94,20 @@ export default function CompanionSettingsScreen() {
       setSaving(false);
     }
   };
+
+  // Same auth pattern as the main chat screen: wait for the auth check,
+  // then send signed-out users to the root screen, which shows the login gate.
+  if (authLoading) {
+    return (
+      <View style={[styles.root, styles.center, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href="/" />;
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -281,6 +297,10 @@ export default function CompanionSettingsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
+  center: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",

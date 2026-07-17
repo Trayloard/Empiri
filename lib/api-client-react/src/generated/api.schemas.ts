@@ -61,6 +61,14 @@ export interface ConversationInput {
   title: string;
 }
 
+export interface ConversationUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  title: string;
+}
+
 export interface Message {
   id: number;
   conversationId: number;

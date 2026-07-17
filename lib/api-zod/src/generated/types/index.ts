@@ -25,6 +25,7 @@ export * from './companionSettingsTone';
 export * from './companionTrait';
 export * from './conversation';
 export * from './conversationInput';
+export * from './conversationUpdate';
 export * from './errorEnvelope';
 export * from './handleBrowserLoginCallbackParams';
 export * from './healthStatus';

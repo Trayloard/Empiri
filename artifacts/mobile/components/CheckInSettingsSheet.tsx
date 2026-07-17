@@ -25,6 +25,8 @@ interface CheckInSettingsSheetProps {
   accent?: string;
   /** Navigate to the companion personalisation screen. */
   onPersonalize?: () => void;
+  /** Sign out of the current account. */
+  onSignOut?: () => void;
   /** DEV-only: fire a check-in greeting immediately (QA shortcut). */
   onDevCheckIn?: () => void;
   /** DEV-only: schedule a notification nudge a few seconds out (QA shortcut). */
@@ -70,6 +72,7 @@ export function CheckInSettingsSheet({
   onClose,
   accent,
   onPersonalize,
+  onSignOut,
   onDevCheckIn,
   onDevNudge,
   onDevRegress,
@@ -216,6 +219,33 @@ export function CheckInSettingsSheet({
               <Feather name="sliders" size={16} color={tint} style={{ marginRight: 10 }} />
               <Text style={[styles.personalizeLabel, { color: colors.foreground }]}>
                 Personalize your companion
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+
+          {onSignOut && (
+            <Pressable
+              onPress={onSignOut}
+              testID="sign-out-button"
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+              style={({ pressed }) => [
+                styles.personalizeRow,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: pressed ? colors.muted : "transparent",
+                },
+              ]}
+            >
+              <Feather
+                name="log-out"
+                size={16}
+                color={colors.destructive}
+                style={{ marginRight: 10 }}
+              />
+              <Text style={[styles.personalizeLabel, { color: colors.destructive }]}>
+                Sign out
               </Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>

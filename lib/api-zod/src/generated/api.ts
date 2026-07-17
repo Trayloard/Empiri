@@ -97,10 +97,58 @@ export const LogoutMobileSessionResponse = zod.object({
 
 
 /**
+ * Returns the conversations owned by the authenticated user, oldest first. Used to resume an existing conversation on a fresh install or new device.
+ * @summary List the signed-in user's conversations
+ */
+export const ListConversationsResponseItem = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListConversationsResponse = zod.array(ListConversationsResponseItem)
+
+
+/**
  * @summary Create a new conversation
  */
 export const CreateConversationBody = zod.object({
   "title": zod.string()
+})
+
+
+/**
+ * @summary Fetch a single conversation
+ */
+export const GetConversationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetConversationResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Rename a conversation
+ */
+export const RenameConversationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const renameConversationBodyTitleMax = 80;
+
+
+
+export const RenameConversationBody = zod.object({
+  "title": zod.string().min(1).max(renameConversationBodyTitleMax)
+})
+
+export const RenameConversationResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "createdAt": zod.coerce.date()
 })
 
 

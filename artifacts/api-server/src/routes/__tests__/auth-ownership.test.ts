@@ -102,6 +102,23 @@ describe("unauthenticated requests", () => {
     expect(res.status).toBe(401);
   });
 
+  it("GET /conversations → 401 without auth", async () => {
+    const res = await request(app).get("/api/conversations");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /conversations/:id → 401 without auth", async () => {
+    const res = await request(app).get(`/api/conversations/${convAId}`);
+    expect(res.status).toBe(401);
+  });
+
+  it("PATCH /conversations/:id → 401 without auth", async () => {
+    const res = await request(app)
+      .patch(`/api/conversations/${convAId}`)
+      .send({ title: "Should fail" });
+    expect(res.status).toBe(401);
+  });
+
   it("GET /conversations/:id/messages → 401 without auth", async () => {
     const res = await request(app).get(`/api/conversations/${convAId}/messages`);
     expect(res.status).toBe(401);
@@ -142,6 +159,28 @@ describe("unauthenticated requests", () => {
 // ---------------------------------------------------------------------------
 
 describe("cross-user ownership enforcement", () => {
+  it("GET /conversations/:id → 404 for user B accessing user A's conversation", async () => {
+    const res = await request(app)
+      .get(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenB}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("PATCH /conversations/:id → 404 for user B renaming user A's conversation", async () => {
+    const res = await request(app)
+      .patch(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ title: "Hijacked" });
+    expect(res.status).toBe(404);
+
+    // Title must be unchanged
+    const [row] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, convAId));
+    expect(row.title).not.toBe("Hijacked");
+  });
+
   it("GET /conversations/:id/messages → 404 for user B accessing user A's conversation", async () => {
     const res = await request(app)
       .get(`/api/conversations/${convAId}/messages`)
@@ -223,6 +262,78 @@ describe("owner can access their own conversation", () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("summary");
     expect(res.body.summary).toBeNull();
+  });
+
+  it("GET /conversations/:id → 200 with the conversation for the owner", async () => {
+    const res = await request(app)
+      .get(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("id", convAId);
+    expect(res.body).toHaveProperty("title");
+    expect(res.body).toHaveProperty("createdAt");
+  });
+
+  it("PATCH /conversations/:id → 200 renames for the owner and persists", async () => {
+    const res = await request(app)
+      .patch(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "  My Renamed Chat  " });
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe("My Renamed Chat");
+
+    const check = await request(app)
+      .get(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(check.body.title).toBe("My Renamed Chat");
+  });
+
+  it("PATCH /conversations/:id → 400 for an empty or whitespace-only title", async () => {
+    const empty = await request(app)
+      .patch(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "" });
+    expect(empty.status).toBe(400);
+
+    const blank = await request(app)
+      .patch(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "   " });
+    expect(blank.status).toBe(400);
+
+    const missing = await request(app)
+      .patch(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({});
+    expect(missing.status).toBe(400);
+
+    const tooLong = await request(app)
+      .patch(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "x".repeat(81) });
+    expect(tooLong.status).toBe(400);
+  });
+
+  it("GET /conversations → lists only the caller's own conversations", async () => {
+    const resA = await request(app)
+      .get("/api/conversations")
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(resA.status).toBe(200);
+    expect(Array.isArray(resA.body)).toBe(true);
+    const idsA = resA.body.map((c: { id: number }) => c.id);
+    expect(idsA).toContain(convAId);
+    for (const c of resA.body) {
+      expect(c).toHaveProperty("id");
+      expect(c).toHaveProperty("title");
+      expect(c).toHaveProperty("createdAt");
+    }
+
+    // User B owns nothing yet — their list must be empty, not user A's.
+    const resB = await request(app)
+      .get("/api/conversations")
+      .set("Authorization", `Bearer ${tokenB}`);
+    expect(resB.status).toBe(200);
+    expect(resB.body.map((c: { id: number }) => c.id)).not.toContain(convAId);
   });
 
   it("POST /conversations → 201 creates a conversation owned by the caller", async () => {

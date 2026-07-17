@@ -8,10 +8,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useColorScheme,
   useWindowDimensions,
@@ -124,6 +126,8 @@ export default function CompanionScreen() {
     checkInCadence,
     mood,
     conversationId,
+    conversationTitle,
+    renameConversation,
     initializing,
     initError,
     error,
@@ -142,6 +146,7 @@ export default function CompanionScreen() {
     devTriggerCheckIn,
     devScheduleNudgeSoon,
     devRegressSelf,
+    signOut,
   } = useCompanion();
 
   const { isAuthenticated, isLoading: authLoading, login } = useAuth();
@@ -150,6 +155,41 @@ export default function CompanionScreen() {
   const accent = useAccentColor(traits.warmthShift);
   const [peekVisible, setPeekVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
+
+  // Rename-chat modal state
+  const [renameVisible, setRenameVisible] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const openRename = () => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRenameDraft(conversationTitle);
+    setRenameError(null);
+    setRenameVisible(true);
+  };
+
+  const submitRename = async () => {
+    const next = renameDraft.trim();
+    if (!next) {
+      setRenameError("Please enter a name.");
+      return;
+    }
+    if (next === conversationTitle) {
+      setRenameVisible(false);
+      return;
+    }
+    setRenameSaving(true);
+    setRenameError(null);
+    try {
+      await renameConversation(next);
+      setRenameVisible(false);
+    } catch {
+      setRenameError("Couldn't rename the chat. Try again.");
+    } finally {
+      setRenameSaving(false);
+    }
+  };
 
   const topPad   = Platform.OS === "web" ? 24 : insets.top + 8;
   const bottomPad = Platform.OS === "web" ? 20 : insets.bottom + 6;
@@ -225,6 +265,12 @@ export default function CompanionScreen() {
     router.push("/companion-settings");
   };
 
+  const handleSignOut = () => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSettingsVisible(false);
+    signOut();
+  };
+
   const handleDevCheckIn = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSettingsVisible(false);
@@ -274,6 +320,27 @@ export default function CompanionScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={0}>
         {/* Chat — full height, top padding leaves room for status bar */}
         <View style={[styles.flex, { paddingTop: topPad + 4 }]}>
+          {/* Chat title header — tap the pencil (or the title) to rename */}
+          {!initializing && !initError && conversationId != null ? (
+            <Pressable
+              onPress={openRename}
+              accessibilityRole="button"
+              accessibilityLabel="Rename this chat"
+              testID="chat-title"
+              style={({ pressed }) => [
+                styles.titleRow,
+                { opacity: pressed ? 0.6 : 1 },
+              ]}
+            >
+              <Text
+                style={[styles.titleText, { color: colors.foreground }]}
+                numberOfLines={1}
+              >
+                {conversationTitle}
+              </Text>
+              <Feather name="edit-2" size={13} color={colors.mutedForeground} />
+            </Pressable>
+          ) : null}
           {initializing ? (
             <View style={styles.center}>
               <ActivityIndicator color={colors.primary} />
@@ -408,6 +475,91 @@ export default function CompanionScreen() {
         onClose={() => setPeekVisible(false)}
       />
 
+      {/* Rename-chat modal */}
+      <Modal
+        visible={renameVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenameVisible(false)}
+      >
+        <Pressable
+          style={styles.renameBackdrop}
+          onPress={() => !renameSaving && setRenameVisible(false)}
+        >
+          <Pressable
+            style={[
+              styles.renameCard,
+              { backgroundColor: colors.background, borderColor: colors.glassBorder },
+            ]}
+            onPress={() => {}}
+          >
+            <Text style={[styles.renameTitle, { color: colors.foreground }]}>
+              Rename chat
+            </Text>
+            <TextInput
+              value={renameDraft}
+              onChangeText={setRenameDraft}
+              placeholder="Chat name"
+              placeholderTextColor={colors.mutedForeground}
+              maxLength={80}
+              autoFocus
+              editable={!renameSaving}
+              onSubmitEditing={submitRename}
+              returnKeyType="done"
+              testID="rename-input"
+              style={[
+                styles.renameInput,
+                {
+                  color: colors.foreground,
+                  borderColor: renameError ? colors.destructive : colors.glassBorder,
+                  backgroundColor: colors.glass,
+                },
+              ]}
+            />
+            {renameError ? (
+              <Text style={[styles.renameError, { color: colors.destructive }]}>
+                {renameError}
+              </Text>
+            ) : null}
+            <View style={styles.renameActions}>
+              <Pressable
+                onPress={() => setRenameVisible(false)}
+                disabled={renameSaving}
+                style={({ pressed }) => [
+                  styles.renameBtn,
+                  { opacity: pressed || renameSaving ? 0.6 : 1 },
+                ]}
+              >
+                <Text style={[styles.renameBtnText, { color: colors.mutedForeground }]}>
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={submitRename}
+                disabled={renameSaving}
+                testID="rename-save"
+                style={({ pressed }) => [
+                  styles.renameBtn,
+                  styles.renameBtnPrimary,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: pressed || renameSaving ? 0.7 : 1,
+                  },
+                ]}
+              >
+                {renameSaving ? (
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                ) : (
+                  <Text style={[styles.renameBtnText, { color: colors.primaryForeground }]}>
+                    Save
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <CheckInSettingsSheet
         visible={settingsVisible}
         cadence={checkInCadence}
@@ -415,6 +567,7 @@ export default function CompanionScreen() {
         onClose={() => setSettingsVisible(false)}
         accent={accent}
         onPersonalize={handlePersonalize}
+        onSignOut={handleSignOut}
         onDevCheckIn={__DEV__ ? handleDevCheckIn : undefined}
         onDevNudge={__DEV__ ? handleDevNudge : undefined}
         onDevRegress={__DEV__ ? handleDevRegress : undefined}
@@ -443,6 +596,73 @@ const styles = StyleSheet.create({
     fontSize: 15, fontFamily: FONTS.semibold,
   },
   listContent: { paddingVertical: 12 },
+  // Chat title header
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 48,
+    paddingBottom: 2,
+  },
+  titleText: {
+    fontSize: 15,
+    fontFamily: FONTS.semibold,
+    letterSpacing: -0.2,
+    maxWidth: "80%",
+  },
+  // Rename modal
+  renameBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  renameCard: {
+    width: "100%",
+    maxWidth: 400,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    gap: 12,
+  },
+  renameTitle: {
+    fontSize: 17,
+    fontFamily: FONTS.bold,
+    letterSpacing: -0.3,
+  },
+  renameInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+  },
+  renameError: {
+    fontSize: 13,
+    fontFamily: FONTS.medium,
+  },
+  renameActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 2,
+  },
+  renameBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 78,
+  },
+  renameBtnPrimary: {},
+  renameBtnText: {
+    fontSize: 14.5,
+    fontFamily: FONTS.semibold,
+  },
   errorBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
     marginHorizontal: 14, marginBottom: 4,

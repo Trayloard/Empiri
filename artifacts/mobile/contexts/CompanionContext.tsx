@@ -5,7 +5,10 @@ import {
   devRegressSelf,
   fetchStream,
   getCompanionSettings,
+  getConversation,
+  listConversations,
   listMessages,
+  renameConversation as apiRenameConversation,
   sendMessage,
   synthesizeSpeech,
   transcribeAudio,
@@ -76,6 +79,12 @@ interface CompanionContextValue {
   checkInCadence: CheckInCadence;
   mood: ComputedMood;
   conversationId: number | null;
+  /** The user-visible title of the current conversation. */
+  conversationTitle: string;
+  /** Rename the current conversation; persists on the server and updates
+   * the title everywhere immediately. Throws on failure so the caller can
+   * surface an error. */
+  renameConversation: (title: string) => Promise<void>;
   initializing: boolean;
   initError: string | null;
   error: string | null;
@@ -161,6 +170,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     computeMood(freshMoodState()),
   );
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [conversationTitle, setConversationTitle] = useState<string>("Empiri");
   const [initializing, setInitializing] = useState<boolean>(true);
   const [initError, setInitError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -305,19 +315,73 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       }
 
       let history: Message[] = [];
+
+      // Helper: resume or create from the server (used both on fresh install
+      // and as a fallback when the locally stored ID turns out to be stale).
+      const resumeOrCreate = async () => {
+        const owned = await listConversations();
+        if (owned.length > 0) {
+          const conversation = owned[0];
+          conversationIdRef.current = conversation.id;
+          setConversationId(conversation.id);
+          setConversationTitle(conversation.title);
+          await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
+          history = await listMessages(conversation.id);
+          setMessages(history);
+        } else {
+          const conversation = await createConversation({ title: "Empiri" });
+          conversationIdRef.current = conversation.id;
+          setConversationId(conversation.id);
+          setConversationTitle(conversation.title);
+          await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
+          setMessages([]);
+        }
+      };
+
       const storedId = await AsyncStorage.getItem(CONVERSATION_KEY);
       if (storedId) {
         const id = Number(storedId);
-        conversationIdRef.current = id;
-        setConversationId(id);
-        history = await listMessages(id);
-        setMessages(history);
+        let stale = false;
+        try {
+          conversationIdRef.current = id;
+          setConversationId(id);
+          history = await listMessages(id);
+          setMessages(history);
+          // Load the persisted title so a rename survives app restarts.
+          // Best-effort: a failure here must not block the chat.
+          try {
+            const conversation = await getConversation(id);
+            setConversationTitle(conversation.title);
+          } catch {
+            // keep the default title
+          }
+        } catch (err) {
+          // If the stored conversation no longer exists on the server (e.g.
+          // the account changed or it was deleted), fall back gracefully.
+          if (
+            typeof err === "object" &&
+            err !== null &&
+            "status" in err &&
+            (err as { status: number }).status === 404
+          ) {
+            stale = true;
+            await AsyncStorage.removeItem(CONVERSATION_KEY);
+            conversationIdRef.current = null;
+            setConversationId(null);
+          } else {
+            throw err;
+          }
+        }
+        if (stale) {
+          // Resume or create a fresh conversation via the server.
+          await resumeOrCreate();
+        }
       } else {
-        const conversation = await createConversation({ title: "Empiri" });
-        conversationIdRef.current = conversation.id;
-        setConversationId(conversation.id);
-        await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
-        setMessages([]);
+        // No locally stored conversation (fresh install or new device).
+        // Resume the account's existing conversation if one exists so chat
+        // history follows the user across devices; only create a new one
+        // when the account has none yet.
+        await resumeOrCreate();
       }
 
       setInitializing(false);
@@ -682,6 +746,14 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const renameConversation = useCallback(async (raw: string) => {
+    const title = raw.trim();
+    const id = conversationIdRef.current;
+    if (!title || id == null) return;
+    const updated = await apiRenameConversation(id, { title });
+    setConversationTitle(updated.title);
+  }, []);
+
   const saveSettings = useCallback(async (patch: CompanionSettingsInput) => {
     const updated = await updateCompanionSettings(patch);
     setSettings(updated);
@@ -706,6 +778,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
     conversationIdRef.current = null;
     setConversationId(null);
+    setConversationTitle("Empiri");
     setMessages([]);
     failedTurnRef.current = null;
     setFailedTurn(null);
@@ -733,6 +806,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         checkInCadence,
         mood,
         conversationId,
+        conversationTitle,
+        renameConversation,
         initializing,
         initError,
         error,
