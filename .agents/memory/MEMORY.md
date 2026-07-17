@@ -13,3 +13,4 @@
 - [Empiri orb/glow trait smoothing](orb-trait-smoothing.md) — ease only the trait part of blob opacity via 3s shared values; never ease breathing cadence (loop restarts/freezes); warm boolean→smoothstep.
 - [Personality accent tinting](accent-tinting-pattern.md) — always blend from each surface's own base color via accentForWarmth so a neutral personality stays pixel-identical.
 - [Deferred personalization follow-ups](deferred-personalization-followups.md) — 3 ideas to remind user about next session: chat-header name/tone, evolution log, auth-gate settings screen.
+- [Meaning-based curiosity grouping](interest-theme-grouping.md) — themes are LLM-computed server-side, cached by topic-set signature; JSONB rejects \u0000; gpt-5-mini needs ≥4096 completion tokens.

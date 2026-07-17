@@ -137,6 +137,12 @@ export interface CompanionInterest {
   affinity: number;
 }
 
+/**
+ * Meaning-based grouping of curiosities, computed server-side — maps a normalized interest topic key to its theme label. Topics absent from the map stand alone. Null when grouping is temporarily unavailable.
+ * @nullable
+ */
+export type CompanionSelfThemes = {[key: string]: string} | null;
+
 export interface CompanionSelf {
   drives: CompanionDrive[];
   traits: CompanionTrait[];
@@ -144,6 +150,11 @@ export interface CompanionSelf {
   narrative: string[];
   interactions: number;
   ageHours: number;
+  /**
+     * Meaning-based grouping of curiosities, computed server-side — maps a normalized interest topic key to its theme label. Topics absent from the map stand alone. Null when grouping is temporarily unavailable.
+     * @nullable
+     */
+  themes: CompanionSelfThemes;
 }
 
 export interface CompanionSelfSnapshot {

@@ -44,6 +44,7 @@ function live(
     drives: [],
     traits: Object.entries(traits).map(([key, value]) => ({ key, value })),
     interests: interests.map((it) => ({ ...it, display: it.display ?? it.topic })),
+    themes: null,
   };
 }
 

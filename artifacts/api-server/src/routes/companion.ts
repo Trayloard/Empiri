@@ -25,6 +25,7 @@ import {
   SendMessageBody,
 } from "@workspace/api-zod";
 import { loadOrCreateSelf, saveSelf } from "../lib/companionSelf";
+import { getInterestThemes } from "../lib/interestThemes";
 import { getSelfHistory, maybeSnapshotSelf } from "../lib/selfSnapshots";
 import {
   buildContextMessages,
@@ -580,13 +581,25 @@ router.post("/conversations/:id/checkin", async (req, res) => {
   res.json(toApiMessage(assistantMessage));
 });
 
-// Peek at the companion's current inner self (drives, traits, interests, narrative)
+// Peek at the companion's current inner self (drives, traits, interests, narrative).
+// Also attaches the meaning-based grouping of curiosities (`themes`), computed
+// server-side and cached per topic set — best-effort: null when unavailable,
+// in which case the client shows curiosities individually.
 router.get("/conversations/:id/self", async (req, res) => {
   const conversation = await requireOwnedConversation(req, res);
   if (!conversation) return;
 
   const self = await loadOrCreateSelf(conversation.id);
-  res.json(summarizeSelf(self));
+  const summary = summarizeSelf(self);
+
+  let themes: Record<string, string> | null = null;
+  try {
+    themes = await getInterestThemes(conversation.id, summary.interests);
+  } catch (err) {
+    req.log.error({ err }, "Failed to group curiosities by meaning");
+  }
+
+  res.json({ ...summary, themes });
 });
 
 // See how the companion has grown: the timeline of inner-self snapshots

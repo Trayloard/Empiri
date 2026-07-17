@@ -208,133 +208,18 @@ function affinityPhrase(v: number): string {
 }
 
 // ── Visual-only grouping of curiosities ──────────────────────────────────
-// Closely related interests (e.g. "galaxies", "astronomy", "stars") are shown
-// together under a single theme so the curiosities surface reads as coherent
-// instead of repetitive. This is a display-time clustering only — the
-// underlying interests stay individual; nothing about how they're stored,
-// weighted, or how Empiri's personality forms changes. A small curated keyword
-// map catches semantic neighbours; a shared singular/plural root catches the
-// rest. Anything matching nothing is shown on its own, exactly as before.
-const INTEREST_THEMES: { label: string; keywords: string[] }[] = [
-  {
-    label: "Space",
-    keywords: [
-      "space", "cosmos", "cosmic", "galaxy", "galaxies", "galactic",
-      "astronomy", "astronomer", "astrophysics", "star", "stars", "stellar",
-      "planet", "planets", "planetary", "nebula", "nebulae", "universe",
-      "orbit", "comet", "asteroid", "moon", "mars", "jupiter", "saturn",
-      "telescope", "constellation", "supernova", "black hole",
-    ],
-  },
-  {
-    label: "Music",
-    keywords: [
-      "music", "musical", "song", "songs", "melody", "guitar", "piano",
-      "drums", "band", "album", "albums", "jazz", "classical", "lyric",
-      "lyrics", "instrument", "singing", "composer", "concert",
-    ],
-  },
-  {
-    label: "Food",
-    keywords: [
-      "cooking", "cook", "recipe", "recipes", "baking", "bake", "food",
-      "foods", "cuisine", "kitchen", "chef", "dish", "meal", "meals",
-      "pasta", "dessert", "coffee", "tea",
-    ],
-  },
-  {
-    label: "Nature",
-    keywords: [
-      "nature", "forest", "forests", "mountain", "mountains", "ocean",
-      "sea", "river", "rivers", "hiking", "wildlife", "plant", "plants",
-      "garden", "gardening", "flower", "flowers", "tree", "trees",
-    ],
-  },
-  {
-    label: "Animals",
-    keywords: [
-      "animal", "animals", "dog", "dogs", "cat", "cats", "pet", "pets",
-      "bird", "birds", "horse", "horses",
-    ],
-  },
-  {
-    label: "Tech",
-    keywords: [
-      "technology", "tech", "computer", "computers", "coding", "code",
-      "programming", "software", "robot", "robots", "robotics", "gadget",
-      "gadgets", "internet",
-    ],
-  },
-  {
-    label: "Art",
-    keywords: [
-      "art", "arts", "painting", "paint", "drawing", "draw", "sketch",
-      "sculpture", "design", "illustration", "museum", "gallery", "artist",
-      "photography", "photo", "photos",
-    ],
-  },
-  {
-    label: "Books",
-    keywords: [
-      "book", "books", "reading", "novel", "novels", "literature", "poetry",
-      "poem", "poems", "author", "writing", "story", "stories",
-    ],
-  },
-  {
-    label: "Film",
-    keywords: [
-      "film", "films", "movie", "movies", "cinema", "director", "actor",
-      "actors", "anime",
-    ],
-  },
-  {
-    label: "Travel",
-    keywords: [
-      "travel", "traveling", "travelling", "trip", "trips", "journey",
-      "adventure", "adventures", "backpacking", "country", "countries",
-      "city", "cities", "culture", "cultures",
-    ],
-  },
-  {
-    label: "Sports",
-    keywords: [
-      "sport", "sports", "fitness", "gym", "running", "workout", "soccer",
-      "football", "basketball", "tennis", "yoga", "exercise", "cycling",
-      "swimming", "climbing",
-    ],
-  },
-  {
-    label: "Games",
-    keywords: [
-      "game", "games", "gaming", "videogame", "videogames", "chess",
-      "puzzle", "puzzles",
-    ],
-  },
-  {
-    label: "Science",
-    keywords: [
-      "science", "physics", "chemistry", "biology", "mathematics", "math",
-      "maths", "geology", "research", "experiment", "experiments",
-    ],
-  },
-  {
-    label: "History",
-    keywords: [
-      "history", "historical", "ancient", "civilization", "civilisation",
-      "empire", "empires", "archaeology", "mythology",
-    ],
-  },
-  {
-    label: "Mind",
-    keywords: [
-      "philosophy", "psychology", "mind", "consciousness", "meditation",
-      "mindfulness", "spirituality", "emotion", "emotions",
-    ],
-  },
-];
-
-// Light singular/plural normaliser used both for keyword matching and the
-// shared-root fallback (galaxies→galaxy, stars→star). Deliberately simple.
+// Closely related interests (e.g. "galaxies", "astrophysics", "stars") are
+// shown together under a single theme so the curiosities surface reads as
+// coherent instead of repetitive. The theme assignments come from the server
+// (`self.themes`), which groups topics by meaning — so synonyms, subfields and
+// typos land together, and themes adapt as Empiri learns new interests. This
+// is a display-time clustering only — the underlying interests stay
+// individual; nothing about how they're stored, weighted, or how Empiri's
+// personality forms changes. When the server map is unavailable, a shared
+// singular/plural root still catches plain pairs; everything else is shown on
+// its own, exactly as before.
+// Light singular/plural normaliser used by the shared-root fallback
+// (galaxies→galaxy, stars→star). Deliberately simple.
 function singularize(w: string): string {
   if (w.length > 4 && w.endsWith("ies")) return `${w.slice(0, -3)}y`;
   if (w.length > 4 && w.endsWith("ses")) return w.slice(0, -2);
@@ -342,29 +227,6 @@ function singularize(w: string): string {
     return w.slice(0, -1);
   }
   return w;
-}
-
-// Find the theme a topic belongs to, matching whole words (singular/plural
-// aware) so "art" never swallows "start". Multi-word keywords match by
-// substring. Returns null when nothing fits.
-function themeFor(topic: string): string | null {
-  const norm = topic.toLowerCase().trim();
-  const words = norm.split(/[^a-z0-9]+/).filter(Boolean);
-  const forms = new Set<string>();
-  for (const w of words) {
-    forms.add(w);
-    forms.add(singularize(w));
-  }
-  for (const theme of INTEREST_THEMES) {
-    for (const kw of theme.keywords) {
-      if (kw.includes(" ")) {
-        if (norm.includes(kw)) return theme.label;
-      } else if (forms.has(kw) || forms.has(singularize(kw))) {
-        return theme.label;
-      }
-    }
-  }
-  return null;
 }
 
 type InterestItem =
@@ -385,12 +247,18 @@ function combinedWeight(members: { affinity: number }[]): number {
   return clamp(v);
 }
 
-// Cluster interests for display: curated themes first, then a shared-root
-// fallback for plain singular/plural pairs. A bucket only becomes a theme when
-// it holds 2+ members; everything else (including lone theme matches) stays an
-// individual curiosity, preserving the original ordering.
-function groupInterests(interests: CompanionInterest[]): InterestItem[] {
-  const keys: (string | null)[] = interests.map((it) => themeFor(it.topic));
+// Cluster interests for display: the server's meaning-based theme map first,
+// then a shared-root fallback for plain singular/plural pairs the map missed
+// (or when it's unavailable). A bucket only becomes a theme when it holds 2+
+// members; everything else (including lone theme matches) stays an individual
+// curiosity, preserving the original ordering.
+function groupInterests(
+  interests: CompanionInterest[],
+  themes: Record<string, string> | null | undefined,
+): InterestItem[] {
+  const keys: (string | null)[] = interests.map(
+    (it) => themes?.[it.topic] ?? null,
+  );
 
   const rootOf = (t: string): string => {
     const first =
@@ -595,7 +463,7 @@ function buildGraph(self: CompanionSelf, fullWidth: number): Graph {
           ? "The things that have caught Empiri's eye, grown from what you talk about."
           : "Nothing here yet — Empiri's curiosities grow as you chat.",
     },
-    groupInterests(self.interests).map((item) => {
+    groupInterests(self.interests, self.themes).map((item) => {
       if (item.kind === "single") {
         return {
           id: `interest-${item.orig}`,

@@ -18,6 +18,7 @@ export * from './companionMemory';
 export * from './companionSelf';
 export * from './companionSelfHistory';
 export * from './companionSelfSnapshot';
+export * from './companionSelfThemes';
 export * from './companionSettings';
 export * from './companionSettingsInput';
 export * from './companionSettingsInputTone';

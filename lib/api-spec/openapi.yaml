@@ -844,6 +844,11 @@ components:
           type: integer
         ageHours:
           type: number
+        themes:
+          type: [object, 'null']
+          description: Meaning-based grouping of curiosities, computed server-side — maps a normalized interest topic key to its theme label. Topics absent from the map stand alone. Null when grouping is temporarily unavailable.
+          additionalProperties:
+            type: string
       required:
         - drives
         - traits
@@ -851,6 +856,7 @@ components:
         - narrative
         - interactions
         - ageHours
+        - themes
     CompanionSelfSnapshot:
       type: object
       properties:

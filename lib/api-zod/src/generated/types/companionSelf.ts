@@ -7,6 +7,7 @@
  */
 import type { CompanionDrive } from './companionDrive';
 import type { CompanionInterest } from './companionInterest';
+import type { CompanionSelfThemes } from './companionSelfThemes';
 import type { CompanionTrait } from './companionTrait';
 
 export interface CompanionSelf {
@@ -16,4 +17,9 @@ export interface CompanionSelf {
   narrative: string[];
   interactions: number;
   ageHours: number;
+  /**
+     * Meaning-based grouping of curiosities, computed server-side — maps a normalized interest topic key to its theme label. Topics absent from the map stand alone. Null when grouping is temporarily unavailable.
+     * @nullable
+     */
+  themes: CompanionSelfThemes;
 }

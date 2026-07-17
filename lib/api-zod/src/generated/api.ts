@@ -248,7 +248,8 @@ export const GetCompanionSelfResponse = zod.object({
 })),
   "narrative": zod.array(zod.string()),
   "interactions": zod.number(),
-  "ageHours": zod.number()
+  "ageHours": zod.number(),
+  "themes": zod.record(zod.string(), zod.string()).nullable().describe('Meaning-based grouping of curiosities, computed server-side — maps a normalized interest topic key to its theme label. Topics absent from the map stand alone. Null when grouping is temporarily unavailable.')
 })
 
 
