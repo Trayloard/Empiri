@@ -18,6 +18,10 @@ import {
 } from "@/hooks/useSmoothedTraitInfluence";
 import type { CompanionStatus } from "@/contexts/CompanionContext";
 import {
+  ambientBlobOpacity,
+  type AmbientBlobKind,
+} from "@/lib/orbOpacity";
+import {
   NEUTRAL_INFLUENCE,
   type TraitInfluence,
 } from "@/lib/traitInfluence";
@@ -27,8 +31,6 @@ interface AmbientGlowProps {
   /** Personality-derived influence — layered on top of mood/activity dynamics. */
   traits?: TraitInfluence;
 }
-
-type AmbientBlobKind = "top" | "left" | "right" | "bottom";
 
 interface AmbientBlobConfig {
   id: string;
@@ -73,30 +75,14 @@ function AmbientBlob({
   traits,
   ...glow
 }: AmbientBlobProps) {
-  const opacity = useDerivedValue(() => {
-    const glowV = traits.glowBoost.value;
-    const warmthV = traits.warmthShift.value;
-
-    const intensity = Math.min(1, baseIntensity + glowV * 0.7);
-    const warmBoost = Math.max(0, warmthV);
-    const coolDamp = Math.max(0, -warmthV);
-
-    let op: number;
-    if (kind === "top") {
-      // Purple is neutral on the warm/cool axis — intensity drives it.
-      op = 0.5 * intensity;
-    } else if (kind === "left") {
-      // Blue recedes as warmth trait rises.
-      op = Math.max(0.15, 0.4 * intensity - coolDamp * 0.25);
-    } else if (kind === "right") {
-      // Pink is boosted by warmth trait.
-      op = Math.min(0.75, 0.38 * intensity + warmBoost * 0.3);
-    } else {
-      // bottom blue
-      op = Math.max(0.1, 0.3 * intensity - coolDamp * 0.2);
-    }
-    return Math.min(1, op);
-  });
+  const opacity = useDerivedValue(() =>
+    ambientBlobOpacity(
+      kind,
+      baseIntensity,
+      traits.glowBoost.value,
+      traits.warmthShift.value,
+    ),
+  );
 
   return <GlowBlob opacity={opacity} {...glow} />;
 }

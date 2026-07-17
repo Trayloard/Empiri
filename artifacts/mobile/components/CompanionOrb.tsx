@@ -11,6 +11,7 @@ import {
 } from "@/hooks/useSmoothedTraitInfluence";
 import type { CompanionStatus } from "@/contexts/CompanionContext";
 import type { MoodLabel } from "@/lib/mood";
+import { orbBlobOpacity, type OrbBlobKind } from "@/lib/orbOpacity";
 import {
   NEUTRAL_INFLUENCE,
   type TraitInfluence,
@@ -55,8 +56,6 @@ const ACTIVE_DYNAMICS: Partial<Record<CompanionStatus, Dynamics>> = {
 };
 
 const BASE_DURATION = 4200;
-
-type OrbBlobKind = "halo" | "blue" | "purple" | "pink" | "orange" | "core";
 
 interface OrbBlobConfig {
   id: string;
@@ -109,45 +108,15 @@ function OrbBlob({
   traits,
   ...glow
 }: OrbBlobProps) {
-  const opacity = useDerivedValue(() => {
-    const glowV = traits.glowBoost.value;
-    const warmthV = traits.warmthShift.value;
-
-    if (kind === "core") {
-      const coreBoost = Math.min(1.35, baseCoreBoost + glowV * 0.5);
-      return Math.min(1, 0.85 * coreBoost);
-    }
-
-    const intensity = Math.min(1, baseIntensity + glowV);
-    const warmBoost = warmthV * 0.4;
-
-    if (kind === "halo") return Math.min(1, 0.45 * intensity);
-    if (kind === "blue") {
-      return Math.min(1, Math.max(0.3, 0.9 * intensity - warmBoost * 0.5));
-    }
-    if (kind === "purple") {
-      return Math.min(1, Math.max(0.35, 0.9 * intensity - warmBoost * 0.25));
-    }
-
-    // Pink / orange warm tones: ramp smoothly up to the warmth threshold
-    // instead of flipping a boolean (which would snap by ~0.35×intensity).
-    // The ramp reaches full warmth exactly at the threshold, so any state that
-    // was already "warm" (intensity ≥ threshold) keeps its original opacity —
-    // only the false→true crossing is softened, over a 0.1 window below it.
-    const warmThreshold = 0.85 - warmthV * 1.5;
-    const lo = warmThreshold - 0.1;
-    let t = (intensity - lo) / 0.1;
-    t = t < 0 ? 0 : t > 1 ? 1 : t;
-    const warmRamp = t * t * (3 - 2 * t);
-
-    if (kind === "pink") {
-      const base = 0.5 + 0.35 * warmRamp;
-      return Math.min(1, base * intensity + warmBoost);
-    }
-    // orange
-    const base = 0.32 + 0.38 * warmRamp;
-    return Math.min(1, base * intensity + warmBoost * 0.8);
-  });
+  const opacity = useDerivedValue(() =>
+    orbBlobOpacity(
+      kind,
+      baseIntensity,
+      baseCoreBoost,
+      traits.glowBoost.value,
+      traits.warmthShift.value,
+    ),
+  );
 
   return <GlowBlob opacity={opacity} {...glow} />;
 }

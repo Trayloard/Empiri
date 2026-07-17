@@ -345,7 +345,7 @@ export function GrowthTimeline({
                   />
                   <View style={styles.flex}>
                     <View style={styles.curioHead}>
-                      <Text style={styles.curioTopic}>{c.topic}</Text>
+                      <Text style={styles.curioTopic}>{c.display}</Text>
                       <Text style={styles.curioWhen}>
                         {relativeWhen(c.at, c.isNow)}
                       </Text>

@@ -18,11 +18,13 @@ export interface TimelinePoint {
   isNow: boolean;
   interactions: number;
   traits: Record<string, number>;
-  interests: { topic: string; affinity: number }[];
+  interests: { topic: string; affinity: number; display: string }[];
 }
 
 export interface CuriosityFirstSeen {
   topic: string;
+  /** proper-cased cosmetic label; falls back to the normalized topic key */
+  display: string;
   /** when this topic first showed up in the timeline */
   at: number;
   /** its most recent affinity */
@@ -61,6 +63,7 @@ export function buildTimeline(
       interests: s.interests.map((i) => ({
         topic: i.topic,
         affinity: i.affinity,
+        display: i.display ?? i.topic,
       })),
     }))
     .filter((p) => Number.isFinite(p.at))
@@ -75,6 +78,7 @@ export function buildTimeline(
       interests: live.interests.map((i) => ({
         topic: i.topic,
         affinity: i.affinity,
+        display: i.display ?? i.topic,
       })),
     });
   }
@@ -107,14 +111,16 @@ export function firstSeenCuriosities(
       if (!existing) {
         seen.set(it.topic, {
           topic: it.topic,
+          display: it.display,
           at: p.at,
           affinity: it.affinity,
           isNow: p.isNow,
         });
       } else {
         // Points arrive oldest→newest, so first-seen `at` is already correct;
-        // keep refreshing affinity to the most recent value.
+        // keep refreshing affinity (and display casing) to the most recent value.
         existing.affinity = it.affinity;
+        existing.display = it.display;
       }
     }
   }
