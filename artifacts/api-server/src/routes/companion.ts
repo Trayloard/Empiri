@@ -36,6 +36,23 @@ import { buildToneAddendum } from "../lib/companionPrompt";
 
 const router: IRouter = Router();
 
+/**
+ * Strictly parse a conversation ID from a URL param. Accepts only a plain
+ * positive base-10 integer string (e.g. "42") — no signs, whitespace,
+ * decimals, exponents, hex, or trailing junk. Returns null for anything else.
+ */
+function parseConversationId(raw: unknown): number | null {
+  if (typeof raw !== "string" || !/^\d+$/.test(raw)) return null;
+  const id = Number.parseInt(raw, 10);
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  return id;
+}
+
+/** Single not-found response so malformed, missing, and not-owned all look identical. */
+function respondConversationNotFound(res: { status: (code: number) => { json: (body: unknown) => unknown } }): void {
+  res.status(404).json({ error: "Conversation not found" });
+}
+
 // The companion's persona is no longer a fixed string: it is composed at
 // request time from the conversation's evolving inner self (see
 // @workspace/neurobrane and ../lib/companionSelf). The inner self still carries
@@ -146,9 +163,9 @@ async function requireOwnedConversation(
   req: Parameters<Parameters<typeof router.get>[1]>[0],
   res: Parameters<Parameters<typeof router.get>[1]>[1],
 ): Promise<(typeof conversations.$inferSelect) | null> {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(404).json({ error: "Conversation not found" });
+  const id = parseConversationId(req.params.id);
+  if (id === null) {
+    respondConversationNotFound(res);
     return null;
   }
 
@@ -163,7 +180,7 @@ async function requireOwnedConversation(
     .where(eq(conversations.id, id));
 
   if (!conversation || conversation.ownerId !== req.user.id) {
-    res.status(404).json({ error: "Conversation not found" });
+    respondConversationNotFound(res);
     return null;
   }
 

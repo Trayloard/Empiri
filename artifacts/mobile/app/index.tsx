@@ -141,6 +141,8 @@ export default function CompanionScreen() {
     toggleVoice,
     toggleNotifications,
     setCheckInCadence,
+    quietHours,
+    setQuietHours,
     retryInit,
     dismissError,
     devTriggerCheckIn,
@@ -564,6 +566,8 @@ export default function CompanionScreen() {
         visible={settingsVisible}
         cadence={checkInCadence}
         onSelect={setCheckInCadence}
+        quietHours={quietHours}
+        onQuietHoursChange={setQuietHours}
         onClose={() => setSettingsVisible(false)}
         accent={accent}
         onPersonalize={handlePersonalize}

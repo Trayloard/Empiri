@@ -52,6 +52,13 @@ import {
   scheduleNudge,
   scheduleNudgeInSeconds,
 } from "@/lib/notifications";
+import {
+  adjustNudgeHoursForQuietHours,
+  DEFAULT_QUIET_HOURS,
+  isInQuietHours,
+  parseQuietHours,
+  type QuietHours,
+} from "@/lib/quietHours";
 import { useAuth } from "@/lib/auth";
 
 export type CompanionStatus =
@@ -97,6 +104,10 @@ interface CompanionContextValue {
   toggleVoice: () => void;
   toggleNotifications: () => Promise<void>;
   setCheckInCadence: (cadence: CheckInCadence) => Promise<void>;
+  /** The user's do-not-disturb window for proactive check-ins. */
+  quietHours: QuietHours;
+  /** Persist a new quiet-hours window and re-arm any pending nudge around it. */
+  setQuietHours: (next: QuietHours) => Promise<void>;
   retryInit: () => void;
   dismissError: () => void;
   signOut: () => Promise<void>;
@@ -126,6 +137,7 @@ const VOICE_KEY = "empiri.voiceEnabled";
 const MOOD_KEY = "empiri.moodState";
 const NOTIF_KEY = "empiri.notificationsEnabled";
 const CADENCE_KEY = "empiri.checkInCadence";
+const QUIET_HOURS_KEY = "empiri.quietHours";
 
 const NUDGE_BODY = "I've been thinking about you — come say hi when you can. 🧡";
 
@@ -163,6 +175,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     useState<boolean>(false);
   const [checkInCadence, setCheckInCadenceState] =
     useState<CheckInCadence>(DEFAULT_CADENCE);
+  const [quietHours, setQuietHoursState] =
+    useState<QuietHours>(DEFAULT_QUIET_HOURS);
   const [moodState, setMoodState] = useState<CompanionMoodState>(() =>
     freshMoodState(),
   );
@@ -183,6 +197,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const moodStateRef = useRef<CompanionMoodState>(moodState);
   const notificationsEnabledRef = useRef<boolean>(notificationsEnabled);
   const checkInCadenceRef = useRef<CheckInCadence>(checkInCadence);
+  const quietHoursRef = useRef<QuietHours>(quietHours);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   // Keep refs in sync so timers/callbacks always see the latest values.
@@ -195,6 +210,9 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     checkInCadenceRef.current = checkInCadence;
   }, [checkInCadence]);
+  useEffect(() => {
+    quietHoursRef.current = quietHours;
+  }, [quietHours]);
 
   const applyMoodState = useCallback((next: CompanionMoodState) => {
     moodStateRef.current = next;
@@ -211,7 +229,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     if (notificationsEnabledRef.current) {
       const hours = cadenceHours(checkInCadenceRef.current);
       if (hours != null) {
-        scheduleNudge(NUDGE_BODY, hours).catch(() => {});
+        const adjusted = adjustNudgeHoursForQuietHours(
+          quietHoursRef.current,
+          hours,
+        );
+        scheduleNudge(NUDGE_BODY, adjusted).catch(() => {});
       }
     }
   }, [applyMoodState]);
@@ -299,6 +321,12 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           : DEFAULT_CADENCE;
       setCheckInCadenceState(cadence);
       checkInCadenceRef.current = cadence;
+
+      const loadedQuiet =
+        parseQuietHours(await AsyncStorage.getItem(QUIET_HOURS_KEY)) ??
+        DEFAULT_QUIET_HOURS;
+      setQuietHoursState(loadedQuiet);
+      quietHoursRef.current = loadedQuiet;
 
       const loadedMood =
         parseMoodState(await AsyncStorage.getItem(MOOD_KEY)) ?? freshMoodState();
@@ -392,7 +420,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       if (
         conversationIdRef.current != null &&
         history.length > 0 &&
-        shouldCheckIn(loadedMood, cadence)
+        shouldCheckIn(loadedMood, cadence) &&
+        !isInQuietHours(loadedQuiet)
       ) {
         await runCheckIn(loadedMood);
       }
@@ -685,7 +714,10 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     }
     const hours = cadenceHours(cadence);
     if (hours != null) {
-      await scheduleNudge(NUDGE_BODY, hours);
+      await scheduleNudge(
+        NUDGE_BODY,
+        adjustNudgeHoursForQuietHours(quietHoursRef.current, hours),
+      );
     }
   }, []);
 
@@ -713,7 +745,32 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       const hours = cadenceHours(next);
       if (hours != null) {
         const hoursAway = computeMood(moodStateRef.current).hoursAway;
-        await scheduleNudge(NUDGE_BODY, Math.max(0, hours - hoursAway));
+        await scheduleNudge(
+          NUDGE_BODY,
+          adjustNudgeHoursForQuietHours(
+            quietHoursRef.current,
+            Math.max(0, hours - hoursAway),
+          ),
+        );
+      }
+    }
+  }, []);
+
+  // Persist the do-not-disturb window and re-arm any pending nudge so a
+  // change takes effect immediately instead of on the next interaction.
+  const setQuietHours = useCallback(async (next: QuietHours) => {
+    quietHoursRef.current = next;
+    setQuietHoursState(next);
+    AsyncStorage.setItem(QUIET_HOURS_KEY, JSON.stringify(next)).catch(() => {});
+
+    if (notificationsEnabledRef.current) {
+      const hours = cadenceHours(checkInCadenceRef.current);
+      if (hours != null) {
+        const hoursAway = computeMood(moodStateRef.current).hoursAway;
+        await scheduleNudge(
+          NUDGE_BODY,
+          adjustNudgeHoursForQuietHours(next, Math.max(0, hours - hoursAway)),
+        );
       }
     }
   }, []);
@@ -820,6 +877,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         toggleVoice,
         toggleNotifications,
         setCheckInCadence,
+        quietHours,
+        setQuietHours,
         retryInit,
         dismissError,
         signOut,

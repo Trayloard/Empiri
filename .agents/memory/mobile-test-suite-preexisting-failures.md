@@ -12,24 +12,16 @@ clean, then don't block on these:
 - **`lib/auth.tsx` typecheck:** `Property 'nonce' does not exist on type 'AuthRequest'`
   — an expo-auth-session typing mismatch. Present even when you haven't touched auth.
 
-- **`contexts/__tests__/CompanionContext.test.tsx`:** the **entire file** fails
-  **deterministically** (not just the proactive-check-in block — the failed-reply
-  block fails the same way in isolation too). Every test times out at
-  `waitFor(() => expect(result.current.initializing).toBe(false))`. The suite fully
-  mocks `@workspace/api-client-react` (createConversation/listMessages/companionCheckIn),
-  so the hang is in the provider's mount-time init, not the network.
+- **`contexts/__tests__/CompanionContext.test.tsx`: FIXED (July 2026).** The file
+  used to fail wholesale because `CompanionProvider` gained a `useAuth()` gate after
+  the tests were written; with no `AuthProvider` in the tree, `authLoading` stayed
+  true and `initializing` never settled. The file now `jest.mock("@/lib/auth")` with
+  a settled signed-in state, and the `@workspace/api-client-react` mock covers every
+  function the provider imports (listConversations, getConversation,
+  getCompanionSettings, etc. — missing ones broke init). All tests pass.
 
-**Why:** `CompanionProvider` now reads `useAuth()` and its mount effect does
-`if (authLoading) return;` before anything sets `initializing` false. The test
-wrapper renders `CompanionProvider` with **no `AuthProvider`**, so `useAuth()` returns
-wstays true forever, the effect bails, and `initializing` never settles. The auth gate
-was added after these tests were written; this is test maintenance, not product code.
-A separate task (`#56 Fix the check-in tests that are currently failing`) owns the fix.
-
-<!-- **How to apply:** if your task didn't touch `CompanionContext.tsx`/`lib/auth.tsx` or -->
-their deps, treat these as pre-existing. For NEW CompanionContext tests, don't edit
-this red file — make a self-contained sibling (e.g. `CompanionContext.dev.test.tsx`)
-that `jest.mock("@/lib/auth")` to return `{ isAuthenticated: true, isLoading: false }`
-so the provider initializes and your tests stay green.
+**How to apply:** when adding CompanionContext tests, keep both mocks intact. If the
+provider gains new imports from the api client, add them to the module mock or init
+silently breaks again.
 
 
