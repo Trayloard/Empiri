@@ -102,13 +102,17 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
     for (const raw of signal.topics) {
       const topic = normalizeTopic(raw);
       if (!topic) continue;
+      // Richer extractors can weight topics by how central they are to the
+      // message; unweighted topics keep full strength (heuristic behaviour).
+      const topicWeight = clamp(signal.topicWeights?.[topic] ?? 1, 0, 1);
+      if (topicWeight <= 0) continue;
       // Display casing rides a separate channel; matching stays on the key, so
       // "Paris" and "paris" reinforce the SAME interest, keeping the best casing.
       const display = signal.topicDisplays?.[topic] ?? raw;
       const existing = interests.find((i) => i.topic === topic);
       if (existing) {
         existing.affinity = clamp(
-          existing.affinity + reinforce * (1 + signal.novelty * 0.5),
+          existing.affinity + reinforce * (1 + signal.novelty * 0.5) * topicWeight,
           min,
           max,
         );
@@ -116,7 +120,11 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
       } else {
         interests.push({
           topic,
-          affinity: clamp(interest.noveltySeedAffinity * (0.5 + signal.novelty) * lr, min, max),
+          affinity: clamp(
+            interest.noveltySeedAffinity * (0.5 + signal.novelty) * lr * topicWeight,
+            min,
+            max,
+          ),
           display: preferredDisplay(undefined, display),
         });
       }

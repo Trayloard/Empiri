@@ -486,3 +486,80 @@ describe("interest display casing", () => {
     expect(gardening?.display).toBe("gardening");
   });
 });
+
+describe("per-topic weights (language-model signals)", () => {
+  const weightedSignal = (
+    topics: string[],
+    topicWeights: Record<string, number> | undefined,
+  ): InteractionSignal => ({
+    kind: "message",
+    connection: 0.8,
+    curiosity: 0.5,
+    novelty: 0.5,
+    expression: 0.5,
+    topics,
+    topicWeights,
+    moodFactor: 1,
+  });
+
+  it("scales interest reinforcement by the topic weight", () => {
+    const base = createSelf(NEURO_PARAMS, undefined, T0);
+
+    const full = evolve(base, weightedSignal(["jazz"], { jazz: 1 }), NEURO_PARAMS, T0 + HOUR);
+    const half = evolve(base, weightedSignal(["jazz"], { jazz: 0.5 }), NEURO_PARAMS, T0 + HOUR);
+
+    const fullAffinity = summarizeSelf(full, NEURO_PARAMS, T0 + HOUR).interests.find(
+      (i) => i.topic === "jazz",
+    )?.affinity;
+    const halfAffinity = summarizeSelf(half, NEURO_PARAMS, T0 + HOUR).interests.find(
+      (i) => i.topic === "jazz",
+    )?.affinity;
+
+    expect(fullAffinity).toBeGreaterThan(0);
+    expect(halfAffinity).toBeGreaterThan(0);
+    expect(halfAffinity!).toBeLessThan(fullAffinity!);
+  });
+
+  it("treats topics without a weight entry as full weight (heuristic behaviour)", () => {
+    const base = createSelf(NEURO_PARAMS, undefined, T0);
+
+    const unweighted = evolve(base, weightedSignal(["jazz"], undefined), NEURO_PARAMS, T0 + HOUR);
+    const explicit = evolve(base, weightedSignal(["jazz"], { jazz: 1 }), NEURO_PARAMS, T0 + HOUR);
+
+    const a = summarizeSelf(unweighted, NEURO_PARAMS, T0 + HOUR).interests.find(
+      (i) => i.topic === "jazz",
+    )?.affinity;
+    const b = summarizeSelf(explicit, NEURO_PARAMS, T0 + HOUR).interests.find(
+      (i) => i.topic === "jazz",
+    )?.affinity;
+    expect(a).toBe(b);
+  });
+
+  it("skips topics with zero weight entirely (no phantom interests)", () => {
+    const base = createSelf(NEURO_PARAMS, undefined, T0);
+    const self = evolve(base, weightedSignal(["jazz"], { jazz: 0 }), NEURO_PARAMS, T0 + HOUR);
+    const jazz = summarizeSelf(self, NEURO_PARAMS, T0 + HOUR).interests.find(
+      (i) => i.topic === "jazz",
+    );
+    expect(jazz).toBeUndefined();
+  });
+
+  it("clamps out-of-range weights instead of amplifying or inverting them", () => {
+    const base = createSelf(NEURO_PARAMS, undefined, T0);
+
+    const over = evolve(base, weightedSignal(["jazz"], { jazz: 5 }), NEURO_PARAMS, T0 + HOUR);
+    const one = evolve(base, weightedSignal(["jazz"], { jazz: 1 }), NEURO_PARAMS, T0 + HOUR);
+    const overAffinity = summarizeSelf(over, NEURO_PARAMS, T0 + HOUR).interests.find(
+      (i) => i.topic === "jazz",
+    )?.affinity;
+    const oneAffinity = summarizeSelf(one, NEURO_PARAMS, T0 + HOUR).interests.find(
+      (i) => i.topic === "jazz",
+    )?.affinity;
+    expect(overAffinity).toBe(oneAffinity);
+
+    const negative = evolve(base, weightedSignal(["jazz"], { jazz: -3 }), NEURO_PARAMS, T0 + HOUR);
+    expect(
+      summarizeSelf(negative, NEURO_PARAMS, T0 + HOUR).interests.find((i) => i.topic === "jazz"),
+    ).toBeUndefined();
+  });
+});

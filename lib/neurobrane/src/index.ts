@@ -20,6 +20,7 @@ export {
   deriveMessageSignal,
 } from "./runtime";
 export { ALL_BLOCKS, enabledBlocks } from "./blocks/registry";
+export { normalizeTopic, preferredDisplay } from "./util";
 export {
   coreSelfBlock,
   CORE_SELF_BLOCK_ID,

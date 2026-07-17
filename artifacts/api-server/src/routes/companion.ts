@@ -11,13 +11,7 @@ import {
   type Tone,
 } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
-import {
-  composePersona,
-  deriveMessageSignal,
-  evolve,
-  project,
-  summarizeSelf,
-} from "@workspace/neurobrane";
+import { composePersona, project, summarizeSelf } from "@workspace/neurobrane";
 import {
   CompanionCheckInBody,
   CreateConversationBody,
@@ -26,6 +20,7 @@ import {
 } from "@workspace/api-zod";
 import { loadOrCreateSelf, saveSelf } from "../lib/companionSelf";
 import { getInterestThemes } from "../lib/interestThemes";
+import { enqueueConversationTask, queueSelfEvolution } from "../lib/messageSignal";
 import { getSelfHistory, maybeSnapshotSelf } from "../lib/selfSnapshots";
 import {
   buildContextMessages,
@@ -351,20 +346,15 @@ router.post("/conversations/:id/messages", async (req, res) => {
     .values({ conversationId: id, role: "assistant", content: reply })
     .returning();
 
-  // Let this genuine exchange shape Empiri's inner self (best-effort: never
-  // fail the reply over a personality update).
-  try {
-    const evolved = evolve(self, deriveMessageSignal(content));
-    await saveSelf(id, evolved);
-    await maybeSnapshotSelf(id, evolved);
-  } catch (err) {
-    req.log.error({ err }, "Failed to evolve companion self");
-  }
-
   res.json({
     userMessage: toApiMessage(userMessage),
     assistantMessage: toApiMessage(assistantMessage),
   });
+
+  // Let this genuine exchange shape Empiri's inner self. The language-model
+  // analysis (with heuristic fallback) runs AFTER the reply so it never adds
+  // latency; failures are logged inside and never affect the response.
+  void queueSelfEvolution(id, content, req.log);
 });
 
 // Send a text message and stream the companion's reply as SSE.
@@ -480,14 +470,6 @@ router.post("/conversations/:id/messages/stream", async (req, res) => {
     .values({ conversationId: id, role: "assistant", content: reply })
     .returning();
 
-  try {
-    const evolved = evolve(self, deriveMessageSignal(content));
-    await saveSelf(id, evolved);
-    await maybeSnapshotSelf(id, evolved);
-  } catch (err) {
-    req.log.error({ err }, "Failed to evolve companion self (stream)");
-  }
-
   res.write(
     `data: ${JSON.stringify({
       done: true,
@@ -496,6 +478,10 @@ router.post("/conversations/:id/messages/stream", async (req, res) => {
     })}\n\n`,
   );
   res.end();
+
+  // Fold the exchange into the inner self after the stream has closed — the
+  // analysis (with heuristic fallback) never delays or breaks the reply.
+  void queueSelfEvolution(id, content, req.log);
 });
 
 // Generate a proactive check-in greeting (the companion reaches out first)
@@ -568,17 +554,23 @@ router.post("/conversations/:id/checkin", async (req, res) => {
     .values({ conversationId: id, role: "assistant", content: reply })
     .returning();
 
+  res.json(toApiMessage(assistantMessage));
+
   // A check-in is Empiri reaching out, not the user feeding it: persist the
   // time-decay so striving keeps growing during quiet stretches (best-effort).
-  try {
-    const projected = project(self);
-    await saveSelf(id, projected);
-    await maybeSnapshotSelf(id, projected);
-  } catch (err) {
-    req.log.error({ err }, "Failed to persist companion self decay");
-  }
-
-  res.json(toApiMessage(assistantMessage));
+  // Queued through the same per-conversation chain as message folds — and
+  // reloaded inside the queue — so a stale projection can never overwrite an
+  // interaction that evolved the self while the check-in was generating.
+  void enqueueConversationTask(id, async () => {
+    try {
+      const latest = await loadOrCreateSelf(id);
+      const projected = project(latest);
+      await saveSelf(id, projected);
+      await maybeSnapshotSelf(id, projected);
+    } catch (err) {
+      req.log.error({ err }, "Failed to persist companion self decay");
+    }
+  });
 });
 
 // Peek at the companion's current inner self (drives, traits, interests, narrative).

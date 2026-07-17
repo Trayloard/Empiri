@@ -32,6 +32,13 @@ export interface InteractionSignal {
    * for signals built without casing info, in which case the key is shown as-is.
    */
   topicDisplays?: Record<string, string>;
+  /**
+   * Optional per-topic weight (0..1) keyed by normalized topic key, scaling
+   * how strongly each topic reinforces/seeds an interest. Produced by richer
+   * extractors (e.g. a language-model analysis); topics without an entry
+   * default to full weight so heuristic signals behave exactly as before.
+   */
+  topicWeights?: Record<string, number>;
   /** External affect multiplier (e.g. derived from client mood); 1 = neutral. */
   moodFactor: number;
 }
