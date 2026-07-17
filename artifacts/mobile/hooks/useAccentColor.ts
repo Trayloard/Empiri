@@ -24,6 +24,17 @@ function easeInOut(t: number): number {
  */
 export function useAccentColor(warmthShift: number): string {
   const colors = useColors();
+  const warmth = useSmoothedWarmth(warmthShift);
+  return accentForWarmth(warmth, colors.statusAccent, colors.spectrum);
+}
+
+/**
+ * The smoothing layer on its own: eases a raw `warmthShift` toward each new
+ * value (instant when reduce-motion is on). Surfaces that want to derive
+ * their own tint from a different base color (primary buttons, gradients,
+ * sheet accents) can consume this once and share a single tween.
+ */
+export function useSmoothedWarmth(warmthShift: number): number {
   const reduceMotion = useReducedMotion();
 
   const [warmth, setWarmth] = useState(warmthShift);
@@ -71,5 +82,5 @@ export function useAccentColor(warmthShift: number): string {
     };
   }, [warmthShift, reduceMotion]);
 
-  return accentForWarmth(warmth, colors.statusAccent, colors.spectrum);
+  return warmth;
 }

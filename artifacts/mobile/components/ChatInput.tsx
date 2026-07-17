@@ -13,12 +13,19 @@ import {
 
 import { FONTS } from "@/constants/fonts";
 import { useColors } from "@/hooks/useColors";
+import { accentForWarmth, spectrumForWarmth } from "@/lib/accent";
 
 interface ChatInputProps {
   onSend: (text: string) => void;
   onMicPress: () => void;
   isRecording: boolean;
   busy: boolean;
+  /**
+   * Smoothed personality warmth (see `useSmoothedWarmth`). Gently tints the
+   * send/mic gradient toward the personality's warm/cool pole; `0` (or
+   * omitted) keeps today's exact brand gradient.
+   */
+  warmth?: number;
 }
 
 export function ChatInput({
@@ -26,10 +33,16 @@ export function ChatInput({
   onMicPress,
   isRecording,
   busy,
+  warmth = 0,
 }: ChatInputProps) {
   const colors = useColors();
   const [text, setText] = useState("");
   const hasText = text.trim().length > 0;
+
+  // Personality-tinted variants of the brand gradient and its glow. Both are
+  // centre-anchored, so a neutral personality renders exactly as before.
+  const spectrum = spectrumForWarmth(warmth, colors.spectrum);
+  const glowColor = accentForWarmth(warmth, colors.spectrum[1], colors.spectrum);
 
   const handleSend = () => {
     if (!hasText || busy) return;
@@ -84,13 +97,13 @@ export function ChatInput({
               styles.buttonWrap,
               {
                 opacity: busy ? 0.5 : pressed ? 0.8 : 1,
-                shadowColor: colors.spectrum[1],
+                shadowColor: glowColor,
               },
             ]}
             testID="send-button"
           >
             <LinearGradient
-              colors={colors.spectrum}
+              colors={spectrum}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.button}
@@ -109,7 +122,7 @@ export function ChatInput({
                 transform: [{ scale: isRecording ? 1.05 : 1 }],
                 shadowColor: isRecording
                   ? colors.destructive
-                  : colors.spectrum[1],
+                  : glowColor,
               },
             ]}
             testID="mic-button"
@@ -125,7 +138,7 @@ export function ChatInput({
               </View>
             ) : (
               <LinearGradient
-                colors={colors.spectrum}
+                colors={spectrum}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.button}

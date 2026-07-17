@@ -32,8 +32,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import { FONTS } from "@/constants/fonts";
+import { accentForWarmth } from "@/lib/accent";
 
 import { GrowthTimeline } from "./GrowthTimeline";
+
+// The sheet's own neutral accent (spinners etc.) — the mind-map's trait hue.
+const SHEET_ACCENT = "#B58CFF";
+// The sheet is always rendered on the fixed dark backdrop, so it tints along
+// the same brand spectrum regardless of the app color scheme.
+const SHEET_SPECTRUM = ["#5B8CFF", "#A855F7", "#EC4899", "#FB923C"] as const;
 
 type SheetMode = "mind" | "growth" | "memory";
 
@@ -59,6 +66,12 @@ interface InnerSelfSheetProps {
   visible: boolean;
   conversationId: number | null;
   onClose: () => void;
+  /**
+   * Smoothed personality warmth (see `useSmoothedWarmth`). Gently tints the
+   * sheet's accents toward the personality's warm/cool pole; `0` (or omitted)
+   * keeps today's exact colors.
+   */
+  warmth?: number;
 }
 
 // ── A monospace face for node labels gives the "mind map" its circuit-board
@@ -741,7 +754,10 @@ export function InnerSelfSheet({
   visible,
   conversationId,
   onClose,
+  warmth = 0,
 }: InnerSelfSheetProps) {
+  // Centre-anchored personality tint — neutral warmth keeps today's accent.
+  const sheetAccent = accentForWarmth(warmth, SHEET_ACCENT, SHEET_SPECTRUM);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
@@ -957,7 +973,7 @@ export function InnerSelfSheet({
 
             {loading || conversationId == null ? (
               <View style={styles.statePad}>
-                <ActivityIndicator color="#B58CFF" />
+                <ActivityIndicator color={sheetAccent} />
               </View>
             ) : error || !self || !graph ? (
               <View style={styles.statePad}>
@@ -1033,6 +1049,7 @@ export function InnerSelfSheet({
               conversationId={conversationId}
               self={self}
               bottomInset={insets.bottom}
+              warmth={warmth}
             />
           </>
         ) : (
@@ -1044,7 +1061,7 @@ export function InnerSelfSheet({
 
             {memoryLoading || conversationId == null ? (
               <View style={styles.statePad}>
-                <ActivityIndicator color="#B58CFF" />
+                <ActivityIndicator color={sheetAccent} />
               </View>
             ) : memoryError ? (
               <View style={styles.statePad}>

@@ -21,7 +21,10 @@ clean, then don't block on these:
   getCompanionSettings, etc. — missing ones broke init). All tests pass.
 
 **How to apply:** when adding CompanionContext tests, keep both mocks intact. If the
-provider gains new imports from the api client, add them to the module mock or init
-silently breaks again.
+provider gains new imports from the api client, add them to **every** test file's
+module mock — there are multiple files (`CompanionContext.test.tsx`,
+`CompanionContext.dev.test.tsx`) and each mocks `@workspace/api-client-react`
+independently; a missing function makes init throw silently and check-in tests
+fail with "expected 1 call, received 0". Both files are green as of July 2026.
 
 

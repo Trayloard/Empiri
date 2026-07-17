@@ -23,6 +23,7 @@ import Animated, {
 import Svg, { Circle, Path } from "react-native-svg";
 
 import { FONTS } from "@/constants/fonts";
+import { accentForWarmth } from "@/lib/accent";
 import {
   buildTimeline,
   firstSeenCuriosities,
@@ -44,20 +45,36 @@ const TRAIT_META: { key: string; label: string; color: string }[] = [
   { key: "calm", label: "Calm", color: "#5FE0C0" },
 ];
 
+// The timeline's own neutral accents, and the fixed dark-sheet spectrum they
+// tint along (the sheet ignores the app color scheme).
+const SPINNER_ACCENT = "#B58CFF";
+const CURIO_ACCENT = "#FFC56E";
+const SHEET_SPECTRUM = ["#5B8CFF", "#A855F7", "#EC4899", "#FB923C"] as const;
+
 interface GrowthTimelineProps {
   conversationId: number | null;
   /** the live "now" reading, already fetched by the parent sheet */
   self: CompanionSelf | null;
   bottomInset: number;
+  /**
+   * Smoothed personality warmth (see `useSmoothedWarmth`). Gently tints the
+   * timeline's accents; `0` (or omitted) keeps today's exact colors.
+   */
+  warmth?: number;
 }
 
 export function GrowthTimeline({
   conversationId,
   self,
   bottomInset,
+  warmth = 0,
 }: GrowthTimelineProps) {
   const { width } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
+
+  // Centre-anchored personality tints — neutral warmth keeps today's colors.
+  const spinnerAccent = accentForWarmth(warmth, SPINNER_ACCENT, SHEET_SPECTRUM);
+  const curioAccent = accentForWarmth(warmth, CURIO_ACCENT, SHEET_SPECTRUM);
 
   const [snapshots, setSnapshots] = useState<CompanionSelfSnapshot[] | null>(
     null,
@@ -133,7 +150,7 @@ export function GrowthTimeline({
   if (conversationId == null || (loading && !snapshots)) {
     return (
       <View style={styles.statePad} testID="growth-loading">
-        <ActivityIndicator color="#B58CFF" />
+        <ActivityIndicator color={spinnerAccent} />
       </View>
     );
   }
@@ -321,7 +338,10 @@ export function GrowthTimeline({
               {curiosities.map((c) => (
                 <View key={c.topic} style={styles.curioRow}>
                   <View
-                    style={[styles.curioDot, c.isNow && styles.curioDotNew]}
+                    style={[
+                      styles.curioDot,
+                      c.isNow && { backgroundColor: curioAccent },
+                    ]}
                   />
                   <View style={styles.flex}>
                     <View style={styles.curioHead}>
@@ -336,6 +356,7 @@ export function GrowthTimeline({
                           styles.curioFill,
                           {
                             width: `${Math.round(Math.max(0, Math.min(100, c.affinity)))}%`,
+                            backgroundColor: curioAccent,
                           },
                         ]}
                       />
@@ -501,9 +522,6 @@ const styles = StyleSheet.create({
     marginTop: 5,
     backgroundColor: "rgba(255,197,110,0.5)",
   },
-  curioDotNew: {
-    backgroundColor: "#FFC56E",
-  },
   curioHead: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -532,6 +550,5 @@ const styles = StyleSheet.create({
   curioFill: {
     height: "100%",
     borderRadius: 2.5,
-    backgroundColor: "#FFC56E",
   },
 });

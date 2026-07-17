@@ -11,4 +11,5 @@
 - [api-server dev hot-reload misses new routes](api-server-dev-hot-reload.md) — newly added Express routes 404 until you restart the API Server workflow; smoke-test on localhost:8080.
 - [Interest display vs key](neurobrane-interest-display-vs-key.md) — interests carry a normalized lowercase key (matching/dedup/decay only) + a separate cosmetic display casing; never dedup on display.
 - [Empiri orb/glow trait smoothing](orb-trait-smoothing.md) — ease only the trait part of blob opacity via 3s shared values; never ease breathing cadence (loop restarts/freezes); warm boolean→smoothstep.
+- [Personality accent tinting](accent-tinting-pattern.md) — always blend from each surface's own base color via accentForWarmth so a neutral personality stays pixel-identical.
 - [Deferred personalization follow-ups](deferred-personalization-followups.md) — 3 ideas to remind user about next session: chat-header name/tone, evolution log, auth-gate settings screen.

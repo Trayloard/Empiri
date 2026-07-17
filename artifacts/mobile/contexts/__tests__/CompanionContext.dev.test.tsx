@@ -65,10 +65,17 @@ jest.mock("expo-notifications", () => ({
 jest.mock("@workspace/api-client-react", () => ({
   companionCheckIn: jest.fn(),
   createConversation: jest.fn(),
+  devRegressSelf: jest.fn(),
+  fetchStream: jest.fn(),
+  getCompanionSettings: jest.fn().mockRejectedValue(new Error("not mocked")),
+  getConversation: jest.fn().mockRejectedValue(new Error("not mocked")),
+  listConversations: jest.fn().mockResolvedValue([]),
   listMessages: jest.fn(),
+  renameConversation: jest.fn(),
   sendMessage: jest.fn(),
   synthesizeSpeech: jest.fn(),
   transcribeAudio: jest.fn(),
+  updateCompanionSettings: jest.fn(),
 }));
 
 // Sign the user in so the provider's auth gate passes and it initializes.

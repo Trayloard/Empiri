@@ -72,3 +72,29 @@ export function accentForWarmth(
   if (factor >= 0) return mixHex(statusAccent, pink, factor * MAX_BLEND);
   return mixHex(statusAccent, blue, -factor * MAX_BLEND);
 }
+
+/** Gradient surfaces shift even more gently than flat accents. */
+const GRADIENT_BLEND = MAX_BLEND * 0.5;
+
+/**
+ * Tints a whole brand gradient toward the personality's warm/cool pole.
+ *
+ * Like `accentForWarmth`, this is centre-anchored: `warmthShift === 0` returns
+ * the spectrum unchanged, so a neutral personality keeps today's exact
+ * gradient. Each stop blends toward the spectrum's own pink (warm) or blue
+ * (cool) anchor, at half the flat-accent strength so gradients stay subtle.
+ */
+export function spectrumForWarmth(
+  warmthShift: number,
+  spectrum: readonly string[],
+): [string, string, ...string[]] {
+  const [blue, , pink] = spectrum;
+  const factor = clamp(warmthShift / WARMTH_RANGE, -1, 1);
+  const target = factor >= 0 ? pink : blue;
+  const t = Math.abs(factor) * GRADIENT_BLEND;
+  return spectrum.map((c) => mixHex(c, target, t)) as [
+    string,
+    string,
+    ...string[],
+  ];
+}

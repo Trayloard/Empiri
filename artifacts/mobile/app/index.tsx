@@ -37,9 +37,10 @@ import { InnerSelfSheet } from "@/components/InnerSelfSheet";
 import { MessageBubble, RetryBubble, TypingBubble } from "@/components/MessageBubble";
 import { FONTS } from "@/constants/fonts";
 import { useCompanion } from "@/contexts/CompanionContext";
-import { useAccentColor } from "@/hooks/useAccentColor";
+import { useSmoothedWarmth } from "@/hooks/useAccentColor";
 import { useColors } from "@/hooks/useColors";
 import { useCompanionTraits } from "@/hooks/useCompanionTraits";
+import { accentForWarmth } from "@/lib/accent";
 import { useAuth } from "@/lib/auth";
 import type { MoodLabel } from "@/lib/mood";
 
@@ -154,7 +155,13 @@ export default function CompanionScreen() {
   const { isAuthenticated, isLoading: authLoading, login } = useAuth();
 
   const traits = useCompanionTraits(conversationId);
-  const accent = useAccentColor(traits.warmthShift);
+  // One shared warmth tween feeds every personality-tinted surface, so the
+  // chrome accent, primary buttons, and send/mic gradient all drift together.
+  const smoothWarmth = useSmoothedWarmth(traits.warmthShift);
+  const accent = accentForWarmth(smoothWarmth, colors.statusAccent, colors.spectrum);
+  // Primary CTAs blend from the brand button color (not statusAccent), so a
+  // neutral personality keeps today's exact button color and CTAs stay bold.
+  const primaryAccent = accentForWarmth(smoothWarmth, colors.primary, colors.spectrum);
   const [peekVisible, setPeekVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
 
@@ -305,7 +312,7 @@ export default function CompanionScreen() {
         <Text style={[styles.emptyText, { color: colors.mutedForeground, marginBottom: 32 }]}>
           Sign in to start your conversation.
         </Text>
-        <Pressable onPress={login} style={[styles.retry, { backgroundColor: colors.primary }]}>
+        <Pressable onPress={login} style={[styles.retry, { backgroundColor: primaryAccent }]}>
           <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Sign in</Text>
         </Pressable>
       </View>
@@ -351,7 +358,7 @@ export default function CompanionScreen() {
             <View style={styles.center}>
               <Feather name="cloud-off" size={36} color={colors.mutedForeground} />
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{initError}</Text>
-              <Pressable onPress={retryInit} style={[styles.retry, { backgroundColor: colors.primary }]}>
+              <Pressable onPress={retryInit} style={[styles.retry, { backgroundColor: primaryAccent }]}>
                 <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Retry</Text>
               </Pressable>
             </View>
@@ -404,6 +411,7 @@ export default function CompanionScreen() {
             onMicPress={handleMic}
             isRecording={isRecording}
             busy={busy}
+            warmth={smoothWarmth}
           />
           {/* Nav row — replaces scattered corner buttons */}
           <View style={styles.navRow}>
@@ -475,6 +483,7 @@ export default function CompanionScreen() {
         visible={peekVisible}
         conversationId={conversationId}
         onClose={() => setPeekVisible(false)}
+        warmth={smoothWarmth}
       />
 
       {/* Rename-chat modal */}
@@ -544,7 +553,7 @@ export default function CompanionScreen() {
                   styles.renameBtn,
                   styles.renameBtnPrimary,
                   {
-                    backgroundColor: colors.primary,
+                    backgroundColor: primaryAccent,
                     opacity: pressed || renameSaving ? 0.7 : 1,
                   },
                 ]}
