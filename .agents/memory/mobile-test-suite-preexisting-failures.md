@@ -9,8 +9,10 @@ When running `pnpm --filter @workspace/mobile test` / `run typecheck`, two failu
 appear that are **independent of most UI/feature work** — verify your own diff is
 clean, then don't block on these:
 
-- **`lib/auth.tsx` typecheck:** `Property 'nonce' does not exist on type 'AuthRequest'`
-  — an expo-auth-session typing mismatch. Present even when you haven't touched auth.
+- **`lib/auth.tsx` typecheck: FIXED (July 2026).** The `nonce` error is gone —
+  expo-auth-session's AuthRequest never had a nonce property (it was undefined at
+  runtime), so the token-exchange body no longer sends it; the server treats nonce
+  as optional. Don't re-add `request.nonce`.
 
 - **`contexts/__tests__/CompanionContext.test.tsx`: FIXED (July 2026).** The file
   used to fail wholesale because `CompanionProvider` gained a `useAuth()` gate after

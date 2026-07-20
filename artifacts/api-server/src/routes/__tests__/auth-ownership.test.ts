@@ -91,6 +91,65 @@ afterAll(async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Malformed / missing / not-owned IDs all look identical (same 404 body)
+// ---------------------------------------------------------------------------
+
+describe("conversation not-found indistinguishability via GET /conversations/:id", () => {
+  const EXPECTED_404 = { error: "Conversation not found" };
+
+  const malformedIds = ["abc", "1.5", "-1", "0", "1e2", "12abc"];
+
+  for (const bad of malformedIds) {
+    it(`malformed id "${bad}" → 404 with canonical body`, async () => {
+      const res = await request(app)
+        .get(`/api/conversations/${bad}`)
+        .set("Authorization", `Bearer ${tokenA}`);
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(EXPECTED_404);
+    });
+  }
+
+  it("valid-format but nonexistent id → 404 with canonical body", async () => {
+    const res = await request(app)
+      .get("/api/conversations/999999999")
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(EXPECTED_404);
+  });
+
+  it("another user's conversation id → 404 with canonical body", async () => {
+    const res = await request(app)
+      .get(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenB}`);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(EXPECTED_404);
+  });
+
+  it("all three categories return byte-identical JSON", async () => {
+    const [malformed, missing, wrongUser] = await Promise.all([
+      request(app)
+        .get("/api/conversations/abc")
+        .set("Authorization", `Bearer ${tokenA}`),
+      request(app)
+        .get("/api/conversations/999999999")
+        .set("Authorization", `Bearer ${tokenA}`),
+      request(app)
+        .get(`/api/conversations/${convAId}`)
+        .set("Authorization", `Bearer ${tokenB}`),
+    ]);
+
+    expect(malformed.status).toBe(404);
+    expect(missing.status).toBe(404);
+    expect(wrongUser.status).toBe(404);
+
+    const bodyText = JSON.stringify(EXPECTED_404);
+    expect(JSON.stringify(malformed.body)).toBe(bodyText);
+    expect(JSON.stringify(missing.body)).toBe(bodyText);
+    expect(JSON.stringify(wrongUser.body)).toBe(bodyText);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Unauthenticated access is rejected
 // ---------------------------------------------------------------------------
 

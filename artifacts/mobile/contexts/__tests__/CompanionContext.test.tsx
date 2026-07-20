@@ -331,6 +331,97 @@ describe("CompanionContext failed-reply handling", () => {
   });
 });
 
+describe("CompanionContext sad-mood arc", () => {
+  it("turns sad when the reply fails, then recovers to a computed mood after a successful reply", async () => {
+    mockSendMessage.mockRejectedValueOnce(new Error("AI unavailable"));
+    mockSendMessage.mockResolvedValueOnce({
+      userMessage: makeMessage(1, "user", "hello"),
+      assistantMessage: makeMessage(2, "assistant", "Hey! Good to see you."),
+    });
+
+    const { result } = await renderReadyCompanion();
+
+    // Turn voice off so the success path doesn't enter audio playback.
+    act(() => {
+      result.current.toggleVoice();
+    });
+    await waitFor(() => expect(result.current.voiceEnabled).toBe(false));
+
+    // The companion starts from a fresh, non-sad mood.
+    expect(result.current.mood.label).not.toBe("sad");
+
+    await act(async () => {
+      await result.current.sendText("hello");
+    });
+
+    // The failed delivery makes the companion sad.
+    expect(result.current.mood.label).toBe("sad");
+    expect(result.current.error).toBe(FRIENDLY_ERROR);
+
+    await act(async () => {
+      await result.current.retryMessage();
+    });
+
+    // A real exchange lifts the mood back to a computed (never "sad") label —
+    // "sad" is only ever set imperatively by the error path, and the fresh
+    // snapshot plus interaction boost lands the companion at "bright".
+    expect(result.current.mood.label).not.toBe("sad");
+    expect(result.current.mood.label).toBe("bright");
+    expect(result.current.error).toBeNull();
+  });
+
+  it("stays sad while retries keep failing", async () => {
+    mockSendMessage.mockRejectedValue(new Error("still down"));
+
+    const { result } = await renderReadyCompanion();
+
+    act(() => {
+      result.current.toggleVoice();
+    });
+    await waitFor(() => expect(result.current.voiceEnabled).toBe(false));
+
+    await act(async () => {
+      await result.current.sendText("hello");
+    });
+    expect(result.current.mood.label).toBe("sad");
+
+    await act(async () => {
+      await result.current.retryMessage();
+    });
+
+    // No successful exchange happened, so the companion never perks up.
+    expect(result.current.mood.label).toBe("sad");
+  });
+
+  it("recovers from sad on a plain successful send (not only via retry)", async () => {
+    mockSendMessage.mockRejectedValueOnce(new Error("AI unavailable"));
+    mockSendMessage.mockResolvedValueOnce({
+      userMessage: makeMessage(3, "user", "you ok?"),
+      assistantMessage: makeMessage(4, "assistant", "All good now!"),
+    });
+
+    const { result } = await renderReadyCompanion();
+
+    act(() => {
+      result.current.toggleVoice();
+    });
+    await waitFor(() => expect(result.current.voiceEnabled).toBe(false));
+
+    await act(async () => {
+      await result.current.sendText("hello");
+    });
+    expect(result.current.mood.label).toBe("sad");
+
+    // The user types a brand-new message instead of tapping retry.
+    await act(async () => {
+      await result.current.sendText("you ok?");
+    });
+
+    expect(result.current.mood.label).toBe("bright");
+    expect(result.current.error).toBeNull();
+  });
+});
+
 describe("CompanionContext proactive check-in", () => {
   const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -17,21 +17,34 @@ import Animated, {
 
 import { FONTS } from "@/constants/fonts";
 import { useColors } from "@/hooks/useColors";
+import { hexToRgba, spectrumForWarmth } from "@/lib/accent";
 
 interface MessageBubbleProps {
   role: string;
   content: string;
+  /**
+   * Smoothed personality warmth (see `useSmoothedWarmth`). Gently tints the
+   * user-bubble gradient; `0` keeps the neutral brand gradient unchanged.
+   */
+  warmth?: number;
 }
 
-export function MessageBubble({ role, content }: MessageBubbleProps) {
+export function MessageBubble({ role, content, warmth = 0 }: MessageBubbleProps) {
   const colors = useColors();
+  const scheme = useColorScheme();
   const isUser = role === "user";
 
   if (isUser) {
+    const tinted = spectrumForWarmth(warmth, colors.spectrum);
+    const bubbleColors: [string, string] =
+      scheme === "dark"
+        ? [hexToRgba(tinted[0], 0.3), hexToRgba(tinted[1], 0.3)]
+        : [tinted[0], tinted[1]];
+
     return (
       <View style={[styles.row, { justifyContent: "flex-end" }]}>
         <LinearGradient
-          colors={colors.userBubble}
+          colors={bubbleColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[

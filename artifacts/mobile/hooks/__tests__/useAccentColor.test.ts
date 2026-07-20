@@ -89,6 +89,36 @@ describe("useSmoothedWarmth", () => {
     expect(result.current).toBe(0.15);
   });
 
+  it("snaps to the target immediately when reduce-motion is enabled mid-tween", () => {
+    mockUseReducedMotion.mockReturnValue(false);
+    const { result, rerender } = renderHook(
+      ({ w }: { w: number }) => useSmoothedWarmth(w),
+      { initialProps: { w: 0 } },
+    );
+
+    // Start a tween toward 0.15 and let it run halfway.
+    rerender({ w: 0.15 });
+    advance(TWEEN_MS / 2);
+    const midValue = result.current;
+    expect(midValue).toBeGreaterThan(0);
+    expect(midValue).toBeLessThan(0.15);
+
+    // User enables reduce-motion while the fade is still in flight.
+    mockUseReducedMotion.mockReturnValue(true);
+    // Trigger a re-render so the hook sees the new reduceMotion value.
+    act(() => {
+      rerender({ w: 0.15 });
+    });
+
+    // The value must have settled on the target with no additional timer advances.
+    expect(result.current).toBe(0.15);
+
+    // Confirm no further animation frames are scheduled: advancing the clock
+    // must not move the value away from the target.
+    advance(TWEEN_MS);
+    expect(result.current).toBe(0.15);
+  });
+
   it("continues from the current eased value when retargeted mid-tween", () => {
     const { result, rerender } = renderHook(
       ({ w }: { w: number }) => useSmoothedWarmth(w),

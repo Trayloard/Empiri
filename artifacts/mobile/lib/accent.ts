@@ -77,6 +77,15 @@ export function accentForWarmth(
 const GRADIENT_BLEND = MAX_BLEND * 0.5;
 
 /**
+ * Converts a `#RRGGBB` hex color to an `rgba(r,g,b,alpha)` string.
+ * Useful when a surface needs transparency applied to a tinted spectrum stop.
+ */
+export function hexToRgba(hex: string, alpha: number): string {
+  const [r, g, b] = parseHex(hex);
+  return `rgba(${r},${g},${b},${clamp(alpha, 0, 1)})`;
+}
+
+/**
  * Tints a whole brand gradient toward the personality's warm/cool pole.
  *
  * Like `accentForWarmth`, this is centre-anchored: `warmthShift === 0` returns

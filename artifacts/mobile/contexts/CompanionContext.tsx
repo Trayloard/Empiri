@@ -15,6 +15,7 @@ import {
   updateCompanionSettings,
   type CompanionSettings,
   type CompanionSettingsInput,
+  type Conversation,
   type Message,
   type Percept,
 } from "@workspace/api-client-react";
@@ -100,6 +101,14 @@ interface CompanionContextValue {
   conversationId: number | null;
   /** The user-visible title of the current conversation. */
   conversationTitle: string;
+  /** All of the user's conversations (for the chat switcher), oldest first. */
+  chats: Conversation[];
+  /** Re-fetch the conversation list from the server (best-effort). */
+  refreshChats: () => Promise<void>;
+  /** Switch to another of the user's conversations and load its history. */
+  openConversation: (id: number) => Promise<void>;
+  /** Create a fresh conversation and switch to it. */
+  startNewChat: () => Promise<void>;
   /** Rename the current conversation; persists on the server and updates
    * the title everywhere immediately. Throws on failure so the caller can
    * surface an error. */
@@ -208,6 +217,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   );
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversationTitle, setConversationTitle] = useState<string>("Empiri");
+  const [chats, setChats] = useState<Conversation[]>([]);
   const [initializing, setInitializing] = useState<boolean>(true);
   const [initError, setInitError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -410,6 +420,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       // and as a fallback when the locally stored ID turns out to be stale).
       const resumeOrCreate = async () => {
         const owned = await listConversations();
+        setChats(owned);
         if (owned.length > 0) {
           const conversation = owned[0];
           conversationIdRef.current = conversation.id;
@@ -423,6 +434,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           conversationIdRef.current = conversation.id;
           setConversationId(conversation.id);
           setConversationTitle(conversation.title);
+          setChats([conversation]);
           await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
           setMessages([]);
         }
@@ -444,6 +456,13 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
             setConversationTitle(conversation.title);
           } catch {
             // keep the default title
+          }
+          // Populate the switcher list. Best-effort: the chat itself already
+          // loaded, so a failed list fetch must not block the app.
+          try {
+            setChats(await listConversations());
+          } catch {
+            // keep whatever we have
           }
         } catch (err) {
           // If the stored conversation no longer exists on the server (e.g.
@@ -722,6 +741,16 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           throw new Error("empty assistant reply");
         }
 
+        // The user may have switched to another conversation (or started a
+        // new chat) while this request was in flight. The reply is already
+        // persisted server-side, but it must never be written into the chat
+        // that is now on screen — that would mix messages across
+        // conversations. The exchange still counts as real contact, though.
+        if (conversationIdRef.current !== id) {
+          touchInteraction();
+          return;
+        }
+
         setMessages((prev) => [
           ...prev.filter((m) => m.id !== optimistic.id),
           userMsg,
@@ -736,13 +765,22 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           await playSpeech(assistantMsg.content);
         }
       } catch {
+        // Same stale-conversation guard: a failure from a chat the user has
+        // already left must not surface an error banner, sad mood, or a
+        // retryable turn in the newly opened chat (the optimistic bubble it
+        // would retry is no longer on screen).
+        if (conversationIdRef.current !== id) return;
         setError("Empiri couldn't reply just now. Try again.");
         setMood((prev) => ({ ...prev, label: "sad" }));
         const failed: FailedTurn = { messageId: optimistic.id, content };
         failedTurnRef.current = failed;
         setFailedTurn(failed);
       } finally {
-        setStatus("idle");
+        // openConversation/startNewChat already reset status for their new
+        // chat; a stale request must not clobber whatever came after.
+        if (conversationIdRef.current === id) {
+          setStatus("idle");
+        }
       }
     },
     [voiceEnabled, playSpeech, touchInteraction, clearFailedTurn, drainPercepts],
@@ -1079,6 +1117,56 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     if (!title || id == null) return;
     const updated = await apiRenameConversation(id, { title });
     setConversationTitle(updated.title);
+    setChats((prev) =>
+      prev.map((c) => (c.id === updated.id ? { ...c, title: updated.title } : c)),
+    );
+  }, []);
+
+  // Re-fetch the switcher list. Best-effort: a failure keeps the old list.
+  const refreshChats = useCallback(async () => {
+    try {
+      setChats(await listConversations());
+    } catch {
+      // keep whatever we have
+    }
+  }, []);
+
+  /**
+   * Switch the app to another of the user's conversations. Loads the
+   * history and title BEFORE swapping the active id so the chat never shows
+   * one conversation's messages under another's identity. Throws on failure
+   * so the switcher sheet can surface an error and stay open.
+   */
+  const openConversation = useCallback(async (id: number) => {
+    if (conversationIdRef.current === id) return;
+    const [conversation, history] = await Promise.all([
+      getConversation(id),
+      listMessages(id),
+    ]);
+    conversationIdRef.current = conversation.id;
+    setConversationId(conversation.id);
+    setConversationTitle(conversation.title);
+    setMessages(history);
+    failedTurnRef.current = null;
+    setFailedTurn(null);
+    setError(null);
+    setStatus("idle");
+    await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
+  }, []);
+
+  /** Create a fresh conversation and switch to it. Throws on failure. */
+  const startNewChat = useCallback(async () => {
+    const conversation = await createConversation({ title: "New chat" });
+    setChats((prev) => [...prev, conversation]);
+    conversationIdRef.current = conversation.id;
+    setConversationId(conversation.id);
+    setConversationTitle(conversation.title);
+    setMessages([]);
+    failedTurnRef.current = null;
+    setFailedTurn(null);
+    setError(null);
+    setStatus("idle");
+    await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
   }, []);
 
   const saveSettings = useCallback(async (patch: CompanionSettingsInput) => {
@@ -1106,6 +1194,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     conversationIdRef.current = null;
     setConversationId(null);
     setConversationTitle("Empiri");
+    setChats([]);
     setMessages([]);
     failedTurnRef.current = null;
     setFailedTurn(null);
@@ -1137,6 +1226,10 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         mood,
         conversationId,
         conversationTitle,
+        chats,
+        refreshChats,
+        openConversation,
+        startNewChat,
         renameConversation,
         initializing,
         initError,

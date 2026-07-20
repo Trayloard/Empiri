@@ -1,0 +1,366 @@
+import { Feather } from "@expo/vector-icons";
+import type { Conversation } from "@workspace/api-client-react";
+import * as Haptics from "expo-haptics";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { FONTS } from "@/constants/fonts";
+import { useColors } from "@/hooks/useColors";
+
+interface ChatSwitcherSheetProps {
+  visible: boolean;
+  /** The user's conversations, oldest first (rendered newest first). */
+  chats: Conversation[];
+  /** The currently open conversation. */
+  activeId: number | null;
+  /** Open another conversation. Rejects on failure. */
+  onSelect: (id: number) => Promise<void>;
+  /** Create a fresh conversation and open it. Rejects on failure. */
+  onNewChat: () => Promise<void>;
+  /** Rename the currently open conversation (opens the rename dialog). */
+  onRenameActive: () => void;
+  /** Refresh the list from the server (best-effort, fire-and-forget). */
+  onRefresh: () => void;
+  onClose: () => void;
+  /** Personality-derived accent; falls back to the static token. */
+  accent?: string;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export function ChatSwitcherSheet({
+  visible,
+  chats,
+  activeId,
+  onSelect,
+  onNewChat,
+  onRenameActive,
+  onRefresh,
+  onClose,
+  accent,
+}: ChatSwitcherSheetProps) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const tint = accent ?? colors.statusAccent;
+
+  // id currently being opened, or -1 while creating a new chat.
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [sheetError, setSheetError] = useState<string | null>(null);
+
+  // Refresh the list every time the sheet opens so titles/new chats from
+  // other devices show up; also clear any stale error/busy state.
+  useEffect(() => {
+    if (visible) {
+      setBusyId(null);
+      setSheetError(null);
+      onRefresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const haptic = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+  };
+
+  const handleOpen = async (id: number) => {
+    if (busyId != null) return;
+    haptic();
+    if (id === activeId) {
+      onClose();
+      return;
+    }
+    setBusyId(id);
+    setSheetError(null);
+    try {
+      await onSelect(id);
+      onClose();
+    } catch {
+      setSheetError("Couldn't open that chat. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleNewChat = async () => {
+    if (busyId != null) return;
+    haptic();
+    setBusyId(-1);
+    setSheetError(null);
+    try {
+      await onNewChat();
+      onClose();
+    } catch {
+      setSheetError("Couldn't create a new chat. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Newest chats first — the most recent conversation is what people
+  // usually want to jump back into.
+  const ordered = [...chats].reverse();
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={styles.overlay} testID="chat-switcher-sheet">
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close chat list"
+        />
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.background,
+              borderColor: colors.glassBorder,
+              paddingBottom: Math.max(insets.bottom, 16) + 4,
+            },
+          ]}
+        >
+          <View style={[styles.handle, { backgroundColor: colors.glassBorder }]} />
+
+          <View style={styles.headerRow}>
+            <Text style={[styles.title, { color: colors.foreground }]}>Your chats</Text>
+            <Pressable
+              onPress={handleNewChat}
+              disabled={busyId != null}
+              accessibilityRole="button"
+              accessibilityLabel="Start a new chat"
+              testID="new-chat-button"
+              style={({ pressed }) => [
+                styles.newChatBtn,
+                {
+                  backgroundColor: `${tint}22`,
+                  borderColor: `${tint}55`,
+                  opacity: pressed || busyId != null ? 0.6 : 1,
+                },
+              ]}
+            >
+              {busyId === -1 ? (
+                <ActivityIndicator size="small" color={tint} />
+              ) : (
+                <Feather name="plus" size={15} color={tint} />
+              )}
+              <Text style={[styles.newChatText, { color: tint }]}>New chat</Text>
+            </Pressable>
+          </View>
+
+          {sheetError ? (
+            <Text style={[styles.errorText, { color: colors.destructive }]}>
+              {sheetError}
+            </Text>
+          ) : null}
+
+          <FlatList
+            data={ordered}
+            keyExtractor={(item) => String(item.id)}
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const active = item.id === activeId;
+              return (
+                <Pressable
+                  onPress={() => handleOpen(item.id)}
+                  disabled={busyId != null}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    active ? `${item.title} (current chat)` : `Open chat ${item.title}`
+                  }
+                  testID={`chat-row-${item.id}`}
+                  style={({ pressed }) => [
+                    styles.row,
+                    {
+                      backgroundColor: active ? `${tint}14` : colors.glass,
+                      borderColor: active ? `${tint}55` : colors.glassBorder,
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.rowIcon,
+                      { backgroundColor: active ? `${tint}22` : "transparent" },
+                    ]}
+                  >
+                    <Feather
+                      name="message-circle"
+                      size={16}
+                      color={active ? tint : colors.mutedForeground}
+                    />
+                  </View>
+                  <View style={styles.rowBody}>
+                    <Text
+                      style={[
+                        styles.rowTitle,
+                        { color: active ? tint : colors.foreground },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text
+                      style={[styles.rowSub, { color: colors.mutedForeground }]}
+                      numberOfLines={1}
+                    >
+                      {active ? "Current chat" : formatDate(item.createdAt)}
+                    </Text>
+                  </View>
+                  {busyId === item.id ? (
+                    <ActivityIndicator size="small" color={tint} />
+                  ) : active ? (
+                    <Pressable
+                      onPress={() => {
+                        haptic();
+                        onRenameActive();
+                      }}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Rename this chat"
+                      testID="switcher-rename-button"
+                      style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+                    >
+                      <Feather name="edit-2" size={15} color={tint} />
+                    </Pressable>
+                  ) : (
+                    <Feather
+                      name="chevron-right"
+                      size={16}
+                      color={colors.mutedForeground}
+                    />
+                  )}
+                </Pressable>
+              );
+            }}
+            ListEmptyComponent={
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                No chats yet — start one!
+              </Text>
+            }
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    maxHeight: "72%",
+  },
+  handle: {
+    alignSelf: "center",
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 12,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    letterSpacing: -0.3,
+  },
+  newChatBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  newChatText: {
+    fontSize: 13,
+    fontFamily: FONTS.semibold,
+  },
+  errorText: {
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    marginBottom: 8,
+  },
+  list: {
+    flexGrow: 0,
+  },
+  listContent: {
+    gap: 8,
+    paddingBottom: 8,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  rowIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rowBody: {
+    flex: 1,
+    gap: 1,
+  },
+  rowTitle: {
+    fontSize: 15,
+    fontFamily: FONTS.semibold,
+  },
+  rowSub: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    textAlign: "center",
+    paddingVertical: 20,
+  },
+});

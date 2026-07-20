@@ -210,7 +210,9 @@ router.get("/conversations", async (req, res) => {
 async function requireOwnedConversation(
   req: Parameters<Parameters<typeof router.get>[1]>[0],
   res: Parameters<Parameters<typeof router.get>[1]>[1],
-): Promise<(typeof conversations.$inferSelect) | null> {
+): Promise<
+  ((typeof conversations.$inferSelect) & { ownerId: string }) | null
+> {
   const id = parseConversationId(req.params.id);
   if (id === null) {
     respondConversationNotFound(res);
@@ -232,7 +234,7 @@ async function requireOwnedConversation(
     return null;
   }
 
-  return conversation;
+  return { ...conversation, ownerId: req.user.id };
 }
 
 // Fetch a single conversation (id, title, createdAt) — owner only
@@ -369,7 +371,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
   // colour this very reply — then layer the user's personalisation.
   const self = await loadOrCreateSelf(id);
   const felt = feelPercepts(id, self, parsed.data.percepts, req.log);
-  const systemContent = await buildSystemPrompt(req.user.id, felt);
+  const systemContent = await buildSystemPrompt(conversation.ownerId, felt);
   const windowedMessages = buildContextMessages(history, contextSummary);
   const chatMessages = [
     { role: "system" as const, content: systemContent },
@@ -487,7 +489,7 @@ router.post("/conversations/:id/messages/stream", async (req, res) => {
 
   const self = await loadOrCreateSelf(id);
   const felt = feelPercepts(id, self, parsed.data.percepts, req.log);
-  const systemContent = await buildSystemPrompt(req.user.id, felt);
+  const systemContent = await buildSystemPrompt(conversation.ownerId, felt);
   const windowedMessages = buildContextMessages(history, contextSummary);
   const chatMessages = [
     { role: "system" as const, content: systemContent },
@@ -616,7 +618,7 @@ router.post("/conversations/:id/checkin", async (req, res) => {
   // them"), so opt-in percepts fold in before the persona composes.
   const self = await loadOrCreateSelf(id);
   const felt = feelPercepts(id, self, percepts, req.log);
-  const systemContent = await buildSystemPrompt(req.user.id, felt);
+  const systemContent = await buildSystemPrompt(conversation.ownerId, felt);
   const chatMessages = [
     { role: "system" as const, content: systemContent },
     ...recent.map((m) => ({

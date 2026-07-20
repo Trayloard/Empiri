@@ -5,24 +5,15 @@ description: Why root pnpm typecheck fails in mockup-sandbox and how per-package
 
 # Monorepo typecheck gotchas
 
-## Pre-existing mockup-sandbox typecheck failure (duplicate @types/react)
-Running root `pnpm run typecheck` fails in `artifacts/mockup-sandbox`
-(`src/components/ui/calendar.tsx`, `src/components/ui/spinner.tsx`) with
-"Two different types with this name exist, but they are unrelated"
-(VoidOrUndefinedOnly / React.Ref).
+## Root typecheck is green and gated (July 2026)
+Root `pnpm run typecheck` now passes cleanly and is registered as a
+"typecheck" validation command alongside "test". The old mockup-sandbox
+duplicate `@types/react` failure no longer reproduces at root. Keep it green:
+any typecheck regression now blocks task completion.
 
-**Cause:** the workspace resolves TWO `@types/react` versions at once —
-`19.1.17` (pulled by the React Native / `@workspace/mobile` side, pinned
-`~19.1.x`) and `19.2.14` (catalog `^19.2.0`, used by web artifacts like
-mockup-sandbox). Both versions exist in `pnpm-lock.yaml` and this duplication
-predates recent mobile work (verified present at HEAD).
-
-**Why it matters:** this failure is NOT caused by changes to the mobile app or
-its test setup. When you touch `artifacts/mobile` and see root typecheck red,
-check whether the only errors are in `mockup-sandbox` — if so it's pre-existing,
-don't chase it. A real fix would be deduping `@types/react` across the monorepo
-(align the RN pin with the catalog, or add an override), which is a broad,
-risky change to do only when explicitly in scope.
+**How to apply:** in ownership-gated api-server routes, get the user id from
+`requireOwnedConversation()`'s returned conversation (`ownerId` is narrowed to
+string) instead of `req.user.id`, which TS sees as possibly undefined.
 
 ## Per-package typecheck uses stale lib declarations
 `pnpm --filter @workspace/<artifact> run typecheck` does NOT rebuild the
