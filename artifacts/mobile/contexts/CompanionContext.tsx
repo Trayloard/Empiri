@@ -41,11 +41,11 @@ import {
   DEFAULT_CADENCE,
   freshMoodState,
   registerInteraction,
-  shouldCheckIn,
   type CheckInCadence,
   type CompanionMoodState,
   type ComputedMood,
 } from "@/lib/mood";
+import { shouldProactivelyCheckIn } from "@/lib/checkInGate";
 import {
   cancelNudges,
   requestNotificationPermission,
@@ -55,7 +55,6 @@ import {
 import {
   adjustNudgeHoursForQuietHours,
   DEFAULT_QUIET_HOURS,
-  isInQuietHours,
   parseQuietHours,
   type QuietHours,
 } from "@/lib/quietHours";
@@ -416,12 +415,12 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
       // After enough quiet time, let the companion greet the user first. It
       // speaks from its current (faded) mood — the lift only comes once the
-      // user replies — so the arc feels real.
+      // user replies — so the arc feels real. The cadence + quiet-hours
+      // suppression rules live in shouldProactivelyCheckIn (lib/checkInGate).
       if (
         conversationIdRef.current != null &&
         history.length > 0 &&
-        shouldCheckIn(loadedMood, cadence) &&
-        !isInQuietHours(loadedQuiet)
+        shouldProactivelyCheckIn(loadedMood, cadence, loadedQuiet)
       ) {
         await runCheckIn(loadedMood);
       }

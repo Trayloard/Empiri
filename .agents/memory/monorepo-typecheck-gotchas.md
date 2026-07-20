@@ -31,3 +31,6 @@ member" errors against stale `lib/*/dist/*.d.ts` (e.g. api-client-react showing
 an old `ConversationDetailEnvelope` shape).
 **How to apply:** trust the root `pnpm run typecheck` (it runs
 `typecheck:libs` = `tsc --build` first) over an isolated per-package run.
+To refresh a single lib's declarations without the full root run:
+`pnpm exec tsc -b lib/<pkg>/tsconfig.json` (the libs have no `build` script;
+they are composite `emitDeclarationOnly` projects writing to `dist/`).

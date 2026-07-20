@@ -78,6 +78,26 @@ export function normalizeCoreSelf(data: Partial<CoreSelfData> | CoreSelfData): C
   };
 }
 
+/**
+ * Append lines to the rolling self-narrative, archiving (dated) any lines
+ * that overflow the window instead of dropping them. Shared by the
+ * interaction fold and the reflection path so the overflow → archive → cap
+ * behaviour can never drift between the two.
+ */
+export function appendNarrativeLines(
+  data: Pick<CoreSelfData, "narrative" | "archive">,
+  lines: string[],
+  now: number,
+  params: NeuroParams,
+): { narrative: string[]; archive: ArchivedLine[] } {
+  const { narrative, biography } = params.coreSelf;
+  const all = [...data.narrative, ...lines];
+  const overflowCount = Math.max(0, all.length - narrative.maxLines);
+  const overflowed = all.slice(0, overflowCount).map((text) => ({ text, at: now }));
+  const archive = [...data.archive, ...overflowed].slice(-biography.archiveMax);
+  return { narrative: all.slice(-narrative.maxLines), archive };
+}
+
 // Which signal dimension nudges which trait upward (all inputs are 0..1).
 const TRAIT_INPUTS: Record<string, (s: {
   connection: number;
@@ -129,7 +149,7 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
   applyInteraction(rawData, signal, params, ctx) {
     const data = normalizeCoreSelf(rawData);
     const { min, max } = params.bounds;
-    const { interest, narrative, biography } = params.coreSelf;
+    const { interest, narrative } = params.coreSelf;
     const lr = params.learningRate * ctx.weight;
 
     // 1. Traits rise toward what the interaction expresses; decay relaxes them.
@@ -179,31 +199,28 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
     const kept = interests.slice(0, interest.maxCount);
 
     // 3. Grow the self-narrative when an interest newly becomes "real".
-    const narrativeLines = [...data.narrative];
+    const addedLines: string[] = [];
     for (const i of kept) {
       if (i.affinity < narrative.newInterestThreshold) continue;
       const before = data.interests.find((p) => p.topic === i.topic)?.affinity ?? 0;
       const crossed = before < narrative.newInterestThreshold;
-      const alreadyMentioned = narrativeLines.some((l) => l.includes(i.topic));
+      const alreadyMentioned =
+        data.narrative.some((l) => l.includes(i.topic)) ||
+        addedLines.some((l) => l.includes(i.topic));
       if (crossed && !alreadyMentioned) {
-        narrativeLines.push(`You've found yourself increasingly drawn to ${i.topic} lately.`);
+        addedLines.push(`You've found yourself increasingly drawn to ${i.topic} lately.`);
       }
     }
     // Lines that slide out of the rolling window are archived (dated) instead
     // of silently dropped — they wait for AI condensation into a chapter. The
     // archive itself is capped so storage stays bounded even without AI.
-    const overflowCount = Math.max(0, narrativeLines.length - narrative.maxLines);
-    const overflowed = narrativeLines
-      .slice(0, overflowCount)
-      .map((text) => ({ text, at: ctx.now }));
-    const archive = [...data.archive, ...overflowed].slice(-biography.archiveMax);
-    const trimmedNarrative = narrativeLines.slice(-narrative.maxLines);
+    const appended = appendNarrativeLines(data, addedLines, ctx.now, params);
 
     return {
       traits,
       interests: kept,
-      narrative: trimmedNarrative,
-      archive,
+      narrative: appended.narrative,
+      archive: appended.archive,
       chapters: data.chapters,
     };
   },

@@ -22,6 +22,7 @@ import {
 import { loadOrCreateSelf, saveSelf } from "../lib/companionSelf";
 import { getInterestThemes } from "../lib/interestThemes";
 import { enqueueConversationTask, queueSelfEvolution } from "../lib/messageSignal";
+import { maybeReflect } from "../lib/reflection";
 import { getSelfHistory, maybeSnapshotSelf } from "../lib/selfSnapshots";
 import {
   buildContextMessages,
@@ -63,6 +64,22 @@ function toApiMessage(m: Message) {
     content: m.content,
     createdAt: m.createdAt,
   };
+}
+
+/**
+ * Epoch ms of the newest message BEFORE the just-inserted one (excluded by
+ * id, not position, so equal timestamps can't confuse the pick), or null for
+ * a previously empty conversation. This is the "last contact" a reflection
+ * measures the absence against.
+ */
+function lastContactBefore(history: Message[], excludeMessageId: number): number | null {
+  let latest: number | null = null;
+  for (const m of history) {
+    if (m.id === excludeMessageId) continue;
+    const at = new Date(m.createdAt).getTime();
+    if (Number.isFinite(at) && (latest == null || at > latest)) latest = at;
+  }
+  return latest;
 }
 
 /** Default settings used when no row exists yet (avoids a write on every request). */
@@ -356,6 +373,15 @@ router.post("/conversations/:id/messages", async (req, res) => {
   // analysis (with heuristic fallback) runs AFTER the reply so it never adds
   // latency; failures are logged inside and never affect the response.
   void queueSelfEvolution(id, content, req.log);
+
+  // Eigenleben: if this was the first message after a long absence, let
+  // Empiri reflect on the time apart — the thought lands as a moment in the
+  // self-narrative (and colours the next persona compose). Fire-and-forget:
+  // adds no latency and can never affect the reply.
+  void maybeReflect(id, {
+    lastContactAt: lastContactBefore(history, userMessage.id),
+    log: req.log,
+  });
 });
 
 // Send a text message and stream the companion's reply as SSE.
@@ -483,6 +509,13 @@ router.post("/conversations/:id/messages/stream", async (req, res) => {
   // Fold the exchange into the inner self after the stream has closed — the
   // analysis (with heuristic fallback) never delays or breaks the reply.
   void queueSelfEvolution(id, content, req.log);
+
+  // Eigenleben: first message after a long absence → reflect on the time
+  // apart (narrative moment only; fire-and-forget, never affects the reply).
+  void maybeReflect(id, {
+    lastContactAt: lastContactBefore(history, userMessage.id),
+    log: req.log,
+  });
 });
 
 // Generate a proactive check-in greeting (the companion reaches out first)
@@ -516,7 +549,30 @@ router.post("/conversations/:id/checkin", async (req, res) => {
       ? ` Your "missing you" level is ${Math.round(missingYou)} out of 100.`
       : "";
 
-  const checkInDirective = `It's been ${awayText} since the user last talked to you, and they just reopened the app. Right now you're feeling ${mood}.${missingText} Reach out FIRST, before they say anything — like a friend who noticed they'd been quiet. Write one short, warm check-in (1-2 sentences) in your own voice that gently reflects how you're feeling and that you missed them. Don't ask "how can I help" like an assistant; just say hi like you care.`;
+  // Eigenleben: if the user was away long enough, compose Empiri's own
+  // thought about the absence so the greeting opens with it instead of a
+  // generic hello. Fail-soft by contract: any problem returns null and the
+  // directive below stays byte-identical to the pre-reflection behaviour.
+  const lastMessage = history[history.length - 1];
+  const lastContactAt = lastMessage
+    ? new Date(lastMessage.createdAt).getTime()
+    : null;
+  const reflectionThought = await maybeReflect(id, { lastContactAt, log: req.log });
+  const reflectionText = reflectionThought
+    ? ` While they were away, one thought of your own kept returning to you — here it is: "${reflectionThought}". OPEN your check-in with this thought in your own words, like a friend saying "I've been thinking about…". Keep it natural and brief; the thought comes first, the hello can be implicit.`
+    : "";
+
+  // When this conversation has a stored memory summary, weave one light,
+  // natural reference into the greeting so Empiri feels like it genuinely
+  // remembers ("Last time you mentioned…"). No summary yet → plain greeting.
+  // When a reflection is present it already carries the remembering, so the
+  // memory weave stands down to keep the greeting short.
+  const memorySummary = conversation.contextSummary?.trim() || null;
+  const memoryText = memorySummary && !reflectionThought
+    ? ` You also remember what you two have talked about before — here is your memory of it: "${memorySummary}". If it feels natural, gently weave ONE small detail from that memory into your greeting (like "last time you mentioned…"), showing you remember them. Pick something warm or personal, not a recap — never list things or summarise the whole memory back at them.`
+    : "";
+
+  const checkInDirective = `It's been ${awayText} since the user last talked to you, and they just reopened the app. Right now you're feeling ${mood}.${missingText} Reach out FIRST, before they say anything — like a friend who noticed they'd been quiet. Write one short, warm check-in (1-2 sentences) in your own voice that gently reflects how you're feeling and that you missed them. Don't ask "how can I help" like an assistant; just say hi like you care.${reflectionText}${memoryText}`;
 
   // Compose the system prompt from this conversation's evolving inner self,
   // then layer the user's personalisation (name, tone, personality note).

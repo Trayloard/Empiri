@@ -11,7 +11,8 @@ Relevant files: `artifacts/mobile/app/index.tsx`, `artifacts/mobile/app/companio
 
 ## 2 — Companion evolution / mood log
 A timeline screen showing how Empiri's inner self has changed over time — one brief snapshot per session (dominant traits + a generated sentence). Needs `GET /companion/evolution-log` backed by `companion_selves`.  
-Relevant files: `artifacts/api-server/src/routes/companion.ts`, `lib/db/src/schema/` (companion_selves), `artifacts/mobile/app/companion-settings.tsx`
+Relevant files: `artifacts/api-server/src/routes/companion.ts`, `lib/db/src/schema/` (companion_selves), `artifacts/mobile/app/companion-settings.tsx`  
+Note (July 2026): a related follow-up task ("see what Empiri thought about while you were away", surfacing reflection narrative moments) is already in the project task list — mention both together, they'd combine well.
 
 ## 3 — Auth-gate the companion-settings screen
 `/companion-settings` has no explicit auth guard; an unauthenticated deep-link hits the API and gets a raw 401. Should redirect to sign-in, matching the pattern in `app/index.tsx`.  

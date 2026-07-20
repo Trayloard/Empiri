@@ -32,6 +32,12 @@ export {
   type Interest,
 } from "./blocks/coreSelf";
 export { pendingBiographyLines, applyChapter } from "./biography";
+export {
+  applyReflection,
+  getLastReflectedAt,
+  shouldReflect,
+  REFLECTION_BLOCK_ID,
+} from "./reflection";
 export { drivesBlock, DRIVES_BLOCK_ID, type DrivesData } from "./blocks/drives";
 export {
   memoryBlock,
