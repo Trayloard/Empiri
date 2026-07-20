@@ -155,6 +155,9 @@ defaultBucketID = "replit-objstore-0ca444a8-1ec6-48a4-9b1f-0ca78ce299c5"
 [userenv]
 
 [userenv.development]
+Empiri = "91209120"
 
 [userenv.shared]
+
+[userenv.production]
 Empiri = "91209120"

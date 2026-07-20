@@ -1,4 +1,5 @@
 import React from "react";
+import { ActivityIndicator } from "react-native";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import {
@@ -112,6 +113,15 @@ const defaultProps = {
   conversationId: 1,
   onClose: jest.fn(),
 };
+
+/** A promise whose resolution the test controls, to hold a request in flight. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
 
 /** Render the sheet, switch to the Memory tab, and wait for the memory. */
 async function openMemoryTab() {
@@ -246,6 +256,78 @@ describe("InnerSelfSheet memory forgetting", () => {
       await findByText("Couldn't forget just now. Please try again."),
     ).toBeTruthy();
     expect(getByTestId("memory-text")).toBeTruthy();
+    expect(mockClearMemory).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("InnerSelfSheet memory in-flight protection", () => {
+  it("locks the editor and ignores extra taps while a save is in flight", async () => {
+    const pending = deferred<{ summary: string }>();
+    mockUpdateMemory.mockReturnValue(pending.promise);
+    const {
+      UNSAFE_getByType,
+      findByTestId,
+      findByText,
+      getByTestId,
+      queryByTestId,
+      queryByText,
+    } = await openMemoryTab();
+
+    fireEvent.press(getByTestId("memory-edit"));
+    const input = await findByTestId("memory-edit-input");
+    fireEvent.changeText(input, "A slow save");
+    fireEvent.press(getByTestId("memory-edit-save"));
+
+    // While the request is pending: spinner replaces the Save label and the
+    // input is locked.
+    await waitFor(() => {
+      expect(queryByText("Save")).toBeNull();
+    });
+    expect(UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+    expect(input.props.editable).toBe(false);
+
+    // A second (and third) tap must not fire a duplicate request.
+    fireEvent.press(getByTestId("memory-edit-save"));
+    fireEvent.press(getByTestId("memory-edit-save"));
+    expect(mockUpdateMemory).toHaveBeenCalledTimes(1);
+
+    // Cancel is disabled mid-flight — the editor must stay open.
+    fireEvent.press(getByTestId("memory-edit-cancel"));
+    expect(getByTestId("memory-edit-input")).toBeTruthy();
+
+    pending.resolve({ summary: "A slow save" });
+
+    expect(await findByText("A slow save")).toBeTruthy();
+    expect(queryByTestId("memory-edit-input")).toBeNull();
+  });
+
+  it("locks the confirm row and ignores extra taps while forgetting is in flight", async () => {
+    const pending = deferred<void>();
+    mockClearMemory.mockReturnValue(pending.promise as never);
+    const { UNSAFE_getByType, findByTestId, findByText, getByTestId, queryByText } =
+      await openMemoryTab();
+
+    fireEvent.press(getByTestId("memory-clear"));
+    fireEvent.press(await findByTestId("memory-clear-confirm"));
+
+    // While the request is pending: spinner replaces the Forget label.
+    await waitFor(() => {
+      expect(queryByText("Forget")).toBeNull();
+    });
+    expect(UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+
+    // Extra taps on the confirm must not fire a duplicate request.
+    fireEvent.press(getByTestId("memory-clear-confirm"));
+    fireEvent.press(getByTestId("memory-clear-confirm"));
+    expect(mockClearMemory).toHaveBeenCalledTimes(1);
+
+    // Keep is disabled mid-flight — the confirm row must stay visible.
+    fireEvent.press(getByTestId("memory-clear-cancel"));
+    expect(getByTestId("memory-clear-confirm")).toBeTruthy();
+
+    pending.resolve();
+
+    expect(await findByText(/Nothing to remember yet/)).toBeTruthy();
     expect(mockClearMemory).toHaveBeenCalledTimes(1);
   });
 });
