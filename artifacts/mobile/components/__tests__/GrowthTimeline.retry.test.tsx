@@ -24,7 +24,7 @@ jest.mock("@expo/vector-icons", () => ({
 
 jest.mock("react-native-svg", () => {
   const { View } = require("react-native");
-  return { __esModule: true, default: View, Path: View, Circle: View };
+  return { __esModule: true, default: View, Path: View, Circle: View, Line: View };
 });
 
 jest.mock("react-native-reanimated", () => {
@@ -37,12 +37,32 @@ jest.mock("react-native-reanimated", () => {
     useReducedMotion: () => true,
     withTiming: (v: unknown) => v,
     withRepeat: (v: unknown) => v,
+    runOnJS: (fn: (...args: unknown[]) => void) => fn,
     Easing: {
       inOut: () => () => 0,
       out: () => () => 0,
       cubic: () => 0,
       ease: () => 0,
     },
+  };
+});
+
+jest.mock("react-native-gesture-handler", () => {
+  const { View } = require("react-native");
+  const Gesture = {
+    Tap: () => ({ onEnd: () => Gesture.Tap() }),
+    Pan: () => ({
+      minDistance: () => Gesture.Pan(),
+      onBegin: () => Gesture.Pan(),
+      onUpdate: () => Gesture.Pan(),
+      onEnd: () => Gesture.Pan(),
+      onFinalize: () => Gesture.Pan(),
+    }),
+    Race: (..._args: unknown[]) => ({}),
+  };
+  return {
+    Gesture,
+    GestureDetector: ({ children }: { children: React.ReactNode }) => children,
   };
 });
 

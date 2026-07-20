@@ -146,6 +146,29 @@ export function timePositions(points: { at: number }[]): number[] {
 }
 
 /**
+ * Index of the timeline point nearest to a touch at normalized x (0..1),
+ * given each point's normalized position (as from `timePositions`). The touch
+ * x is clamped into range so drags past the chart edges snap to the endpoints.
+ * Ties between two equally near points resolve to the later (more recent) one.
+ * Returns -1 when there are no positions.
+ */
+export function nearestTimelineIndex(xNorm: number, xs: number[]): number {
+  const n = xs.length;
+  if (n === 0) return -1;
+  const x = Math.max(0, Math.min(1, xNorm));
+  let best = 0;
+  let bestDist = Math.abs(xs[0] - x);
+  for (let i = 1; i < n; i++) {
+    const d = Math.abs(xs[i] - x);
+    if (d <= bestDist) {
+      best = i;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+/**
  * Build an SVG polyline `d` for a sparkline over the given box. When `xs`
  * (normalized 0..1 positions, one per value) is supplied the points honor a real
  * time axis; otherwise they are spaced evenly by index.

@@ -4,7 +4,7 @@ import {
   type CompanionSelf,
   type CompanionSelfSnapshot,
 } from "@workspace/api-client-react";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -16,12 +16,14 @@ import {
 } from "react-native";
 import Animated, {
   Easing,
+  runOnJS,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Circle, Path } from "react-native-svg";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Svg, { Circle, Line, Path } from "react-native-svg";
 
 import { FONTS } from "@/constants/fonts";
 import { accentForWarmth } from "@/lib/accent";
@@ -29,6 +31,7 @@ import {
   buildTimeline,
   chapterPeriodLabel,
   firstSeenCuriosities,
+  nearestTimelineIndex,
   relativeWhen,
   sparklinePath,
   timeAxisTicks,
@@ -94,6 +97,10 @@ export function GrowthTimeline({
   // Bumping this re-runs the history fetch — the in-place "Try again" path.
   const [attempt, setAttempt] = useState(0);
 
+  // Scrubber state — which point is the user currently touching?
+  // null means no active touch (readout hidden).
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+
   useEffect(() => {
     if (conversationId == null) return;
     let cancelled = false;
@@ -123,6 +130,75 @@ export function GrowthTimeline({
   const chartW = Math.min(width, 460) - 32 - 36; // page margin + card padding
   const chartH = 132;
 
+  // Gesture handler for the personality chart.
+  // xs is read on the JS thread via a ref so gesture worklets don't need to
+  // touch JS objects directly — they hand off to runOnJS callbacks.
+  const xsRef = useRef<number[]>([]);
+
+  // JS-thread callback: compute nearest index and update React state.
+  const onScrubTouch = useCallback(
+    (touchX: number) => {
+      const xNorm = Math.max(0, Math.min(1, touchX / chartW));
+      const idx = nearestTimelineIndex(xNorm, xsRef.current);
+      setActiveIdx(idx < 0 ? null : idx);
+    },
+    [chartW],
+  );
+
+  const tapDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onScrubRelease = useCallback(() => {
+    setActiveIdx(null);
+    if (tapDismissRef.current != null) {
+      clearTimeout(tapDismissRef.current);
+      tapDismissRef.current = null;
+    }
+  }, []);
+
+  // On tap: show the readout then auto-dismiss after 1.5 s so the user has
+  // time to read the values without having to hold the chart.
+  const onTapEnd = useCallback(
+    (touchX: number) => {
+      onScrubTouch(touchX);
+      if (tapDismissRef.current != null) clearTimeout(tapDismissRef.current);
+      tapDismissRef.current = setTimeout(() => {
+        tapDismissRef.current = null;
+        setActiveIdx(null);
+      }, 1500);
+    },
+    [onScrubTouch],
+  );
+
+  // Cancel any pending tap-dismiss when a pan starts.
+  const onPanBegin = useCallback(
+    (touchX: number) => {
+      if (tapDismissRef.current != null) {
+        clearTimeout(tapDismissRef.current);
+        tapDismissRef.current = null;
+      }
+      onScrubTouch(touchX);
+    },
+    [onScrubTouch],
+  );
+
+  const chartGesture = useMemo(() => {
+    const onTouchJS = runOnJS(onScrubTouch);
+    const onTapEndJS = runOnJS(onTapEnd);
+    const onPanBeginJS = runOnJS(onPanBegin);
+    const onReleaseJS = runOnJS(onScrubRelease);
+    return Gesture.Race(
+      Gesture.Tap().onEnd((e) => {
+        onTapEndJS(e.x);
+      }),
+      Gesture.Pan()
+        .minDistance(0)
+        .onBegin((e) => onPanBeginJS(e.x))
+        .onUpdate((e) => onTouchJS(e.x))
+        .onEnd(() => onReleaseJS())
+        .onFinalize(() => onReleaseJS()),
+    );
+  }, [onScrubTouch, onTapEnd, onPanBegin, onScrubRelease]);
+
   const series = useMemo(
     () =>
       traitSeries(
@@ -137,6 +213,11 @@ export function GrowthTimeline({
   // plus light endpoint labels for the span.
   const xs = useMemo(() => timePositions(points), [points]);
   const axisTicks = useMemo(() => timeAxisTicks(points), [points]);
+
+  // Keep the ref that worklet closures read in sync with the latest xs array.
+  useEffect(() => {
+    xsRef.current = xs;
+  }, [xs, xsRef]);
 
   const interactionsPath = useMemo(() => {
     const vals = points.map((p) => p.interactions);
@@ -219,50 +300,90 @@ export function GrowthTimeline({
 
           {enough ? (
             <>
-              <View style={{ height: chartH, marginTop: 16 }}>
-                <Svg width={chartW} height={chartH}>
-                  {[0, 0.5, 1].map((g) => {
-                    const yy = 4 + g * (chartH - 8);
-                    return (
-                      <Path
-                        key={`grid-${g}`}
-                        d={`M 0 ${yy} L ${chartW} ${yy}`}
-                        stroke="rgba(255,255,255,0.06)"
+              {/* Chart — wrapped in a gesture detector for scrubbing */}
+              <GestureDetector gesture={chartGesture}>
+                <View
+                  style={{ height: chartH, marginTop: 16 }}
+                  accessibilityLabel="Personality chart — drag to explore past moments"
+                  accessibilityHint="Drag left or right to see Empiri's trait values at each recorded moment"
+                >
+                  <Svg width={chartW} height={chartH}>
+                    {[0, 0.5, 1].map((g) => {
+                      const yy = 4 + g * (chartH - 8);
+                      return (
+                        <Path
+                          key={`grid-${g}`}
+                          d={`M 0 ${yy} L ${chartW} ${yy}`}
+                          stroke="rgba(255,255,255,0.06)"
+                          strokeWidth={1}
+                        />
+                      );
+                    })}
+                    {series.map((s) => {
+                      const meta = TRAIT_META.find((t) => t.key === s.key)!;
+                      return (
+                        <Path
+                          key={s.key}
+                          d={sparklinePath(s.values, chartW, chartH, { pad: 4, xs })}
+                          stroke={meta.color}
+                          strokeOpacity={0.92}
+                          strokeWidth={2}
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      );
+                    })}
+                    {/* Scrubber hit dots — one per trait at the active snapshot */}
+                    {activeIdx !== null &&
+                      series.map((s) => {
+                        const meta = TRAIT_META.find((t) => t.key === s.key)!;
+                        const val = s.values[activeIdx] ?? 0;
+                        const cx = (xs[activeIdx] ?? 0) * chartW;
+                        const cy = 4 + (1 - Math.max(0, Math.min(100, val)) / 100) * (chartH - 8);
+                        return (
+                          <Circle
+                            key={`scrub-dot-${s.key}`}
+                            cx={cx}
+                            cy={cy}
+                            r={4}
+                            fill={meta.color}
+                            stroke="rgba(13,15,24,0.9)"
+                            strokeWidth={1.5}
+                          />
+                        );
+                      })}
+                    {/* "now" endpoint dots (static) */}
+                    {activeIdx === null &&
+                      series.map((s) => {
+                        const meta = TRAIT_META.find((t) => t.key === s.key)!;
+                        const last = s.values[s.values.length - 1];
+                        const cy = 4 + (1 - Math.max(0, Math.min(100, last)) / 100) * (chartH - 8);
+                        return (
+                          <Circle
+                            key={`dot-${s.key}`}
+                            cx={chartW}
+                            cy={cy}
+                            r={3}
+                            fill={meta.color}
+                          />
+                        );
+                      })}
+                    {/* Scrubber vertical line — drawn last so it sits on top */}
+                    {activeIdx !== null && (
+                      <Line
+                        x1={(xs[activeIdx] ?? 0) * chartW}
+                        y1={0}
+                        x2={(xs[activeIdx] ?? 0) * chartW}
+                        y2={chartH}
+                        stroke="rgba(255,255,255,0.3)"
                         strokeWidth={1}
+                        strokeDasharray="3 3"
                       />
-                    );
-                  })}
-                  {series.map((s) => {
-                    const meta = TRAIT_META.find((t) => t.key === s.key)!;
-                    return (
-                      <Path
-                        key={s.key}
-                        d={sparklinePath(s.values, chartW, chartH, { pad: 4, xs })}
-                        stroke={meta.color}
-                        strokeOpacity={0.92}
-                        strokeWidth={2}
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    );
-                  })}
-                  {series.map((s) => {
-                    const meta = TRAIT_META.find((t) => t.key === s.key)!;
-                    const last = s.values[s.values.length - 1];
-                    const cy = 4 + (1 - Math.max(0, Math.min(100, last)) / 100) * (chartH - 8);
-                    return (
-                      <Circle
-                        key={`dot-${s.key}`}
-                        cx={chartW}
-                        cy={cy}
-                        r={3}
-                        fill={meta.color}
-                      />
-                    );
-                  })}
-                </Svg>
-              </View>
+                    )}
+                  </Svg>
+                </View>
+              </GestureDetector>
 
               {axisTicks.length > 0 ? (
                 <View style={styles.axisRow}>
@@ -273,34 +394,76 @@ export function GrowthTimeline({
                 </View>
               ) : null}
 
-              <View style={styles.legend}>
-                {TRAIT_META.map((t) => {
-                  const s = series.find((x) => x.key === t.key)!;
-                  const first = s.values[0];
-                  const last = s.values[s.values.length - 1];
-                  const delta = Math.round(last - first);
-                  const deltaColor =
-                    delta === 0
-                      ? "rgba(255,255,255,0.35)"
-                      : delta > 0
-                        ? "#5FE0C0"
-                        : "#FF7EB6";
-                  return (
-                    <View key={t.key} style={styles.legendRow}>
-                      <View
-                        style={[styles.legendDot, { backgroundColor: t.color }]}
-                      />
-                      <Text style={styles.legendLabel}>{t.label}</Text>
-                      <Text style={[styles.legendVal, { color: t.color }]}>
-                        {Math.round(last)}
-                      </Text>
-                      <Text style={[styles.legendDelta, { color: deltaColor }]}>
-                        {delta > 0 ? `+${delta}` : delta < 0 ? `${delta}` : "—"}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
+              {/* Scrubber readout — slides in when the user touches the chart */}
+              {activeIdx !== null ? (
+                <View style={styles.readout} testID="scrubber-readout">
+                  <Text style={styles.readoutDate}>
+                    {points[activeIdx].isNow
+                      ? "now"
+                      : (() => {
+                          const d = new Date(points[activeIdx].at);
+                          return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+                        })()}
+                  </Text>
+                  <View style={styles.readoutTraits}>
+                    {TRAIT_META.map((t) => {
+                      const val = Math.round(
+                        series.find((s) => s.key === t.key)?.values[activeIdx] ?? 0,
+                      );
+                      return (
+                        <View key={t.key} style={styles.readoutTraitRow}>
+                          <View style={[styles.readoutDot, { backgroundColor: t.color }]} />
+                          <Text style={styles.readoutTraitLabel}>{t.label}</Text>
+                          <Text style={[styles.readoutTraitVal, { color: t.color }]}>
+                            {val}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                    {points[activeIdx].interests.length > 0 ? (
+                      <View style={styles.readoutCurioRow}>
+                        {points[activeIdx].interests.slice(0, 3).map((it) => (
+                          <View key={it.topic} style={styles.readoutCurioChip}>
+                            <Text style={styles.readoutCurioText}>{it.display}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.legend}>
+                  {TRAIT_META.map((t) => {
+                    const s = series.find((x) => x.key === t.key)!;
+                    const first = s.values[0];
+                    const last = s.values[s.values.length - 1];
+                    const delta = Math.round(last - first);
+                    const deltaColor =
+                      delta === 0
+                        ? "rgba(255,255,255,0.35)"
+                        : delta > 0
+                          ? "#5FE0C0"
+                          : "#FF7EB6";
+                    return (
+                      <View key={t.key} style={styles.legendRow}>
+                        <View
+                          style={[styles.legendDot, { backgroundColor: t.color }]}
+                        />
+                        <Text style={styles.legendLabel}>{t.label}</Text>
+                        <Text style={[styles.legendVal, { color: t.color }]}>
+                          {Math.round(last)}
+                        </Text>
+                        <Text style={[styles.legendDelta, { color: deltaColor }]}>
+                          {delta > 0 ? `+${delta}` : delta < 0 ? `${delta}` : "—"}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+              {activeIdx === null && (
+                <Text style={styles.scrubHint}>tap or drag the chart to explore</Text>
+              )}
             </>
           ) : (
             <View style={styles.barList}>
@@ -700,5 +863,78 @@ const styles = StyleSheet.create({
   curioFill: {
     height: "100%",
     borderRadius: 2.5,
+  },
+  readout: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  readoutDate: {
+    fontFamily: MONO,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: "rgba(255,255,255,0.5)",
+    marginBottom: 10,
+    textTransform: "uppercase",
+  },
+  readoutTraits: {
+    gap: 7,
+  },
+  readoutTraitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  readoutDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  readoutTraitLabel: {
+    flex: 1,
+    fontFamily: FONTS.medium,
+    fontSize: 13,
+    color: "rgba(255,255,255,0.7)",
+  },
+  readoutTraitVal: {
+    fontFamily: FONTS.semibold,
+    fontSize: 13,
+    width: 34,
+    textAlign: "right",
+  },
+  readoutCurioRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.07)",
+  },
+  readoutCurioChip: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: "rgba(255,197,110,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,197,110,0.2)",
+  },
+  readoutCurioText: {
+    fontFamily: MONO,
+    fontSize: 10,
+    letterSpacing: 0.3,
+    color: "rgba(255,197,110,0.8)",
+    textTransform: "lowercase",
+  },
+  scrubHint: {
+    fontFamily: MONO,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: "rgba(255,255,255,0.22)",
+    textAlign: "center",
+    marginTop: 10,
   },
 });

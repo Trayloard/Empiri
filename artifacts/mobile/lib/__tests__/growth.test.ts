@@ -10,6 +10,7 @@ import {
   firstSeenCuriosities,
   relativeWhen,
   sparklinePath,
+  nearestTimelineIndex,
   timeAxisTicks,
   timePositions,
   traitSeries,
@@ -251,6 +252,52 @@ describe("timeAxisTicks", () => {
     const ticks = timeAxisTicks(points, NOW);
     expect(ticks[1].label).not.toBe("now");
     expect(ticks[1].label).toBe(axisDateLabel(NOW - 24 * HOUR, NOW));
+  });
+});
+
+describe("nearestTimelineIndex", () => {
+  it("returns -1 for empty positions", () => {
+    expect(nearestTimelineIndex(0.5, [])).toBe(-1);
+  });
+
+  it("returns 0 for a single point regardless of x", () => {
+    expect(nearestTimelineIndex(0, [0])).toBe(0);
+    expect(nearestTimelineIndex(1, [0])).toBe(0);
+  });
+
+  it("returns the index of the closest position", () => {
+    const xs = [0, 0.5, 1];
+    expect(nearestTimelineIndex(0, xs)).toBe(0);
+    expect(nearestTimelineIndex(0.2, xs)).toBe(0);
+    expect(nearestTimelineIndex(0.26, xs)).toBe(1);
+    expect(nearestTimelineIndex(0.5, xs)).toBe(1);
+    expect(nearestTimelineIndex(0.9, xs)).toBe(2);
+    expect(nearestTimelineIndex(1, xs)).toBe(2);
+  });
+
+  it("clamps x values outside 0..1 to the endpoints", () => {
+    const xs = [0, 0.5, 1];
+    expect(nearestTimelineIndex(-0.5, xs)).toBe(0);
+    expect(nearestTimelineIndex(2, xs)).toBe(2);
+  });
+
+  it("on a tie prefers the later (more recent) point", () => {
+    // x=0.5 is equidistant from positions 0 and 1
+    const xs = [0, 1];
+    expect(nearestTimelineIndex(0.5, xs)).toBe(1);
+  });
+
+  it("handles unevenly spaced time positions", () => {
+    // Sparse early, dense recent
+    const xs = [0, 0.05, 0.1, 0.9, 1];
+    // 0.07 is closer to 0.05 (dist 0.02) than to 0.1 (dist 0.03) → index 1
+    expect(nearestTimelineIndex(0.07, xs)).toBe(1);
+    // 0.5 is closer to 0.9 (dist 0.4) than to 0.1 (dist 0.4) — tie → later
+    expect(nearestTimelineIndex(0.5, xs)).toBe(3);
+    // 0.93 is closer to 0.9 (dist 0.03) than to 1.0 (dist 0.07)
+    expect(nearestTimelineIndex(0.93, xs)).toBe(3);
+    // 0.97 is closer to 1.0 (dist 0.03) than to 0.9 (dist 0.07)
+    expect(nearestTimelineIndex(0.97, xs)).toBe(4);
   });
 });
 

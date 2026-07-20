@@ -86,21 +86,8 @@ jest.mock("expo-notifications", () => ({
   SchedulableTriggerInputTypes: { TIME_INTERVAL: "timeInterval" },
 }));
 
-jest.mock("@workspace/api-client-react", () => ({
-  companionCheckIn: jest.fn(),
-  createConversation: jest.fn(),
-  devRegressSelf: jest.fn(),
-  fetchStream: jest.fn(),
-  getCompanionSettings: jest.fn().mockRejectedValue(new Error("not mocked")),
-  getConversation: jest.fn().mockRejectedValue(new Error("not mocked")),
-  listConversations: jest.fn().mockResolvedValue([]),
-  listMessages: jest.fn(),
-  renameConversation: jest.fn(),
-  sendMessage: jest.fn(),
-  synthesizeSpeech: jest.fn(),
-  transcribeAudio: jest.fn(),
-  updateCompanionSettings: jest.fn(),
-}));
+// Shared manual mock: see artifacts/mobile/__mocks__/@workspace/api-client-react.ts
+jest.mock("@workspace/api-client-react");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
