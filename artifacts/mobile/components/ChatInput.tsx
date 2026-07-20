@@ -77,6 +77,9 @@ export function ChatInput({
   };
 
   const handleMic = () => {
+    // If the long-press just fired in this press cycle, suppress the tap so
+    // onMicPress and onMicLongPress are mutually exclusive per press.
+    if (longPressFiredRef.current) return;
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }

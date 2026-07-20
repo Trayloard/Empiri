@@ -82,6 +82,18 @@ describe("ChatInput hold-to-call gesture", () => {
     expect(defaultProps.onMicPress).not.toHaveBeenCalled();
   });
 
+  it("does not call onMicPress if a long press fired in the same press cycle (tap suppression)", () => {
+    // Simulate: pressIn → longPress fires → press (onPress) fires on release.
+    // The longPressFiredRef guard in handleMic must suppress the tap.
+    const { getByTestId } = render(<ChatInput {...defaultProps} />);
+    const btn = getByTestId("mic-button");
+    fireEvent(btn, "pressIn");
+    fireEvent(btn, "longPress"); // sets longPressFiredRef = true
+    fireEvent.press(btn);        // handleMic should bail early
+    expect(defaultProps.onMicLongPress).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onMicPress).not.toHaveBeenCalled();
+  });
+
   it("shows the hold-progress ring when onMicLongPress is provided", () => {
     const { getByTestId } = render(<ChatInput {...defaultProps} />);
     expect(getByTestId("mic-hold-ring")).toBeTruthy();

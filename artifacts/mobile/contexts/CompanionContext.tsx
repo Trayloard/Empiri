@@ -225,6 +225,9 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   // always see the current value without depending on the state directly.
   const isRecordingRef = useRef<boolean>(false);
   const isCallActiveRef = useRef<boolean>(false);
+  // When a call is active, Empiri must always speak its reply regardless of
+  // the user's voiceEnabled toggle. This ref is read inside deliver().
+  const callForcesVoiceRef = useRef<boolean>(false);
   // Used by startCall to auto-stop each recording round after a timeout;
   // cleared by endCall so the loop can exit promptly.
   const callAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -728,7 +731,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         // A real exchange happened — the companion perks up.
         touchInteraction();
 
-        if (voiceEnabled) {
+        if (voiceEnabled || callForcesVoiceRef.current) {
           setStatus("speaking");
           await playSpeech(assistantMsg.content);
         }
@@ -807,8 +810,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     }
   }, [recorder]);
 
-  const stopListening = useCallback(async () => {
-    if (!isRecordingRef.current) return;
+  // Returns true when the round completed successfully (text sent), false when
+  // it failed (empty audio, transcription/network error). Callers that do not
+  // need the result can safely ignore it; startCall uses it to count failures.
+  const stopListening = useCallback(async (): Promise<boolean> => {
+    if (!isRecordingRef.current) return false;
     isRecordingRef.current = false;
     setIsRecording(false);
     setStatus("transcribing");
@@ -817,7 +823,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       const uri = recorder.uri;
       if (!uri) {
         setStatus("idle");
-        return;
+        return false;
       }
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
@@ -826,12 +832,14 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       if (!text.trim()) {
         setError("I didn't catch that. Try again.");
         setStatus("idle");
-        return;
+        return false;
       }
       await sendText(text);
+      return true;
     } catch (err) {
       setError(classifyVoiceError(err));
       setStatus("idle");
+      return false;
     }
   }, [recorder, sendText]);
 
@@ -842,6 +850,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
   const endCall = useCallback(() => {
     isCallActiveRef.current = false;
+    callForcesVoiceRef.current = false;
     setIsCallActive(false);
     if (callAutoStopRef.current != null) {
       clearTimeout(callAutoStopRef.current);
@@ -869,6 +878,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     const MAX_CONSECUTIVE_ERRORS = 2;
 
     isCallActiveRef.current = true;
+    callForcesVoiceRef.current = true;
     setIsCallActive(true);
 
     let consecutiveErrors = 0;
@@ -895,14 +905,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
         if (!isCallActiveRef.current) break;
 
-        // Transcribe → send → speak; errors are surfaced via setError inside
-        // stopListening, but we also track them locally to bail on outages.
-        let roundFailed = false;
-        await stopListening().catch(() => {
-          roundFailed = true;
-        });
+        // Transcribe → send → speak. stopListening returns true on success,
+        // false on any error (it also surfaces the error via setError).
+        const roundOk = await stopListening();
 
-        if (roundFailed) {
+        if (!roundOk) {
           consecutiveErrors += 1;
           if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) break;
         } else {
@@ -913,6 +920,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       }
     } finally {
       isCallActiveRef.current = false;
+      callForcesVoiceRef.current = false;
       setIsCallActive(false);
     }
   }, [startListening, stopListening]);
