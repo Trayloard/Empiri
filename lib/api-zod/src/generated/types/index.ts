@@ -13,6 +13,7 @@ export * from './authUserEnvelope';
 export * from './beginBrowserLoginParams';
 export * from './checkInInput';
 export * from './companionDrive';
+export * from './companionFact';
 export * from './companionInterest';
 export * from './companionMemory';
 export * from './companionSelf';

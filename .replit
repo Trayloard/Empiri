@@ -25,6 +25,7 @@ task = "shell.exec"
 args = "pnpm --filter @workspace/launch-video run dev"
 cwd = "./artifacts/launch-video"
 waitForPort = 19679
+ensurePreviewReachable = "/"
 router = "path"
 
 [workflows.workflow.tasks.env]
@@ -66,6 +67,8 @@ task = "shell.exec"
 args = "pnpm --filter @workspace/api-server run dev"
 cwd = "./artifacts/api-server"
 waitForPort = 8080
+ensurePreviewReachable = "/"
+router = "path"
 
 [workflows.workflow.tasks.env]
 PORT = "8080"
@@ -85,19 +88,12 @@ task = "shell.exec"
 args = "pnpm --filter @workspace/mockup-sandbox run dev"
 cwd = "./artifacts/mockup-sandbox"
 waitForPort = 8081
+ensurePreviewReachable = "/"
+router = "path"
 
 [workflows.workflow.tasks.env]
 PORT = "8081"
 BASE_PATH = "/__mockup"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "test"
 
 [[workflows.workflow]]
 name = "test"
@@ -109,6 +105,15 @@ args = "pnpm install --frozen-lockfile && pnpm test"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "Empiri app"
+mode = "sequential"
+author = 58120139
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "test"
 
 [agent]
 stack = "PNPM_WORKSPACE"
@@ -147,3 +152,10 @@ channel = "stable-25_05"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-0ca444a8-1ec6-48a4-9b1f-0ca78ce299c5"
+
+[userenv]
+
+[userenv.development]
+
+[userenv.shared]
+Empiri = "91209120"

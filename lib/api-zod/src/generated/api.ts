@@ -247,6 +247,11 @@ export const GetCompanionSelfResponse = zod.object({
   "affinity": zod.number()
 })),
   "narrative": zod.array(zod.string()),
+  "facts": zod.array(zod.object({
+  "key": zod.string().describe('Stable slot identifier (e.g. \"dog_name\") — a later update to the same slot replaces the text.'),
+  "text": zod.string().describe('The remembered statement, third-person (\"Their dog is called Milo\").'),
+  "salience": zod.number().describe('How firmly the fact is held right now (0-100); grows on re-mention, fades over time.')
+})).describe('Durable personal facts the companion remembers about the user, most salient first.'),
   "interactions": zod.number(),
   "ageHours": zod.number(),
   "themes": zod.record(zod.string(), zod.string()).nullable().describe('Meaning-based grouping of curiosities, computed server-side — maps a normalized interest topic key to its theme label. Topics absent from the map stand alone. Null when grouping is temporarily unavailable.')

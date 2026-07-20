@@ -146,6 +146,7 @@ export function summarizeSelf(
     traits: [],
     interests: [],
     narrative: [],
+    facts: [],
     interactions: projected.interactions,
     ageHours: round1(Math.max(0, (now - projected.createdAt) / HOUR_MS)),
   };
@@ -157,6 +158,7 @@ export function summarizeSelf(
     if (part.traits) summary.traits.push(...part.traits);
     if (part.interests) summary.interests.push(...part.interests);
     if (part.narrative) summary.narrative.push(...part.narrative);
+    if (part.facts) summary.facts.push(...part.facts);
   }
   return summary;
 }

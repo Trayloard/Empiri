@@ -109,6 +109,61 @@ describe("sanitizeAnalyzedSignal", () => {
     });
     expect(signal!.topics).toEqual(["jazz", "hiking", "berlin"]);
   });
+
+  it("passes through well-formed facts with normalized snake_case keys", () => {
+    const signal = sanitizeAnalyzedSignal({
+      ...validAnalysis,
+      facts: [
+        { key: "Dog Name", text: "  Their dog is called Milo ", confidence: 0.9 },
+        { key: "exam-date", text: "They have an exam on Aug 3", confidence: 0.7 },
+      ],
+    });
+    expect(signal!.facts).toEqual([
+      { key: "dog_name", text: "Their dog is called Milo", confidence: 0.9 },
+      { key: "exam_date", text: "They have an exam on Aug 3", confidence: 0.7 },
+    ]);
+  });
+
+  it("omits the facts field entirely when none are usable", () => {
+    expect(sanitizeAnalyzedSignal(validAnalysis)!.facts).toBeUndefined();
+    expect(sanitizeAnalyzedSignal({ ...validAnalysis, facts: [] })!.facts).toBeUndefined();
+    expect(
+      sanitizeAnalyzedSignal({ ...validAnalysis, facts: "not an array" })!.facts,
+    ).toBeUndefined();
+  });
+
+  it("skips malformed fact entries individually without rejecting the analysis", () => {
+    const signal = sanitizeAnalyzedSignal({
+      ...validAnalysis,
+      facts: [
+        "just-a-string",
+        { key: "", text: "No key", confidence: 0.9 },
+        { key: "job", text: "", confidence: 0.9 },
+        { key: "novel", text: "x".repeat(300), confidence: 0.9 },
+        { key: "mood", text: "They feel happy", confidence: 0 },
+        { key: "pet", text: "They have a cat", confidence: "high" },
+        { key: "dog_name", text: "Their dog is called Milo", confidence: 0.9 },
+      ],
+    });
+    expect(signal).not.toBeNull();
+    expect(signal!.facts).toEqual([
+      { key: "dog_name", text: "Their dog is called Milo", confidence: 0.9 },
+    ]);
+  });
+
+  it("dedupes facts whose keys collide after normalization and caps at three", () => {
+    const signal = sanitizeAnalyzedSignal({
+      ...validAnalysis,
+      facts: [
+        { key: "dog_name", text: "Their dog is called Milo", confidence: 0.9 },
+        { key: "Dog-Name", text: "A duplicate slot", confidence: 0.8 },
+        { key: "job", text: "They work as a nurse", confidence: 0.8 },
+        { key: "home_city", text: "They live in Berlin", confidence: 0.7 },
+        { key: "partner_name", text: "Their partner is Alex", confidence: 0.7 },
+      ],
+    });
+    expect(signal!.facts!.map((f) => f.key)).toEqual(["dog_name", "job", "home_city"]);
+  });
 });
 
 describe("resolveMessageSignal", () => {

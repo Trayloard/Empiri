@@ -1,6 +1,7 @@
 import type { BlockDefinition, NeuroParams } from "../types";
 import { coreSelfBlock, CORE_SELF_BLOCK_ID } from "./coreSelf";
 import { drivesBlock, DRIVES_BLOCK_ID } from "./drives";
+import { memoryBlock, MEMORY_BLOCK_ID } from "./memory";
 
 /**
  * Every known building block, keyed by id. To add a block: implement
@@ -10,6 +11,7 @@ import { drivesBlock, DRIVES_BLOCK_ID } from "./drives";
 export const ALL_BLOCKS: Record<string, BlockDefinition<any>> = {
   [CORE_SELF_BLOCK_ID]: coreSelfBlock,
   [DRIVES_BLOCK_ID]: drivesBlock,
+  [MEMORY_BLOCK_ID]: memoryBlock,
 };
 
 /** The active blocks for the given params, in declared fold order. */

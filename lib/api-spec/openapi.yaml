@@ -821,6 +821,22 @@ components:
         - topic
         - display
         - affinity
+    CompanionFact:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Stable slot identifier (e.g. "dog_name") — a later update to the same slot replaces the text.
+        text:
+          type: string
+          description: The remembered statement, third-person ("Their dog is called Milo").
+        salience:
+          type: number
+          description: How firmly the fact is held right now (0-100); grows on re-mention, fades over time.
+      required:
+        - key
+        - text
+        - salience
     CompanionSelf:
       type: object
       properties:
@@ -840,6 +856,11 @@ components:
           type: array
           items:
             type: string
+        facts:
+          type: array
+          description: Durable personal facts the companion remembers about the user, most salient first.
+          items:
+            $ref: "#/components/schemas/CompanionFact"
         interactions:
           type: integer
         ageHours:
@@ -854,6 +875,7 @@ components:
         - traits
         - interests
         - narrative
+        - facts
         - interactions
         - ageHours
         - themes

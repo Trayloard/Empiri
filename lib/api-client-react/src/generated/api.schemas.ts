@@ -137,6 +137,15 @@ export interface CompanionInterest {
   affinity: number;
 }
 
+export interface CompanionFact {
+  /** Stable slot identifier (e.g. "dog_name") — a later update to the same slot replaces the text. */
+  key: string;
+  /** The remembered statement, third-person ("Their dog is called Milo"). */
+  text: string;
+  /** How firmly the fact is held right now (0-100); grows on re-mention, fades over time. */
+  salience: number;
+}
+
 /**
  * Meaning-based grouping of curiosities, computed server-side — maps a normalized interest topic key to its theme label. Topics absent from the map stand alone. Null when grouping is temporarily unavailable.
  * @nullable
@@ -148,6 +157,8 @@ export interface CompanionSelf {
   traits: CompanionTrait[];
   interests: CompanionInterest[];
   narrative: string[];
+  /** Durable personal facts the companion remembers about the user, most salient first. */
+  facts: CompanionFact[];
   interactions: number;
   ageHours: number;
   /**

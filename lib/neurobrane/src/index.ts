@@ -28,3 +28,10 @@ export {
   type Interest,
 } from "./blocks/coreSelf";
 export { drivesBlock, DRIVES_BLOCK_ID, type DrivesData } from "./blocks/drives";
+export {
+  memoryBlock,
+  MEMORY_BLOCK_ID,
+  normalizeFactKey,
+  type Fact,
+  type MemoryData,
+} from "./blocks/memory";

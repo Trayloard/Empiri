@@ -639,6 +639,9 @@ export function InnerSelfSheet({
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState(false);
 
+  // Durable personal facts Empiri holds about the user, most salient first.
+  const facts = self?.facts ?? [];
+
   const switchMode = (next: SheetMode) => {
     if (next === mode) return;
     if (Platform.OS !== "web") {
@@ -931,7 +934,7 @@ export function InnerSelfSheet({
               <View style={styles.statePad}>
                 <ActivityIndicator color={sheetAccent} />
               </View>
-            ) : memoryError ? (
+            ) : memoryError && facts.length === 0 ? (
               <View style={styles.statePad}>
                 <Feather
                   name="cloud-off"
@@ -942,7 +945,7 @@ export function InnerSelfSheet({
                   Couldn&apos;t recall just now.
                 </Text>
               </View>
-            ) : !memory ? (
+            ) : !memory && facts.length === 0 ? (
               <View style={styles.statePad}>
                 <Feather
                   name="book-open"
@@ -963,13 +966,62 @@ export function InnerSelfSheet({
                 ]}
                 showsVerticalScrollIndicator={false}
               >
-                <View style={styles.memoryCard}>
-                  <Text style={styles.memoryText}>{memory}</Text>
-                </View>
-                <Text style={styles.memoryFootnote}>
-                  A gentle recap Empiri keeps so our longer talks stay
-                  connected.
-                </Text>
+                {memory ? (
+                  <>
+                    <View style={styles.memoryCard}>
+                      <Text style={styles.memoryText}>{memory}</Text>
+                    </View>
+                    <Text style={styles.memoryFootnote}>
+                      A gentle recap Empiri keeps so our longer talks stay
+                      connected.
+                    </Text>
+                  </>
+                ) : null}
+
+                {facts.length > 0 ? (
+                  <>
+                    <Text
+                      style={[
+                        styles.factsTitle,
+                        memory != null && styles.factsTitleSpaced,
+                      ]}
+                    >
+                      LITTLE THINGS I&apos;VE PICKED UP
+                    </Text>
+                    <View style={styles.factsCard} testID="facts-card">
+                      {facts.map((fact, index) => (
+                        <View
+                          key={fact.key}
+                          style={[
+                            styles.factRow,
+                            index > 0 && styles.factRowDivider,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.factDot,
+                              {
+                                backgroundColor: sheetAccent,
+                                opacity:
+                                  0.35 +
+                                  0.65 *
+                                    Math.max(
+                                      0,
+                                      Math.min(1, fact.salience / 100),
+                                    ),
+                              },
+                            ]}
+                          />
+                          <Text style={styles.factText}>{fact.text}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <Text style={styles.memoryFootnote}>
+                      Little things you&apos;ve shared — the ones we return to
+                      stay the brightest.
+                    </Text>
+                  </>
+                ) : null}
               </ScrollView>
             )}
           </>
@@ -1203,6 +1255,47 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 16,
     paddingHorizontal: 12,
+  },
+  factsTitle: {
+    fontFamily: FONTS.semibold,
+    fontSize: 11.5,
+    letterSpacing: 2,
+    color: "rgba(255,255,255,0.55)",
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  factsTitleSpaced: {
+    marginTop: 26,
+  },
+  factsCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+  },
+  factRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  factRowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+  },
+  factDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  factText: {
+    flex: 1,
+    fontFamily: FONTS.regular,
+    fontSize: 14.5,
+    lineHeight: 21,
+    color: "rgba(231,233,245,0.92)",
   },
   node: {
     position: "absolute",

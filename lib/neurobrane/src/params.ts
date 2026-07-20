@@ -18,10 +18,11 @@ import type { NeuroParams } from "./types";
 export const NEURO_PARAMS: NeuroParams = {
   schemaVersion: 1,
   learningRate: 1,
-  enabledBlocks: ["core-self", "drives"],
+  enabledBlocks: ["core-self", "drives", "memory"],
   blockWeights: {
     "core-self": 1,
     drives: 1,
+    memory: 1,
   },
   bounds: { min: 0, max: 100 },
   drives: {
@@ -58,5 +59,19 @@ export const NEURO_PARAMS: NeuroParams = {
       maxLines: 5,
       newInterestThreshold: 55,
     },
+  },
+  memory: {
+    maxCount: 12,
+    // A confidently stated fact starts around 55 (30 + 25·confidence) — above
+    // the surface threshold, so Empiri can use it right away.
+    seedSalienceBase: 30,
+    seedSaliencePerConfidence: 25,
+    refreshGain: 16,
+    // Slow forgetting: an unrefreshed fact slides below the surface threshold
+    // in roughly a week and is forgotten entirely after about a month.
+    decayPerHour: 0.15,
+    dropBelow: 0.5,
+    surfaceThreshold: 35,
+    personaCount: 3,
   },
 };

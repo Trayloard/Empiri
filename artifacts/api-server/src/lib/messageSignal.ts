@@ -2,7 +2,9 @@ import { openai } from "@workspace/integrations-openai-ai-server";
 import {
   deriveMessageSignal,
   evolve,
+  normalizeFactKey,
   normalizeTopic,
+  type FactCandidate,
   type InteractionSignal,
 } from "@workspace/neurobrane";
 import { loadOrCreateSelf, saveSelf } from "./companionSelf";
@@ -22,6 +24,9 @@ import { maybeSnapshotSelf } from "./selfSnapshots";
 /** Maximum number of topics folded from one message. */
 const MAX_TOPICS = 3;
 
+/** Maximum number of durable facts folded from one message. */
+const MAX_FACTS = 3;
+
 /**
  * Any genuine exchange feeds the need for connection at least a little (the
  * heuristic always used 1). A floor keeps the connection drive from starving
@@ -32,6 +37,7 @@ const CONNECTION_FLOOR = 0.4;
 /** Shape the model is asked to produce (validated defensively below). */
 interface RawAnalysis {
   topics?: unknown;
+  facts?: unknown;
   connection?: unknown;
   curiosity?: unknown;
   novelty?: unknown;
@@ -49,7 +55,9 @@ function asUnitNumber(value: unknown): number | null {
  * malformed, returns null so the caller falls back to the heuristic wholesale
  * (a half-trusted analysis is worse than a predictable fallback). Topics are
  * optional — an empty list is a legitimate result for filler messages, and is
- * exactly the noise-reduction the heuristic cannot deliver.
+ * exactly the noise-reduction the heuristic cannot deliver. Facts are equally
+ * optional and validated leniently PER ENTRY: one malformed fact is skipped
+ * without discarding the analysis (facts are an enrichment, not a core signal).
  */
 export function sanitizeAnalyzedSignal(raw: unknown): InteractionSignal | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -90,6 +98,31 @@ export function sanitizeAnalyzedSignal(raw: unknown): InteractionSignal | null {
     }
   }
 
+  const facts: FactCandidate[] = [];
+  if (Array.isArray(candidate.facts)) {
+    const seenKeys = new Set<string>();
+    for (const entry of candidate.facts) {
+      if (facts.length >= MAX_FACTS) break;
+      if (!entry || typeof entry !== "object") continue;
+      const { key, text, confidence } = entry as {
+        key?: unknown;
+        text?: unknown;
+        confidence?: unknown;
+      };
+      if (typeof key !== "string" || typeof text !== "string") continue;
+      const normalizedKey = normalizeFactKey(key);
+      if (normalizedKey.length < 2) continue;
+      const trimmedText = text.trim();
+      // Guard against empty statements and runaway paragraphs.
+      if (trimmedText.length === 0 || trimmedText.length > 200) continue;
+      const c = asUnitNumber(confidence);
+      if (c === null || c <= 0) continue;
+      if (seenKeys.has(normalizedKey)) continue;
+      seenKeys.add(normalizedKey);
+      facts.push({ key: normalizedKey, text: trimmedText, confidence: c });
+    }
+  }
+
   return {
     kind: "message",
     connection: Math.max(CONNECTION_FLOOR, connection),
@@ -100,6 +133,7 @@ export function sanitizeAnalyzedSignal(raw: unknown): InteractionSignal | null {
     topicDisplays,
     topicWeights,
     moodFactor: 1,
+    ...(facts.length > 0 ? { facts } : {}),
   };
 }
 
@@ -115,13 +149,14 @@ async function analyzeMessage(content: string): Promise<InteractionSignal> {
         content:
           'You analyze ONE user message sent to a warm AI companion. Extract:\n' +
           '1. "topics": up to 3 genuine subjects the user is engaging with — hobbies, fields, places, people, activities, concrete things (keep the user\'s language and best casing, e.g. "Astrophysik", "Paris"). NEVER include filler words, greetings, emotions, or generic verbs. Each topic gets a "weight" 0-1 for how central it is to the message. Use [] when the message carries no real subject.\n' +
-          '2. Four signal strengths, each 0-1:\n' +
+          '2. "facts": up to 3 durable personal facts the user STATED about their own life — names, relationships, pets, job, home, health, upcoming events. Each fact has: "key", a stable snake_case slot identifier so a later update lands in the same slot (e.g. "dog_name", "job", "exam_date", "partner_name", "home_city"); "text", one short third-person statement in the user\'s language (e.g. "Their dog is called Milo"); "confidence" 0-1 for how clearly it was stated. Only real, durable facts — NEVER moods, opinions, or one-off plans for today. Use [] when the message states none.\n' +
+          '3. Four signal strengths, each 0-1:\n' +
           '   "connection": how much genuine personal engagement the message shows,\n' +
           '   "curiosity": how much asking, wondering, or wanting to learn,\n' +
           '   "novelty": how new/varied the subject matter feels,\n' +
           '   "expression": how heartfelt, open, or expressive the sharing is.\n' +
           'Reply with exactly this JSON shape:\n' +
-          '{"topics":[{"topic":"Astrophysik","weight":0.9}],"connection":0.8,"curiosity":0.5,"novelty":0.6,"expression":0.4}',
+          '{"topics":[{"topic":"Astrophysik","weight":0.9}],"facts":[{"key":"dog_name","text":"Their dog is called Milo","confidence":0.9}],"connection":0.8,"curiosity":0.5,"novelty":0.6,"expression":0.4}',
       },
       { role: "user", content },
     ],
