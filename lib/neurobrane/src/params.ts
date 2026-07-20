@@ -59,6 +59,18 @@ export const NEURO_PARAMS: NeuroParams = {
       maxLines: 5,
       newInterestThreshold: 55,
     },
+    biography: {
+      // Overflowed narrative lines wait here (dated) for AI condensation. If
+      // the AI never runs, the cap quietly restores the old drop-the-oldest
+      // behavior, just with more headroom.
+      archiveMax: 30,
+      // Condense once a chapter's worth of lines has gathered.
+      condenseThreshold: 4,
+      // ~2 years of roughly-monthly chapters before the earliest fade away.
+      maxChapters: 24,
+      // At most this many chapters are woven into the persona prompt.
+      personaChapters: 2,
+    },
   },
   memory: {
     maxCount: 12,

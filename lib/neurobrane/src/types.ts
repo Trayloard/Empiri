@@ -193,6 +193,20 @@ export interface NeuroParams {
       /** Affinity at which a new interest earns a narrative line. */
       newInterestThreshold: number;
     };
+    biography: {
+      /**
+       * Maximum overflowed narrative lines held in the archive awaiting
+       * condensation; beyond this the oldest are dropped (the pre-biography
+       * behavior, so storage stays bounded even when AI is unavailable).
+       */
+      archiveMax: number;
+      /** Archive size at which a condensation run becomes due. */
+      condenseThreshold: number;
+      /** Maximum number of chapters kept (oldest dropped beyond this). */
+      maxChapters: number;
+      /** Maximum number of chapters woven into the persona at once. */
+      personaChapters: number;
+    };
   };
   memory: {
     /** Maximum number of facts kept (lowest-salience evicted). */
@@ -238,6 +252,16 @@ export interface FactSummary {
   /** How firmly the fact is held right now (0..100). */
   salience: number;
 }
+export interface ChapterSummary {
+  /** Epoch ms of the earliest moment the chapter covers. */
+  from: NowMs;
+  /** Epoch ms of the latest moment the chapter covers. */
+  to: NowMs;
+  /** The condensed chapter text, second person ("Back then you…"). */
+  text: string;
+  /** Core themes of the period (normalized topic keys, up to a few). */
+  themes: string[];
+}
 
 /** What a single block contributes to the friendly summary. */
 export interface BlockSummary {
@@ -246,6 +270,7 @@ export interface BlockSummary {
   interests?: InterestSummary[];
   narrative?: string[];
   facts?: FactSummary[];
+  chapters?: ChapterSummary[];
 }
 
 /** The merged, read-only view of the whole inner self for the peek UI. */
@@ -255,6 +280,7 @@ export interface SelfSummary {
   interests: InterestSummary[];
   narrative: string[];
   facts: FactSummary[];
+  chapters: ChapterSummary[];
   interactions: number;
   ageHours: number;
 }

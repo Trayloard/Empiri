@@ -1,4 +1,10 @@
-import type { BlockDefinition, InterestSummary, TraitSummary } from "../types";
+import type {
+  BlockDefinition,
+  ChapterSummary,
+  InterestSummary,
+  NeuroParams,
+  TraitSummary,
+} from "../types";
 import {
   clamp,
   hoursBetween,
@@ -28,10 +34,48 @@ export interface Interest {
   display?: string;
 }
 
+/** A narrative line that overflowed the rolling window, dated for condensation. */
+export interface ArchivedLine {
+  text: string;
+  /** Epoch ms when the line slid out of the rolling narrative (drop time, not creation time). */
+  at: number;
+}
+
+/** A condensed, dated chapter of the shared story ("Back in July you…"). */
+export interface Chapter {
+  /** Epoch ms of the earliest moment the chapter covers. */
+  from: number;
+  /** Epoch ms of the latest moment the chapter covers. */
+  to: number;
+  /** The condensed chapter text, second person, matching the narrative voice. */
+  text: string;
+  /** Core themes of the period (normalized topic keys). */
+  themes: string[];
+}
+
 export interface CoreSelfData {
   traits: Record<string, number>;
   interests: Interest[];
   narrative: string[];
+  /** Overflowed narrative lines awaiting AI condensation into a chapter. */
+  archive: ArchivedLine[];
+  /** The condensed life story so far, oldest chapter first. */
+  chapters: Chapter[];
+}
+
+/**
+ * Defensive normalization for persisted states that predate the biography
+ * fields (hydrate() only checks that block data exists, not its shape).
+ * Missing fields become empty — a lossless migration.
+ */
+export function normalizeCoreSelf(data: Partial<CoreSelfData> | CoreSelfData): CoreSelfData {
+  return {
+    traits: data.traits ?? {},
+    interests: data.interests ?? [],
+    narrative: data.narrative ?? [],
+    archive: Array.isArray(data.archive) ? data.archive : [],
+    chapters: Array.isArray(data.chapters) ? data.chapters : [],
+  };
 }
 
 // Which signal dimension nudges which trait upward (all inputs are 0..1).
@@ -79,12 +123,13 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
       .filter((i) => i.topic.length > 0)
       .slice(0, params.coreSelf.interest.maxCount);
     const narrative = (seed?.narrative ?? []).slice(-params.coreSelf.narrative.maxLines);
-    return { traits, interests, narrative };
+    return { traits, interests, narrative, archive: [], chapters: [] };
   },
 
-  applyInteraction(data, signal, params, ctx) {
+  applyInteraction(rawData, signal, params, ctx) {
+    const data = normalizeCoreSelf(rawData);
     const { min, max } = params.bounds;
-    const { interest, narrative } = params.coreSelf;
+    const { interest, narrative, biography } = params.coreSelf;
     const lr = params.learningRate * ctx.weight;
 
     // 1. Traits rise toward what the interaction expresses; decay relaxes them.
@@ -144,12 +189,27 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
         narrativeLines.push(`You've found yourself increasingly drawn to ${i.topic} lately.`);
       }
     }
+    // Lines that slide out of the rolling window are archived (dated) instead
+    // of silently dropped — they wait for AI condensation into a chapter. The
+    // archive itself is capped so storage stays bounded even without AI.
+    const overflowCount = Math.max(0, narrativeLines.length - narrative.maxLines);
+    const overflowed = narrativeLines
+      .slice(0, overflowCount)
+      .map((text) => ({ text, at: ctx.now }));
+    const archive = [...data.archive, ...overflowed].slice(-biography.archiveMax);
     const trimmedNarrative = narrativeLines.slice(-narrative.maxLines);
 
-    return { traits, interests: kept, narrative: trimmedNarrative };
+    return {
+      traits,
+      interests: kept,
+      narrative: trimmedNarrative,
+      archive,
+      chapters: data.chapters,
+    };
   },
 
-  decay(data, params, ctx) {
+  decay(rawData, params, ctx) {
+    const data = normalizeCoreSelf(rawData);
     const hrs = hoursBetween(ctx.elapsedMs);
     if (hrs <= 0) return data;
     const { min, max } = params.bounds;
@@ -168,10 +228,17 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
       .map((i) => ({ ...i, affinity: clamp(i.affinity - lost, min, max) }))
       .filter((i) => i.affinity > 0.5);
 
-    return { traits, interests, narrative: data.narrative };
+    return {
+      traits,
+      interests,
+      narrative: data.narrative,
+      archive: data.archive,
+      chapters: data.chapters,
+    };
   },
 
-  contributePersona(data, params) {
+  contributePersona(rawData, params) {
+    const data = normalizeCoreSelf(rawData);
     const { traitBaselines, interest } = params.coreSelf;
     const adjectives = Object.entries(data.traits)
       .map(([key, value]) => ({ key, value, lift: value - (traitBaselines[key] ?? 0) }))
@@ -192,10 +259,22 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
       parts.push(`Lately you've grown genuinely curious about ${joinNatural(topInterests)}.`);
     }
     if (data.narrative.length > 0) parts.push(data.narrative[data.narrative.length - 1]);
+
+    // A whisper of the longer story: the most recent chapter, plus at most one
+    // older chapter that still resonates with a current surfaced interest.
+    // Strictly capped so the prompt never bloats as chapters accumulate.
+    const chosen = selectPersonaChapters(data, params);
+    if (chosen.length > 0) {
+      const lines = chosen.map((c) => c.text.replace(/[.?!]+$/, ""));
+      parts.push(
+        `Earlier chapters of your story together (you may gently reference them, like an old friend would): ${lines.join(". ")}.`,
+      );
+    }
     return parts.join(" ");
   },
 
-  summarize(data, params) {
+  summarize(rawData, params) {
+    const data = normalizeCoreSelf(rawData);
     const traits: TraitSummary[] = Object.entries(data.traits).map(([key, value]) => ({
       key,
       value: round1(value),
@@ -207,6 +286,33 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
         affinity: round1(i.affinity),
         display: i.display ?? i.topic,
       }));
-    return { traits, interests, narrative: [...data.narrative] };
+    const chapters: ChapterSummary[] = [...data.chapters]
+      .sort((a, b) => a.from - b.from)
+      .map((c) => ({ from: c.from, to: c.to, text: c.text, themes: [...c.themes] }));
+    return { traits, interests, narrative: [...data.narrative], chapters };
   },
 };
+
+/**
+ * Pick which chapters the persona may reference: always the most recent one,
+ * plus older chapters whose themes overlap a currently surfaced interest (the
+ * "salience" proxy — the past that still echoes in the present), newest first,
+ * capped at params.coreSelf.biography.personaChapters.
+ */
+export function selectPersonaChapters(data: CoreSelfData, params: NeuroParams): Chapter[] {
+  const { biography, interest } = params.coreSelf;
+  if (data.chapters.length === 0 || biography.personaChapters <= 0) return [];
+
+  const byRecency = [...data.chapters].sort((a, b) => b.to - a.to);
+  const surfaced = new Set(
+    data.interests.filter((i) => i.affinity >= interest.surfaceThreshold).map((i) => i.topic),
+  );
+
+  const chosen: Chapter[] = [byRecency[0]];
+  for (const chapter of byRecency.slice(1)) {
+    if (chosen.length >= biography.personaChapters) break;
+    if (chapter.themes.some((t) => surfaced.has(t))) chosen.push(chapter);
+  }
+  // Tell the story oldest-first so "back then → more recently" reads naturally.
+  return chosen.sort((a, b) => a.from - b.from);
+}

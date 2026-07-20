@@ -1,9 +1,12 @@
 import { openai } from "@workspace/integrations-openai-ai-server";
 import {
+  applyChapter,
   deriveMessageSignal,
   evolve,
   normalizeFactKey,
   normalizeTopic,
+  pendingBiographyLines,
+  type ArchivedLine,
   type FactCandidate,
   type InteractionSignal,
 } from "@workspace/neurobrane";
@@ -190,6 +193,103 @@ export async function resolveMessageSignal(
   }
 }
 
+/** Maximum number of themes a condensed chapter may carry. */
+const MAX_CHAPTER_THEMES = 3;
+
+/** Maximum length of a condensed chapter text (1-2 sentences, hard bound). */
+const MAX_CHAPTER_TEXT = 300;
+
+/**
+ * Validate the model's condensation output. Strict: a chapter without usable
+ * text is worthless, so we return null and leave the archive untouched (it
+ * will be retried on a later overflow, or capped away — the old behavior).
+ */
+export function sanitizeCondensedChapter(
+  raw: unknown,
+): { text: string; themes: string[] } | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const { text, themes } = raw as { text?: unknown; themes?: unknown };
+  if (typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_CHAPTER_TEXT) return null;
+
+  const cleanThemes: string[] = [];
+  if (Array.isArray(themes)) {
+    for (const entry of themes) {
+      if (cleanThemes.length >= MAX_CHAPTER_THEMES) break;
+      if (typeof entry !== "string") continue;
+      const key = normalizeTopic(entry);
+      if (key.length < 2 || cleanThemes.includes(key)) continue;
+      cleanThemes.push(key);
+    }
+  }
+  return { text: trimmed, themes: cleanThemes };
+}
+
+/** Ask the model to condense dated archive lines into one chapter. Throws on failure. */
+async function condenseArchiveLines(
+  lines: ArchivedLine[],
+): Promise<{ text: string; themes: string[] }> {
+  const dated = lines
+    .map((l) => `${new Date(l.at).toISOString().slice(0, 10)}: ${l.text}`)
+    .join("\n");
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-5-mini",
+    max_completion_tokens: 1024,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          "You condense dated diary-like lines from an AI companion's self-narrative into ONE chapter of the shared story with its user.\n" +
+          'Reply with exactly this JSON shape: {"text":"...","themes":["..."]}\n' +
+          '"text": 1-2 warm sentences in the SAME LANGUAGE as the lines, second person ("You..."), past tense, naturally mentioning the period (e.g. "Back in early July..."). Capture what mattered in that stretch, not a list.\n' +
+          `"themes": up to ${MAX_CHAPTER_THEMES} short lowercase topic keywords for the period (e.g. "jazz", "job", "hiking").`,
+      },
+      { role: "user", content: dated },
+    ],
+  });
+
+  const text = completion.choices[0]?.message?.content?.trim() ?? "";
+  const chapter = sanitizeCondensedChapter(JSON.parse(text));
+  if (!chapter) throw new Error("Model condensation did not match the expected shape");
+  return chapter;
+}
+
+/**
+ * Condense the overflowed narrative archive into a dated chapter once enough
+ * lines have gathered. Runs inside the conversation queue, AFTER the fold has
+ * been saved. Never throws: on any failure the archive simply stays as it is
+ * (bounded by its cap — the pre-biography behavior).
+ */
+async function maybeCondenseBiography(
+  conversationId: number,
+  evolved: Parameters<typeof saveSelf>[1],
+  log?: SignalLogger,
+): Promise<void> {
+  try {
+    const lines = pendingBiographyLines(evolved);
+    if (lines.length === 0) return;
+
+    const condensed = await condenseArchiveLines(lines);
+
+    // Reload before folding the chapter in: dev routes write the self outside
+    // this queue, and the AI call above took real time.
+    const fresh = await loadOrCreateSelf(conversationId);
+    const chapter = {
+      from: Math.min(...lines.map((l) => l.at)),
+      to: Math.max(...lines.map((l) => l.at)),
+      text: condensed.text,
+      themes: condensed.themes,
+    };
+    const withChapter = applyChapter(fresh, chapter, lines.length);
+    await saveSelf(conversationId, withChapter);
+  } catch (err) {
+    log?.warn({ err }, "Biography condensation failed; archive left for a later run");
+  }
+}
+
 /** Per-conversation tail of the evolution queue (serializes folds). */
 const evolutionQueues = new Map<number, Promise<void>>();
 
@@ -235,6 +335,10 @@ export function queueSelfEvolution(
       const evolved = evolve(self, signal);
       await saveSelf(conversationId, evolved);
       await maybeSnapshotSelf(conversationId, evolved);
+      // After the fold is safely saved: turn a full archive into a chapter.
+      // Still inside this conversation's queue entry, so no other fold can
+      // interleave; its own failures never disturb the saved evolution.
+      await maybeCondenseBiography(conversationId, evolved, log);
     } catch (err) {
       log?.error({ err }, "Failed to evolve companion self");
     }

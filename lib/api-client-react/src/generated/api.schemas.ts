@@ -146,6 +146,17 @@ export interface CompanionFact {
   salience: number;
 }
 
+export interface CompanionChapter {
+  /** Epoch ms of the earliest moment the chapter covers. */
+  from: number;
+  /** Epoch ms of the latest moment the chapter covers. */
+  to: number;
+  /** The condensed chapter text, second person ("Back then you…"). */
+  text: string;
+  /** Core themes of the period (normalized topic keys). */
+  themes: string[];
+}
+
 /**
  * Meaning-based grouping of curiosities, computed server-side — maps a normalized interest topic key to its theme label. Topics absent from the map stand alone. Null when grouping is temporarily unavailable.
  * @nullable
@@ -159,6 +170,8 @@ export interface CompanionSelf {
   narrative: string[];
   /** Durable personal facts the companion remembers about the user, most salient first. */
   facts: CompanionFact[];
+  /** The condensed life story so far — dated chapters, oldest first. */
+  chapters: CompanionChapter[];
   interactions: number;
   ageHours: number;
   /**

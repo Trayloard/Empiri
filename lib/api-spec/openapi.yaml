@@ -837,6 +837,28 @@ components:
         - key
         - text
         - salience
+    CompanionChapter:
+      type: object
+      properties:
+        from:
+          type: number
+          description: Epoch ms of the earliest moment the chapter covers.
+        to:
+          type: number
+          description: Epoch ms of the latest moment the chapter covers.
+        text:
+          type: string
+          description: The condensed chapter text, second person ("Back then you…").
+        themes:
+          type: array
+          description: Core themes of the period (normalized topic keys).
+          items:
+            type: string
+      required:
+        - from
+        - to
+        - text
+        - themes
     CompanionSelf:
       type: object
       properties:
@@ -861,6 +883,11 @@ components:
           description: Durable personal facts the companion remembers about the user, most salient first.
           items:
             $ref: "#/components/schemas/CompanionFact"
+        chapters:
+          type: array
+          description: The condensed life story so far — dated chapters, oldest first.
+          items:
+            $ref: "#/components/schemas/CompanionChapter"
         interactions:
           type: integer
         ageHours:
@@ -876,6 +903,7 @@ components:
         - interests
         - narrative
         - facts
+        - chapters
         - interactions
         - ageHours
         - themes

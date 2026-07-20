@@ -669,7 +669,8 @@ router.post("/conversations/:id/dev/regress", async (req, res) => {
       regressedBlocks[blockId] = {
         ...envelope,
         lastUpdatedAt: now,
-        data: { traits, interests, narrative },
+        // Spread first so newer core-self fields (archive, chapters) survive.
+        data: { ...data, traits, interests, narrative },
       };
     } else if (blockId === "drives") {
       const data = envelope.data as { levels: Record<string, number> };

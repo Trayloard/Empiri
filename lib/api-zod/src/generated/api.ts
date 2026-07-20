@@ -252,6 +252,12 @@ export const GetCompanionSelfResponse = zod.object({
   "text": zod.string().describe('The remembered statement, third-person (\"Their dog is called Milo\").'),
   "salience": zod.number().describe('How firmly the fact is held right now (0-100); grows on re-mention, fades over time.')
 })).describe('Durable personal facts the companion remembers about the user, most salient first.'),
+  "chapters": zod.array(zod.object({
+  "from": zod.number().describe('Epoch ms of the earliest moment the chapter covers.'),
+  "to": zod.number().describe('Epoch ms of the latest moment the chapter covers.'),
+  "text": zod.string().describe('The condensed chapter text, second person (\"Back then you…\").'),
+  "themes": zod.array(zod.string()).describe('Core themes of the period (normalized topic keys).')
+})).describe('The condensed life story so far — dated chapters, oldest first.'),
   "interactions": zod.number(),
   "ageHours": zod.number(),
   "themes": zod.record(zod.string(), zod.string()).nullable().describe('Meaning-based grouping of curiosities, computed server-side — maps a normalized interest topic key to its theme label. Topics absent from the map stand alone. Null when grouping is temporarily unavailable.')

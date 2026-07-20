@@ -26,6 +26,7 @@ import { FONTS } from "@/constants/fonts";
 import { accentForWarmth } from "@/lib/accent";
 import {
   buildTimeline,
+  chapterPeriodLabel,
   firstSeenCuriosities,
   relativeWhen,
   sparklinePath,
@@ -167,6 +168,9 @@ export function GrowthTimeline({
   const firstInteractions = points[0]?.interactions ?? 0;
   const nowInteractions = lastPoint?.interactions ?? 0;
   const gained = Math.max(0, nowInteractions - firstInteractions);
+  // Served oldest-first by the API; sort defensively so the story always
+  // reads chronologically.
+  const chapters = [...(self?.chapters ?? [])].sort((a, b) => a.from - b.from);
 
   return (
     <Animated.View style={[styles.flex, fadeStyle]} testID="growth-timeline">
@@ -324,6 +328,47 @@ export function GrowthTimeline({
             <Text style={styles.momentsCaption}>
               every message leaves a mark on me
             </Text>
+          )}
+        </View>
+
+        {/* OUR STORY */}
+        <View style={styles.card} testID="growth-story">
+          <Text style={styles.cardTitle}>OUR STORY</Text>
+          <Text style={styles.cardSub}>
+            the chapters our months together have written
+          </Text>
+          {chapters.length === 0 ? (
+            <Text style={styles.emptyLine}>
+              Our first chapter is still being written — keep talking with me.
+            </Text>
+          ) : (
+            <View style={styles.chapterList}>
+              {chapters.map((c, i) => (
+                <View key={`${c.from}-${i}`} style={styles.chapterRow}>
+                  <View style={styles.chapterRail}>
+                    <View style={styles.chapterDot} />
+                    {i < chapters.length - 1 ? (
+                      <View style={styles.chapterLine} />
+                    ) : null}
+                  </View>
+                  <View style={styles.chapterBody}>
+                    <Text style={styles.chapterWhen}>
+                      {chapterPeriodLabel(c.from, c.to)}
+                    </Text>
+                    <Text style={styles.chapterText}>{c.text}</Text>
+                    {c.themes.length > 0 ? (
+                      <View style={styles.themeRow}>
+                        {c.themes.map((t) => (
+                          <View key={t} style={styles.themeChip}>
+                            <Text style={styles.themeChipText}>{t}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              ))}
+            </View>
           )}
         </View>
 
@@ -505,6 +550,69 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "rgba(255,255,255,0.45)",
     marginTop: 14,
+  },
+  chapterList: {
+    marginTop: 16,
+  },
+  chapterRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  chapterRail: {
+    alignItems: "center",
+    width: 10,
+  },
+  chapterDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 5,
+    backgroundColor: "rgba(181,140,255,0.85)",
+  },
+  chapterLine: {
+    flex: 1,
+    width: 1.5,
+    marginTop: 3,
+    marginBottom: 3,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  chapterBody: {
+    flex: 1,
+    paddingBottom: 18,
+  },
+  chapterWhen: {
+    fontFamily: MONO,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: "rgba(255,255,255,0.4)",
+  },
+  chapterText: {
+    fontFamily: FONTS.regular,
+    fontSize: 14.5,
+    lineHeight: 21,
+    color: "rgba(255,255,255,0.86)",
+    marginTop: 5,
+  },
+  themeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 8,
+  },
+  themeChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  themeChipText: {
+    fontFamily: MONO,
+    fontSize: 10.5,
+    letterSpacing: 0.5,
+    color: "rgba(255,255,255,0.55)",
+    textTransform: "lowercase",
   },
   curioList: {
     marginTop: 14,

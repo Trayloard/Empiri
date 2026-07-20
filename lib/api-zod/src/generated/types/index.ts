@@ -12,6 +12,7 @@ export * from './authUser';
 export * from './authUserEnvelope';
 export * from './beginBrowserLoginParams';
 export * from './checkInInput';
+export * from './companionChapter';
 export * from './companionDrive';
 export * from './companionFact';
 export * from './companionInterest';

@@ -6,6 +6,7 @@ import type {
 import {
   axisDateLabel,
   buildTimeline,
+  chapterPeriodLabel,
   firstSeenCuriosities,
   relativeWhen,
   sparklinePath,
@@ -45,9 +46,36 @@ function live(
     traits: Object.entries(traits).map(([key, value]) => ({ key, value })),
     interests: interests.map((it) => ({ ...it, display: it.display ?? it.topic })),
     facts: [],
+    chapters: [],
     themes: null,
   };
 }
+
+describe("chapterPeriodLabel", () => {
+  it("labels a single-month period as month + year", () => {
+    const from = new Date(2026, 6, 3).getTime();
+    const to = new Date(2026, 6, 24).getTime();
+    expect(chapterPeriodLabel(from, to)).toBe("Jul 2026");
+  });
+
+  it("labels a same-year span with both months", () => {
+    const from = new Date(2026, 6, 3).getTime();
+    const to = new Date(2026, 8, 15).getTime();
+    expect(chapterPeriodLabel(from, to)).toBe("Jul – Sep 2026");
+  });
+
+  it("labels a cross-year span with both years", () => {
+    const from = new Date(2026, 11, 20).getTime();
+    const to = new Date(2027, 0, 9).getTime();
+    expect(chapterPeriodLabel(from, to)).toBe("Dec 2026 – Jan 2027");
+  });
+
+  it("tolerates swapped bounds", () => {
+    const from = new Date(2026, 6, 24).getTime();
+    const to = new Date(2026, 6, 3).getTime();
+    expect(chapterPeriodLabel(from, to)).toBe("Jul 2026");
+  });
+});
 
 describe("buildTimeline", () => {
   it("sorts snapshots oldest→newest and appends the live now point", () => {

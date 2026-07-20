@@ -24,9 +24,14 @@ export { normalizeTopic, preferredDisplay } from "./util";
 export {
   coreSelfBlock,
   CORE_SELF_BLOCK_ID,
+  normalizeCoreSelf,
+  selectPersonaChapters,
+  type ArchivedLine,
+  type Chapter,
   type CoreSelfData,
   type Interest,
 } from "./blocks/coreSelf";
+export { pendingBiographyLines, applyChapter } from "./biography";
 export { drivesBlock, DRIVES_BLOCK_ID, type DrivesData } from "./blocks/drives";
 export {
   memoryBlock,

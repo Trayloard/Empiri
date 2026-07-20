@@ -229,6 +229,24 @@ export function axisDateLabel(at: number, now: number = Date.now()): string {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
+/**
+ * Human period label for a chapter of the shared story: "Jul 2026" when it
+ * falls inside one month, "Jul – Sep 2026" across months, and
+ * "Dec 2026 – Jan 2027" across years. Local time, like the rest of the sheet.
+ */
+export function chapterPeriodLabel(from: number, to: number): string {
+  const a = new Date(Math.min(from, to));
+  const b = new Date(Math.max(from, to));
+  const sameYear = a.getFullYear() === b.getFullYear();
+  if (sameYear && a.getMonth() === b.getMonth()) {
+    return `${MONTHS[a.getMonth()]} ${a.getFullYear()}`;
+  }
+  if (sameYear) {
+    return `${MONTHS[a.getMonth()]} – ${MONTHS[b.getMonth()]} ${a.getFullYear()}`;
+  }
+  return `${MONTHS[a.getMonth()]} ${a.getFullYear()} – ${MONTHS[b.getMonth()]} ${b.getFullYear()}`;
+}
+
 export interface AxisTick {
   /** normalized 0..1 position along the time axis */
   pos: number;
