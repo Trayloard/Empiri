@@ -48,6 +48,11 @@ export interface InteractionSignal {
    * memory block simply doesn't grow when analysis is unavailable.
    */
   facts?: FactCandidate[];
+  /**
+   * Optional device percepts riding along with this fold (already sanitized).
+   * Only the senses block consumes them; every other block ignores the field.
+   */
+  percepts?: Percept[];
 }
 
 /**
@@ -60,6 +65,24 @@ export interface FactCandidate {
   key: string;
   text: string;
   confidence: number;
+}
+
+/** The device "senses" a percept can come from. Deliberately coarse — no
+ * location, no microphone, no health data. */
+export type PerceptKind = "shake" | "charging" | "battery_low" | "daypart";
+
+/**
+ * One gentle moment of device perception, reported by the client with the
+ * user's consent (opt-in). `intensity` (0..1) is how salient the moment felt;
+ * `at` is when it happened (epoch ms, client clock — sanitized server-side).
+ * `detail` carries an optional qualifier such as the daypart bucket
+ * ("early_morning", "late_night").
+ */
+export interface Percept {
+  kind: PerceptKind;
+  intensity: number;
+  at: NowMs;
+  detail?: string;
 }
 
 /**
@@ -207,6 +230,26 @@ export interface NeuroParams {
       /** Maximum number of chapters woven into the persona at once. */
       personaChapters: number;
     };
+  };
+  senses: {
+    /** Maximum recent percepts retained (oldest dropped beyond this). */
+    maxRecent: number;
+    /** Minutes a percept stays "fresh"; older ones are pruned on decay. */
+    freshWindowMinutes: number;
+    /** Intensity (0..1) at/above which a fresh percept surfaces in the persona. */
+    surfaceThreshold: number;
+    /** Intensity a repeat percept is dampened to while its kind is throttled. */
+    dampenedIntensity: number;
+    /** Per-kind minutes before the same kind may be offered to the persona again. */
+    voiceThrottleMinutes: Record<string, number>;
+    /** Fallback throttle (minutes) for kinds missing from the map above. */
+    defaultThrottleMinutes: number;
+    /** Maximum percepts accepted per fold (sanitization cap). */
+    maxPerFold: number;
+    /** Percepts older than this many hours are rejected as stale. */
+    maxStaleHours: number;
+    /** Master multiplier on the tiny drive nudges percepts produce. */
+    driveImpulseScale: number;
   };
   memory: {
     /** Maximum number of facts kept (lowest-salience evicted). */

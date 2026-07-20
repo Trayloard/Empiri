@@ -3,11 +3,13 @@ import type {
   InnerSelf,
   InteractionSignal,
   NeuroParams,
+  Percept,
   SelfSeed,
   SelfSummary,
 } from "./types";
 import { NEURO_PARAMS } from "./params";
 import { enabledBlocks } from "./blocks/registry";
+import { perceptDriveNudges, sanitizePercepts } from "./blocks/senses";
 import { clamp, extractTopicsDetailed, round1 } from "./util";
 import { BASE_IDENTITY, INNER_HEADER, STYLE_RULES } from "./persona";
 
@@ -108,6 +110,53 @@ export function evolve(
     blocks[block.id] = { version: block.version, lastUpdatedAt: now, data };
   }
   return { ...decayed, blocks, interactions: decayed.interactions + 1 };
+}
+
+/**
+ * Fold pure device perception into the self WITHOUT counting an interaction —
+ * a percept is an ambient feeling, not a genuine exchange. The percepts ride a
+ * synthetic near-zero signal (only the tiny drive nudges they themselves
+ * produce), so every other block effectively no-ops while the senses block
+ * stores the moments and the drives shift ever so slightly. Sanitizes its
+ * input, so callers may pass raw client data. With no valid percepts this is
+ * exactly `project` (time-decay only).
+ */
+export function perceive(
+  self: InnerSelf,
+  percepts: Percept[] | unknown,
+  params: NeuroParams = NEURO_PARAMS,
+  now: number = Date.now(),
+): InnerSelf {
+  const clean = sanitizePercepts(percepts, now, params);
+  if (clean.length === 0) return project(self, params, now);
+
+  const nudges = perceptDriveNudges(clean, params);
+  const signal: InteractionSignal = {
+    kind: "checkin",
+    connection: nudges.connection,
+    curiosity: nudges.curiosity,
+    novelty: nudges.novelty,
+    expression: nudges.expression,
+    topics: [],
+    moodFactor: 1,
+    percepts: clean,
+  };
+
+  const decayed = project(self, params, now);
+  const blocks: Record<string, BlockEnvelope> = { ...decayed.blocks };
+  for (const block of enabledBlocks(params)) {
+    const env = blocks[block.id];
+    if (!env) continue;
+    const weight = params.blockWeights[block.id] ?? 1;
+    const data = block.applyInteraction(env.data, signal, params, {
+      now,
+      elapsedMs: 0,
+      weight,
+    });
+    blocks[block.id] = { version: block.version, lastUpdatedAt: now, data };
+  }
+  // Deliberately NOT incrementing `interactions`.
+  return { ...decayed, blocks };
 }
 
 /**

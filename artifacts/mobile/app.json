@@ -16,7 +16,8 @@
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Empiri uses your microphone so you can talk to your companion by voice."
+        "NSMicrophoneUsageDescription": "Empiri uses your microphone so you can talk to your companion by voice.",
+        "NSMotionUsageDescription": "With Senses turned on, Empiri notices gentle motion like a playful shake while the app is open."
       }
     },
     "android": {
@@ -44,6 +45,12 @@
         "expo-notifications",
         {
           "color": "#A855F7"
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "With Senses turned on, Empiri notices gentle motion like a playful shake while the app is open."
         }
       ]
     ],

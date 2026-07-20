@@ -77,9 +77,44 @@ export interface Message {
   createdAt: string;
 }
 
+export type PerceptKind = typeof PerceptKind[keyof typeof PerceptKind];
+
+
+export const PerceptKind = {
+  shake: 'shake',
+  charging: 'charging',
+  battery_low: 'battery_low',
+  daypart: 'daypart',
+} as const;
+
+/**
+ * One gentle, privacy-safe moment of device perception (opt-in only).
+ */
+export interface Percept {
+  kind: PerceptKind;
+  /**
+     * How salient the moment felt, 0-1
+     * @minimum 0
+     * @maximum 1
+     */
+  intensity: number;
+  /** When it happened (epoch milliseconds, client clock) */
+  at: number;
+  /**
+     * Optional qualifier, e.g. the daypart bucket ("late_night")
+     * @maxLength 32
+     */
+  detail?: string;
+}
+
 export interface MessageInput {
   /** @minLength 1 */
   content: string;
+  /**
+     * Device percepts sensed since the last send (opt-in senses only)
+     * @maxItems 8
+     */
+  percepts?: Percept[];
 }
 
 export interface SendMessageResult {
@@ -94,6 +129,11 @@ export interface CheckInInput {
   mood: string;
   /** How much the companion has been missing the user, 0-100 */
   missingYou?: number;
+  /**
+     * Device percepts sensed since the last send (opt-in senses only)
+     * @maxItems 8
+     */
+  percepts?: Percept[];
 }
 
 export interface TranscribeInput {

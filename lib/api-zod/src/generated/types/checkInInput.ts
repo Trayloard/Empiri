@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { Percept } from './percept';
 
 export interface CheckInInput {
   /** Approximate hours since the user last interacted */
@@ -13,4 +14,9 @@ export interface CheckInInput {
   mood: string;
   /** How much the companion has been missing the user, 0-100 */
   missingYou?: number;
+  /**
+     * Device percepts sensed since the last send (opt-in senses only)
+     * @maxItems 8
+     */
+  percepts?: Percept[];
 }

@@ -177,10 +177,23 @@ export const SendMessageParams = zod.object({
 })
 
 
+export const sendMessageBodyPerceptsItemIntensityMin = 0;
+export const sendMessageBodyPerceptsItemIntensityMax = 1;
+
+export const sendMessageBodyPerceptsItemDetailMax = 32;
+
+export const sendMessageBodyPerceptsMax = 8;
+
 
 
 export const SendMessageBody = zod.object({
-  "content": zod.string().min(1)
+  "content": zod.string().min(1),
+  "percepts": zod.array(zod.object({
+  "kind": zod.enum(['shake', 'charging', 'battery_low', 'daypart']),
+  "intensity": zod.number().min(sendMessageBodyPerceptsItemIntensityMin).max(sendMessageBodyPerceptsItemIntensityMax).describe('How salient the moment felt, 0-1'),
+  "at": zod.number().describe('When it happened (epoch milliseconds, client clock)'),
+  "detail": zod.string().max(sendMessageBodyPerceptsItemDetailMax).optional().describe('Optional qualifier, e.g. the daypart bucket (\"late_night\")')
+}).describe('One gentle, privacy-safe moment of device perception (opt-in only).')).max(sendMessageBodyPerceptsMax).optional().describe('Device percepts sensed since the last send (opt-in senses only)')
 })
 
 export const SendMessageResponse = zod.object({
@@ -208,10 +221,25 @@ export const CompanionCheckInParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const companionCheckInBodyPerceptsItemIntensityMin = 0;
+export const companionCheckInBodyPerceptsItemIntensityMax = 1;
+
+export const companionCheckInBodyPerceptsItemDetailMax = 32;
+
+export const companionCheckInBodyPerceptsMax = 8;
+
+
+
 export const CompanionCheckInBody = zod.object({
   "hoursAway": zod.number().describe('Approximate hours since the user last interacted'),
   "mood": zod.string().describe('The companion\'s current mood label (e.g. sleepy, happy, bright)'),
-  "missingYou": zod.number().optional().describe('How much the companion has been missing the user, 0-100')
+  "missingYou": zod.number().optional().describe('How much the companion has been missing the user, 0-100'),
+  "percepts": zod.array(zod.object({
+  "kind": zod.enum(['shake', 'charging', 'battery_low', 'daypart']),
+  "intensity": zod.number().min(companionCheckInBodyPerceptsItemIntensityMin).max(companionCheckInBodyPerceptsItemIntensityMax).describe('How salient the moment felt, 0-1'),
+  "at": zod.number().describe('When it happened (epoch milliseconds, client clock)'),
+  "detail": zod.string().max(companionCheckInBodyPerceptsItemDetailMax).optional().describe('Optional qualifier, e.g. the daypart bucket (\"late_night\")')
+}).describe('One gentle, privacy-safe moment of device perception (opt-in only).')).max(companionCheckInBodyPerceptsMax).optional().describe('Device percepts sensed since the last send (opt-in senses only)')
 })
 
 export const CompanionCheckInResponse = zod.object({

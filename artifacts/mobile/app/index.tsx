@@ -144,6 +144,8 @@ export default function CompanionScreen() {
     setCheckInCadence,
     quietHours,
     setQuietHours,
+    sensesEnabled,
+    toggleSenses,
     retryInit,
     dismissError,
     devTriggerCheckIn,
@@ -577,6 +579,8 @@ export default function CompanionScreen() {
         onSelect={setCheckInCadence}
         quietHours={quietHours}
         onQuietHoursChange={setQuietHours}
+        sensesEnabled={sensesEnabled}
+        onSensesToggle={toggleSenses}
         onClose={() => setSettingsVisible(false)}
         accent={accent}
         onPersonalize={handlePersonalize}

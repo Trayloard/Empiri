@@ -37,6 +37,8 @@ export * from './message';
 export * from './messageInput';
 export * from './mobileTokenExchangeRequest';
 export * from './mobileTokenExchangeSuccess';
+export * from './percept';
+export * from './perceptKind';
 export * from './sendMessageResult';
 export * from './speechInput';
 export * from './speechResult';

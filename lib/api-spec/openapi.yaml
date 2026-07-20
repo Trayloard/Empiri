@@ -785,12 +785,41 @@ components:
         - role
         - content
         - createdAt
+    Percept:
+      type: object
+      description: One gentle, privacy-safe moment of device perception (opt-in only).
+      properties:
+        kind:
+          type: string
+          enum: [shake, charging, battery_low, daypart]
+        intensity:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: How salient the moment felt, 0-1
+        at:
+          type: number
+          description: When it happened (epoch milliseconds, client clock)
+        detail:
+          type: string
+          maxLength: 32
+          description: Optional qualifier, e.g. the daypart bucket ("late_night")
+      required:
+        - kind
+        - intensity
+        - at
     MessageInput:
       type: object
       properties:
         content:
           type: string
           minLength: 1
+        percepts:
+          type: array
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/Percept"
+          description: Device percepts sensed since the last send (opt-in senses only)
       required:
         - content
     SendMessageResult:
@@ -815,6 +844,12 @@ components:
         missingYou:
           type: number
           description: How much the companion has been missing the user, 0-100
+        percepts:
+          type: array
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/Percept"
+          description: Device percepts sensed since the last send (opt-in senses only)
       required:
         - hoursAway
         - mood

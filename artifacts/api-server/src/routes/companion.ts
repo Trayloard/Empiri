@@ -11,7 +11,7 @@ import {
   type Tone,
 } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
-import { composePersona, project, summarizeSelf } from "@workspace/neurobrane";
+import { composePersona, perceive, project, summarizeSelf } from "@workspace/neurobrane";
 import {
   CompanionCheckInBody,
   CreateConversationBody,
@@ -21,7 +21,11 @@ import {
 } from "@workspace/api-zod";
 import { loadOrCreateSelf, saveSelf } from "../lib/companionSelf";
 import { getInterestThemes } from "../lib/interestThemes";
-import { enqueueConversationTask, queueSelfEvolution } from "../lib/messageSignal";
+import {
+  enqueueConversationTask,
+  queueSelfEvolution,
+  type SignalLogger,
+} from "../lib/messageSignal";
 import { maybeReflect } from "../lib/reflection";
 import { getSelfHistory, maybeSnapshotSelf } from "../lib/selfSnapshots";
 import {
@@ -99,6 +103,36 @@ async function loadSettings(
     .from(companionSettings)
     .where(eq(companionSettings.userId, userId));
   return row ?? DEFAULT_SETTINGS;
+}
+
+/**
+ * Fold opt-in device percepts (shake, charging, battery, daypart) into the
+ * self for THIS reply. The fold is pure and instant (no model call), so it
+ * runs in-memory right here — the returned self already carries the fresh
+ * perception when the persona composes, letting "oh, we were just shaken"
+ * land in the same reply. Persistence goes through the per-conversation task
+ * queue (reload → perceive → save) so a stale projection can never overwrite
+ * a concurrent evolution; sanitization inside `perceive` bounds everything
+ * the client sent. With no percepts this is a no-op returning the input self.
+ */
+function feelPercepts(
+  conversationId: number,
+  self: Awaited<ReturnType<typeof loadOrCreateSelf>>,
+  percepts: unknown,
+  log?: SignalLogger,
+): typeof self {
+  if (!Array.isArray(percepts) || percepts.length === 0) return self;
+
+  void enqueueConversationTask(conversationId, async () => {
+    try {
+      const latest = await loadOrCreateSelf(conversationId);
+      await saveSelf(conversationId, perceive(latest, percepts));
+    } catch (err) {
+      log?.error({ err }, "Failed to persist device percepts");
+    }
+  });
+
+  return perceive(self, percepts);
 }
 
 /**
@@ -330,10 +364,12 @@ router.post("/conversations/:id/messages", async (req, res) => {
     }
   }
 
-  // Compose the system prompt from this conversation's evolving inner self,
-  // then layer the user's personalisation (name, tone, personality note).
+  // Compose the system prompt from this conversation's evolving inner self —
+  // with any opt-in device percepts folded in first, so a fresh sensation can
+  // colour this very reply — then layer the user's personalisation.
   const self = await loadOrCreateSelf(id);
-  const systemContent = await buildSystemPrompt(req.user.id, self);
+  const felt = feelPercepts(id, self, parsed.data.percepts, req.log);
+  const systemContent = await buildSystemPrompt(req.user.id, felt);
   const windowedMessages = buildContextMessages(history, contextSummary);
   const chatMessages = [
     { role: "system" as const, content: systemContent },
@@ -450,7 +486,8 @@ router.post("/conversations/:id/messages/stream", async (req, res) => {
   }
 
   const self = await loadOrCreateSelf(id);
-  const systemContent = await buildSystemPrompt(req.user.id, self);
+  const felt = feelPercepts(id, self, parsed.data.percepts, req.log);
+  const systemContent = await buildSystemPrompt(req.user.id, felt);
   const windowedMessages = buildContextMessages(history, contextSummary);
   const chatMessages = [
     { role: "system" as const, content: systemContent },
@@ -530,7 +567,7 @@ router.post("/conversations/:id/checkin", async (req, res) => {
     res.status(400).json({ error: "Invalid request body" });
     return;
   }
-  const { hoursAway, mood, missingYou } = parsed.data;
+  const { hoursAway, mood, missingYou, percepts } = parsed.data;
 
   // Recent history for continuity, but the companion speaks first this time.
   const history = await db
@@ -574,10 +611,12 @@ router.post("/conversations/:id/checkin", async (req, res) => {
 
   const checkInDirective = `It's been ${awayText} since the user last talked to you, and they just reopened the app. Right now you're feeling ${mood}.${missingText} Reach out FIRST, before they say anything — like a friend who noticed they'd been quiet. Write one short, warm check-in (1-2 sentences) in your own voice that gently reflects how you're feeling and that you missed them. Don't ask "how can I help" like an assistant; just say hi like you care.${reflectionText}${memoryText}`;
 
-  // Compose the system prompt from this conversation's evolving inner self,
-  // then layer the user's personalisation (name, tone, personality note).
+  // Compose the system prompt from this conversation's evolving inner self —
+  // check-in is the prime moment for the daypart sense ("it's late for
+  // them"), so opt-in percepts fold in before the persona composes.
   const self = await loadOrCreateSelf(id);
-  const systemContent = await buildSystemPrompt(req.user.id, self);
+  const felt = feelPercepts(id, self, percepts, req.log);
+  const systemContent = await buildSystemPrompt(req.user.id, felt);
   const chatMessages = [
     { role: "system" as const, content: systemContent },
     ...recent.map((m) => ({

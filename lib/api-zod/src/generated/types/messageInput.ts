@@ -5,8 +5,14 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { Percept } from './percept';
 
 export interface MessageInput {
   /** @minLength 1 */
   content: string;
+  /**
+     * Device percepts sensed since the last send (opt-in senses only)
+     * @maxItems 8
+     */
+  percepts?: Percept[];
 }

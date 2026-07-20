@@ -15,6 +15,7 @@ export {
   hydrate,
   project,
   evolve,
+  perceive,
   composePersona,
   summarizeSelf,
   deriveMessageSignal,
@@ -39,6 +40,13 @@ export {
   REFLECTION_BLOCK_ID,
 } from "./reflection";
 export { drivesBlock, DRIVES_BLOCK_ID, type DrivesData } from "./blocks/drives";
+export {
+  sensesBlock,
+  SENSES_BLOCK_ID,
+  sanitizePercepts,
+  perceptDriveNudges,
+  type SensesData,
+} from "./blocks/senses";
 export {
   memoryBlock,
   MEMORY_BLOCK_ID,

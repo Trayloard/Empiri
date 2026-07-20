@@ -30,6 +30,10 @@ interface CheckInSettingsSheetProps {
   quietHours?: QuietHours;
   /** Persist a change to the quiet-hours window. */
   onQuietHoursChange?: (next: QuietHours) => void;
+  /** Whether the opt-in device senses (motion, battery, time of day) are on. */
+  sensesEnabled?: boolean;
+  /** Flip the senses opt-in. */
+  onSensesToggle?: () => void;
   /** Personality-derived accent; falls back to the static token. */
   accent?: string;
   /** Navigate to the companion personalisation screen. */
@@ -81,6 +85,8 @@ export function CheckInSettingsSheet({
   onClose,
   quietHours,
   onQuietHoursChange,
+  sensesEnabled,
+  onSensesToggle,
   accent,
   onPersonalize,
   onSignOut,
@@ -367,6 +373,69 @@ export function CheckInSettingsSheet({
                   ))}
                 </View>
               )}
+            </View>
+          )}
+
+          {onSensesToggle && (
+            <View
+              style={[styles.quietSection, { borderColor: colors.border }]}
+              testID="senses-section"
+            >
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== "web") {
+                    Haptics.selectionAsync().catch(() => {});
+                  }
+                  onSensesToggle();
+                }}
+                testID="senses-toggle"
+                accessibilityRole="switch"
+                accessibilityState={{ checked: !!sensesEnabled }}
+                accessibilityLabel="Senses"
+                style={({ pressed }) => [
+                  styles.quietHeader,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Feather
+                  name="activity"
+                  size={18}
+                  color={sensesEnabled ? tint : colors.mutedForeground}
+                  style={{ marginRight: 12 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[styles.quietTitle, { color: colors.foreground }]}
+                  >
+                    Senses
+                  </Text>
+                  <Text
+                    style={[styles.quietDesc, { color: colors.mutedForeground }]}
+                  >
+                    {sensesEnabled
+                      ? "Empiri notices little things — a shake, charging, the time of day — while the app is open."
+                      : "Let Empiri gently notice motion, charging, and the time of day."}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.quietSwitch,
+                    {
+                      backgroundColor: sensesEnabled ? tint : colors.muted,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.quietSwitchKnob,
+                      {
+                        backgroundColor: colors.background,
+                        alignSelf: sensesEnabled ? "flex-end" : "flex-start",
+                      },
+                    ]}
+                  />
+                </View>
+              </Pressable>
             </View>
           )}
 

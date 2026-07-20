@@ -18,11 +18,12 @@ import type { NeuroParams } from "./types";
 export const NEURO_PARAMS: NeuroParams = {
   schemaVersion: 1,
   learningRate: 1,
-  enabledBlocks: ["core-self", "drives", "memory"],
+  enabledBlocks: ["core-self", "drives", "memory", "senses"],
   blockWeights: {
     "core-self": 1,
     drives: 1,
     memory: 1,
+    senses: 1,
   },
   bounds: { min: 0, max: 100 },
   drives: {
@@ -71,6 +72,31 @@ export const NEURO_PARAMS: NeuroParams = {
       // At most this many chapters are woven into the persona prompt.
       personaChapters: 2,
     },
+  },
+  senses: {
+    // A handful of moments is plenty — perception is ambient, not a log.
+    maxRecent: 5,
+    // A percept older than this is no longer "just now" and is pruned.
+    freshWindowMinutes: 45,
+    // Only moments at/above this salience may surface in the persona.
+    surfaceThreshold: 0.35,
+    // Throttled repeats are folded at this sub-threshold intensity: still
+    // felt (tiny drive colour), never re-mentioned.
+    dampenedIntensity: 0.2,
+    // Per-kind cool-downs before the same sense may be voiced again. The
+    // daypart is deliberately rare — it should feel like noticing, not a clock.
+    voiceThrottleMinutes: {
+      shake: 20,
+      charging: 45,
+      battery_low: 180,
+      daypart: 360,
+    },
+    defaultThrottleMinutes: 60,
+    // Sanitization bounds for client-reported percepts.
+    maxPerFold: 8,
+    maxStaleHours: 6,
+    // Master dial on how strongly percepts colour the drives (1 = gentle).
+    driveImpulseScale: 1,
   },
   memory: {
     maxCount: 12,

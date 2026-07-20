@@ -16,6 +16,7 @@ import {
   type CompanionSettings,
   type CompanionSettingsInput,
   type Message,
+  type Percept,
 } from "@workspace/api-client-react";
 import {
   AudioModule,
@@ -24,7 +25,9 @@ import {
   setAudioModeAsync,
   useAudioRecorder,
 } from "expo-audio";
+import * as Battery from "expo-battery";
 import * as FileSystem from "expo-file-system/legacy";
+import { Accelerometer } from "expo-sensors";
 import React, {
   createContext,
   useCallback,
@@ -33,7 +36,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import {
   cadenceHours,
@@ -58,6 +61,15 @@ import {
   parseQuietHours,
   type QuietHours,
 } from "@/lib/quietHours";
+import {
+  batteryLowPercept,
+  chargingPercept,
+  collectOutgoingPercepts,
+  detectShake,
+  pushPercept,
+  SENSES_KEY,
+  shakeMagnitude,
+} from "@/lib/senses";
 import { useAuth } from "@/lib/auth";
 
 export type CompanionStatus =
@@ -107,6 +119,10 @@ interface CompanionContextValue {
   quietHours: QuietHours;
   /** Persist a new quiet-hours window and re-arm any pending nudge around it. */
   setQuietHours: (next: QuietHours) => Promise<void>;
+  /** Whether the opt-in device senses (motion, battery, time of day) are on. */
+  sensesEnabled: boolean;
+  /** Flip the senses opt-in; turning it off discards anything already sensed. */
+  toggleSenses: () => void;
   retryInit: () => void;
   dismissError: () => void;
   signOut: () => Promise<void>;
@@ -190,6 +206,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const [failedTurn, setFailedTurn] = useState<FailedTurn | null>(null);
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [settings, setSettings] = useState<CompanionSettings | null>(null);
+  const [sensesEnabled, setSensesEnabled] = useState<boolean>(false);
 
   const conversationIdRef = useRef<number | null>(null);
   const failedTurnRef = useRef<FailedTurn | null>(null);
@@ -197,6 +214,10 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const notificationsEnabledRef = useRef<boolean>(notificationsEnabled);
   const checkInCadenceRef = useRef<CheckInCadence>(checkInCadence);
   const quietHoursRef = useRef<QuietHours>(quietHours);
+  const sensesEnabledRef = useRef<boolean>(false);
+  const perceptsRef = useRef<Percept[]>([]);
+  const lastShakeAtRef = useRef<number | null>(null);
+  const batteryLowReportedRef = useRef<boolean>(false);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   // Keep refs in sync so timers/callbacks always see the latest values.
@@ -272,6 +293,19 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     playSpeechRef.current = playSpeech;
   }, [playSpeech]);
 
+  // Everything sensed since the last request, gated by the opt-in and the
+  // platform (see collectOutgoingPercepts). Draining clears the buffer so the
+  // same moment is never reported to the companion twice.
+  const drainPercepts = useCallback((): Percept[] | undefined => {
+    const percepts = collectOutgoingPercepts({
+      enabled: sensesEnabledRef.current,
+      isWeb: Platform.OS === "web",
+      buffer: perceptsRef.current,
+    });
+    perceptsRef.current = [];
+    return percepts.length > 0 ? percepts : undefined;
+  }, []);
+
   // Fetch and present a proactive greeting for the companion's current mood.
   // Shared by the time-based check-in on launch and the dev-only "check in now"
   // shortcut, so both paths stay in lockstep.
@@ -281,10 +315,12 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       if (convId == null) return;
       try {
         const current = computeMood(state);
+        const percepts = drainPercepts();
         const greeting = await companionCheckIn(convId, {
           hoursAway: current.hoursAway,
           mood: current.label,
           missingYou: current.missingYou,
+          ...(percepts ? { percepts } : {}),
         });
         setMessages((prev) => [...prev, greeting]);
         if (voiceEnabled) {
@@ -296,7 +332,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         // A failed check-in is silent — the user can still start the chat.
       }
     },
-    [voiceEnabled],
+    [voiceEnabled, drainPercepts],
   );
 
   const initialize = useCallback(async () => {
@@ -310,6 +346,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       const notifOn = storedNotif === "true";
       setNotificationsEnabled(notifOn);
       notificationsEnabledRef.current = notifOn;
+
+      const storedSenses = await AsyncStorage.getItem(SENSES_KEY);
+      const sensesOn = storedSenses === "true";
+      setSensesEnabled(sensesOn);
+      sensesEnabledRef.current = sensesOn;
 
       const storedCadence = await AsyncStorage.getItem(CADENCE_KEY);
       const cadence: CheckInCadence =
@@ -449,6 +490,97 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Opt-in device senses. Sensor subscriptions exist only while the senses
+  // are switched on, the app is foregrounded, and we're on a native platform —
+  // the web build has no motion/battery access and degrades to the ambient
+  // daypart percept added at send time (see drainPercepts).
+  useEffect(() => {
+    if (!sensesEnabled || Platform.OS === "web") return;
+
+    let accelSub: { remove: () => void } | null = null;
+    let chargeSub: { remove: () => void } | null = null;
+    let levelSub: { remove: () => void } | null = null;
+    let wasCharging: boolean | null = null;
+    let cancelled = false;
+    // Bumped by every start()/stop() so a start() that was still awaiting the
+    // initial battery read when the app backgrounded can never attach its
+    // listeners afterwards (they would be orphaned and leak until unmount).
+    let generation = 0;
+
+    const record = (percept: Percept | null) => {
+      if (percept) {
+        perceptsRef.current = pushPercept(perceptsRef.current, percept);
+      }
+    };
+
+    const start = async () => {
+      const gen = ++generation;
+      Accelerometer.setUpdateInterval(200);
+      accelSub = Accelerometer.addListener((sample) => {
+        const percept = detectShake(
+          shakeMagnitude(sample),
+          lastShakeAtRef.current,
+        );
+        if (percept) {
+          lastShakeAtRef.current = percept.at;
+          record(percept);
+        }
+      });
+
+      try {
+        const state = await Battery.getBatteryStateAsync();
+        if (cancelled || gen !== generation) return;
+        wasCharging =
+          state === Battery.BatteryState.CHARGING ||
+          state === Battery.BatteryState.FULL;
+        chargeSub = Battery.addBatteryStateListener(({ batteryState }) => {
+          const charging =
+            batteryState === Battery.BatteryState.CHARGING ||
+            batteryState === Battery.BatteryState.FULL;
+          record(chargingPercept(wasCharging, charging));
+          wasCharging = charging;
+        });
+        levelSub = Battery.addBatteryLevelListener(({ batteryLevel }) => {
+          const percept = batteryLowPercept(
+            batteryLevel,
+            wasCharging === true,
+            batteryLowReportedRef.current,
+          );
+          if (percept) {
+            batteryLowReportedRef.current = true;
+            record(percept);
+          }
+        });
+      } catch {
+        // Battery info is best-effort; motion sensing still works without it.
+      }
+    };
+
+    const stop = () => {
+      generation++;
+      accelSub?.remove();
+      accelSub = null;
+      chargeSub?.remove();
+      chargeSub = null;
+      levelSub?.remove();
+      levelSub = null;
+    };
+
+    if (AppState.currentState === "active") {
+      start();
+    }
+    const appStateSub = AppState.addEventListener("change", (next) => {
+      stop();
+      if (next === "active") start();
+    });
+
+    return () => {
+      cancelled = true;
+      appStateSub.remove();
+      stop();
+    };
+  }, [sensesEnabled]);
+
   const clearFailedTurn = useCallback(() => {
     failedTurnRef.current = null;
     setFailedTurn(null);
@@ -473,12 +605,19 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       try {
         let userMsg: Message;
         let assistantMsg: Message;
+        const percepts = drainPercepts();
 
         if (Platform.OS === "web") {
           // ── SSE streaming path ──────────────────────────────────────────────
           const streamResponse = await fetchStream(
             `/conversations/${id}/messages/stream`,
-            { method: "POST", body: JSON.stringify({ content }) },
+            {
+              method: "POST",
+              body: JSON.stringify({
+                content,
+                ...(percepts ? { percepts } : {}),
+              }),
+            },
           );
 
           if (!streamResponse.ok) {
@@ -546,7 +685,10 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         } else {
           // ── React Native fallback ───────────────────────────────────────────
           // ReadableStream is not exposed in RN; use the regular REST endpoint.
-          const result = await sendMessage(id, { content });
+          const result = await sendMessage(id, {
+            content,
+            ...(percepts ? { percepts } : {}),
+          });
           userMsg = result.userMessage;
           assistantMsg = result.assistantMessage;
         }
@@ -581,7 +723,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         setStatus("idle");
       }
     },
-    [voiceEnabled, playSpeech, touchInteraction, clearFailedTurn],
+    [voiceEnabled, playSpeech, touchInteraction, clearFailedTurn, drainPercepts],
   );
 
   const sendText = useCallback(
@@ -755,6 +897,24 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Opt-in senses toggle. OFF is the default and the hard boundary: switching
+  // off tears down the sensor subscriptions (via the lifecycle effect) AND
+  // discards anything already buffered, so nothing sensed earlier can leak
+  // into a later send.
+  const toggleSenses = useCallback(() => {
+    setSensesEnabled((prev) => {
+      const next = !prev;
+      sensesEnabledRef.current = next;
+      if (!next) {
+        perceptsRef.current = [];
+        lastShakeAtRef.current = null;
+        batteryLowReportedRef.current = false;
+      }
+      AsyncStorage.setItem(SENSES_KEY, String(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   // Persist the do-not-disturb window and re-arm any pending nudge so a
   // change takes effect immediately instead of on the next interaction.
   const setQuietHours = useCallback(async (next: QuietHours) => {
@@ -842,6 +1002,9 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     setStatus("idle");
     setNotificationsEnabled(false);
     notificationsEnabledRef.current = false;
+    perceptsRef.current = [];
+    lastShakeAtRef.current = null;
+    batteryLowReportedRef.current = false;
 
     const fresh = freshMoodState();
     moodStateRef.current = fresh;
@@ -878,6 +1041,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         setCheckInCadence,
         quietHours,
         setQuietHours,
+        sensesEnabled,
+        toggleSenses,
         retryInit,
         dismissError,
         signOut,
