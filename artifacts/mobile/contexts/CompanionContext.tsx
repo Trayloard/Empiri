@@ -114,7 +114,7 @@ interface CompanionContextValue {
   sendText: (content: string) => Promise<void>;
   retryMessage: () => Promise<void>;
   startListening: () => Promise<void>;
-  stopListening: () => Promise<void>;
+  stopListening: () => Promise<boolean>;
   /** Start a continuous listen→transcribe→send→speak call loop. Triggered
    * by a 3-second long-press on the mic button. */
   startCall: () => Promise<void>;
