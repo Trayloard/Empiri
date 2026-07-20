@@ -7,6 +7,7 @@ import {
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -36,6 +37,14 @@ import {
 } from "@/lib/growth";
 
 const MONO = "monospace";
+
+function hexA(hex: string, a: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
 
 // One hue per trait, drawn from Empiri's spectrum so the lines stay legible.
 const TRAIT_META: { key: string; label: string; color: string }[] = [
@@ -82,6 +91,8 @@ export function GrowthTimeline({
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // Bumping this re-runs the history fetch — the in-place "Try again" path.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (conversationId == null) return;
@@ -101,7 +112,7 @@ export function GrowthTimeline({
     return () => {
       cancelled = true;
     };
-  }, [conversationId]);
+  }, [conversationId, attempt]);
 
   const points = useMemo(
     () => buildTimeline(snapshots ?? [], self),
@@ -160,6 +171,22 @@ export function GrowthTimeline({
       <View style={styles.statePad}>
         <Feather name="cloud-off" size={28} color="rgba(255,255,255,0.5)" />
         <Text style={styles.stateText}>Couldn&apos;t trace my growth just now.</Text>
+        <Pressable
+          onPress={() => setAttempt((a) => a + 1)}
+          accessibilityRole="button"
+          accessibilityLabel="Try again"
+          testID="retry-growth"
+          style={({ pressed }) => [
+            styles.retryBtn,
+            { borderColor: hexA(spinnerAccent, 0.55) },
+            pressed ? { opacity: 0.7 } : null,
+          ]}
+        >
+          <Feather name="refresh-cw" size={13} color={spinnerAccent} />
+          <Text style={[styles.retryText, { color: spinnerAccent }]}>
+            Try again
+          </Text>
+        </Pressable>
       </View>
     );
   }
@@ -431,6 +458,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "rgba(255,255,255,0.5)",
     textAlign: "center",
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginTop: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  retryText: {
+    fontFamily: FONTS.semibold,
+    fontSize: 13,
+    letterSpacing: 0.3,
   },
   scroll: {
     paddingHorizontal: 16,

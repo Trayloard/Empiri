@@ -650,6 +650,10 @@ export function InnerSelfSheet({
   const [memoryActionError, setMemoryActionError] = useState<string | null>(
     null,
   );
+  // Bumping these re-runs the matching fetch effect — the in-place "Try
+  // again" path for transient failures.
+  const [selfAttempt, setSelfAttempt] = useState(0);
+  const [memoryAttempt, setMemoryAttempt] = useState(0);
 
   // Durable personal facts Empiri holds about the user, most salient first.
   const facts = self?.facts ?? [];
@@ -681,7 +685,7 @@ export function InnerSelfSheet({
     return () => {
       cancelled = true;
     };
-  }, [visible, conversationId]);
+  }, [visible, conversationId, selfAttempt]);
 
   // Empiri's rolling memory of earlier messages (read-only). Fetched alongside
   // the self so the Memory tab is ready the moment it's opened.
@@ -703,7 +707,7 @@ export function InnerSelfSheet({
     return () => {
       cancelled = true;
     };
-  }, [visible, conversationId]);
+  }, [visible, conversationId, memoryAttempt]);
 
   // Reset the open detail card and view mode whenever the sheet is dismissed.
   useEffect(() => {
@@ -932,6 +936,24 @@ export function InnerSelfSheet({
                 <Text style={styles.stateText}>
                   Couldn&apos;t peek inside just now.
                 </Text>
+                {error ? (
+                  <Pressable
+                    onPress={() => setSelfAttempt((a) => a + 1)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Try again"
+                    testID="retry-self"
+                    style={({ pressed }) => [
+                      styles.retryBtn,
+                      { borderColor: hexA(sheetAccent, 0.55) },
+                      pressed ? { opacity: 0.7 } : null,
+                    ]}
+                  >
+                    <Feather name="refresh-cw" size={13} color={sheetAccent} />
+                    <Text style={[styles.retryText, { color: sheetAccent }]}>
+                      Try again
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : (
               <ScrollView
@@ -1020,6 +1042,22 @@ export function InnerSelfSheet({
                 <Text style={styles.stateText}>
                   Couldn&apos;t recall just now.
                 </Text>
+                <Pressable
+                  onPress={() => setMemoryAttempt((a) => a + 1)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try again"
+                  testID="retry-memory"
+                  style={({ pressed }) => [
+                    styles.retryBtn,
+                    { borderColor: hexA(sheetAccent, 0.55) },
+                    pressed ? { opacity: 0.7 } : null,
+                  ]}
+                >
+                  <Feather name="refresh-cw" size={13} color={sheetAccent} />
+                  <Text style={[styles.retryText, { color: sheetAccent }]}>
+                    Try again
+                  </Text>
+                </Pressable>
               </View>
             ) : !memory && facts.length === 0 ? (
               <View style={styles.statePad}>
@@ -1447,6 +1485,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "rgba(255,255,255,0.5)",
     textAlign: "center",
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginTop: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  retryText: {
+    fontFamily: FONTS.semibold,
+    fontSize: 13,
+    letterSpacing: 0.3,
   },
   scroll: {
     flex: 1,
