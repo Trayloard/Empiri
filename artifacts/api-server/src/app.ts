@@ -8,6 +8,13 @@ import { authMiddleware } from "./middlewares/authMiddleware";
 
 const app: Express = express();
 
+// Root-level health check — must sit before authMiddleware so the deployment
+// platform's probe never hits DB session logic. Returns 200 so autoscale and
+// the dev workflow's ensurePreviewReachable check both succeed.
+app.get("/", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 app.use(
   pinoHttp({
     logger,
