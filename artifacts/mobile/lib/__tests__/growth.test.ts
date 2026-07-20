@@ -221,6 +221,20 @@ describe("axisDateLabel", () => {
     expect(label).not.toBe("today");
     expect(label).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
   });
+
+  it("includes the year when the date falls in a different year than now", () => {
+    const label = axisDateLabel(NOW - 400 * 24 * HOUR, NOW);
+    expect(label).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+    const d = new Date(NOW - 400 * 24 * HOUR);
+    expect(label.endsWith(`, ${d.getFullYear()}`)).toBe(true);
+  });
+
+  it("keeps the compact form for dates within the current year", () => {
+    const sameYear = new Date(NOW);
+    sameYear.setDate(sameYear.getDate() - 5);
+    const label = axisDateLabel(sameYear.getTime(), NOW);
+    expect(label).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+  });
 });
 
 describe("timeAxisTicks", () => {

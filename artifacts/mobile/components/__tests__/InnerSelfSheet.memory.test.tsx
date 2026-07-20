@@ -91,14 +91,8 @@ jest.mock("react-native-gesture-handler", () => {
   };
 });
 
-// Fully mock the data client so we can drive success/failure deterministically.
-jest.mock("@workspace/api-client-react", () => ({
-  clearCompanionMemory: jest.fn(),
-  getCompanionMemory: jest.fn(),
-  getCompanionSelf: jest.fn(),
-  getCompanionSelfHistory: jest.fn(),
-  updateCompanionMemory: jest.fn(),
-}));
+// Shared manual mock: see artifacts/mobile/__mocks__/@workspace/api-client-react.ts
+jest.mock("@workspace/api-client-react");
 
 const mockGetSelf = getCompanionSelf as jest.MockedFunction<
   typeof getCompanionSelf

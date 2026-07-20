@@ -249,6 +249,9 @@ export function axisDateLabel(at: number, now: number = Date.now()): string {
   ) {
     return "today";
   }
+  if (d.getFullYear() !== today.getFullYear()) {
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  }
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 

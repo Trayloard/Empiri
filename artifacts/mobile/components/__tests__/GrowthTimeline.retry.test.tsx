@@ -66,9 +66,8 @@ jest.mock("react-native-gesture-handler", () => {
   };
 });
 
-jest.mock("@workspace/api-client-react", () => ({
-  getCompanionSelfHistory: jest.fn(),
-}));
+// Shared manual mock: see artifacts/mobile/__mocks__/@workspace/api-client-react.ts
+jest.mock("@workspace/api-client-react");
 
 const mockGetHistory = getCompanionSelfHistory as jest.MockedFunction<
   typeof getCompanionSelfHistory
