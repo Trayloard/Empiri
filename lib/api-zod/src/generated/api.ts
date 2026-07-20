@@ -308,6 +308,40 @@ export const GetCompanionMemoryResponse = zod.object({
 
 
 /**
+ * Replaces the rolling context summary with user-provided text so the user can correct or trim what the companion recalls.
+ * @summary Edit what the companion remembers about the conversation
+ */
+export const UpdateCompanionMemoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const updateCompanionMemoryBodySummaryMax = 2000;
+
+
+
+export const UpdateCompanionMemoryBody = zod.object({
+  "summary": zod.string().min(1).max(updateCompanionMemoryBodySummaryMax).describe('The corrected summary text the companion should remember.')
+})
+
+export const UpdateCompanionMemoryResponse = zod.object({
+  "summary": zod.string().nullable().describe('The rolling context summary of earlier messages, or null if nothing has been summarised yet.')
+})
+
+
+/**
+ * Removes the stored rolling context summary and resets the summariser watermark, returning the memory to its empty state.
+ * @summary Clear what the companion remembers about the conversation
+ */
+export const ClearCompanionMemoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ClearCompanionMemoryResponse = zod.object({
+  "summary": zod.string().nullable().describe('The rolling context summary of earlier messages, or null if nothing has been summarised yet.')
+})
+
+
+/**
  * @summary Transcribe recorded audio into text
  */
 export const TranscribeAudioBody = zod.object({

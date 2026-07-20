@@ -201,6 +201,15 @@ export interface CompanionMemory {
   summary: string | null;
 }
 
+export interface UpdateCompanionMemoryInput {
+  /**
+     * The corrected summary text the companion should remember.
+     * @minLength 1
+     * @maxLength 2000
+     */
+  summary: string;
+}
+
 /**
  * Conversation tone preset.
  */

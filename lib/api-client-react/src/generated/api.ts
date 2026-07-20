@@ -44,7 +44,8 @@ import type {
   SpeechInput,
   SpeechResult,
   TranscribeInput,
-  TranscribeResult
+  TranscribeResult,
+  UpdateCompanionMemoryInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1352,6 +1353,150 @@ export function useGetCompanionMemory<TData = Awaited<ReturnType<typeof getCompa
 
 
 
+
+export const getUpdateCompanionMemoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/conversations/${id}/memory`
+}
+
+/**
+ * Replaces the rolling context summary with user-provided text so the user can correct or trim what the companion recalls.
+ * @summary Edit what the companion remembers about the conversation
+ */
+export const updateCompanionMemory = async (id: number,
+    updateCompanionMemoryInput: UpdateCompanionMemoryInput, options?: RequestInit): Promise<CompanionMemory> => {
+
+  return customFetch<CompanionMemory>(getUpdateCompanionMemoryUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateCompanionMemoryInput,)
+  }
+);}
+
+
+
+
+export const getUpdateCompanionMemoryMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCompanionMemory>>, TError,{id: number;data: BodyType<UpdateCompanionMemoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCompanionMemory>>, TError,{id: number;data: BodyType<UpdateCompanionMemoryInput>}, TContext> => {
+
+const mutationKey = ['updateCompanionMemory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCompanionMemory>>, {id: number;data: BodyType<UpdateCompanionMemoryInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateCompanionMemory(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCompanionMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof updateCompanionMemory>>>
+    export type UpdateCompanionMemoryMutationBody = BodyType<UpdateCompanionMemoryInput>
+    export type UpdateCompanionMemoryMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Edit what the companion remembers about the conversation
+ */
+export const useUpdateCompanionMemory = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCompanionMemory>>, TError,{id: number;data: BodyType<UpdateCompanionMemoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCompanionMemory>>,
+        TError,
+        {id: number;data: BodyType<UpdateCompanionMemoryInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateCompanionMemoryMutationOptions(options));
+    }
+
+export const getClearCompanionMemoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/conversations/${id}/memory`
+}
+
+/**
+ * Removes the stored rolling context summary and resets the summariser watermark, returning the memory to its empty state.
+ * @summary Clear what the companion remembers about the conversation
+ */
+export const clearCompanionMemory = async (id: number, options?: RequestInit): Promise<CompanionMemory> => {
+
+  return customFetch<CompanionMemory>(getClearCompanionMemoryUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getClearCompanionMemoryMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearCompanionMemory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clearCompanionMemory>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['clearCompanionMemory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearCompanionMemory>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  clearCompanionMemory(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearCompanionMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof clearCompanionMemory>>>
+
+    export type ClearCompanionMemoryMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Clear what the companion remembers about the conversation
+ */
+export const useClearCompanionMemory = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearCompanionMemory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof clearCompanionMemory>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getClearCompanionMemoryMutationOptions(options));
+    }
 
 export const getTranscribeAudioUrl = () => {
 

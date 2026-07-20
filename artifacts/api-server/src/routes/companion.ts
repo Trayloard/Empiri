@@ -17,6 +17,7 @@ import {
   CreateConversationBody,
   RenameConversationBody,
   SendMessageBody,
+  UpdateCompanionMemoryBody,
 } from "@workspace/api-zod";
 import { loadOrCreateSelf, saveSelf } from "../lib/companionSelf";
 import { getInterestThemes } from "../lib/interestThemes";
@@ -611,6 +612,49 @@ router.get("/conversations/:id/memory", async (req, res) => {
   if (!conversation) return;
 
   res.json({ summary: conversation.contextSummary ?? null });
+});
+
+// Edit what the companion remembers: replace the rolling context summary with
+// user-provided text. The summariser watermark is preserved so future
+// refreshes fold new overflow into the corrected summary rather than
+// re-summarising from scratch.
+router.patch("/conversations/:id/memory", async (req, res) => {
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
+
+  const parsed = UpdateCompanionMemoryBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body" });
+    return;
+  }
+  const summary = parsed.data.summary.trim();
+  if (!summary) {
+    res.status(400).json({ error: "Summary is required" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(conversations)
+    .set({ contextSummary: summary })
+    .where(eq(conversations.id, conversation.id))
+    .returning();
+
+  res.json({ summary: updated.contextSummary });
+});
+
+// Clear what the companion remembers: remove the stored summary and reset the
+// summariser watermark so the memory genuinely starts over (the next overflow
+// past the context window builds a fresh summary from that point on).
+router.delete("/conversations/:id/memory", async (req, res) => {
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
+
+  await db
+    .update(conversations)
+    .set({ contextSummary: null, contextSummaryMessageCount: null })
+    .where(eq(conversations.id, conversation.id));
+
+  res.json({ summary: null });
 });
 
 // DEV-ONLY: roll Empiri's inner self back a few steps without wiping it

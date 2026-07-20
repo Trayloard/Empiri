@@ -152,6 +152,18 @@ describe("unauthenticated requests", () => {
     const res = await request(app).get(`/api/conversations/${convAId}/memory`);
     expect(res.status).toBe(401);
   });
+
+  it("PATCH /conversations/:id/memory → 401 without auth", async () => {
+    const res = await request(app)
+      .patch(`/api/conversations/${convAId}/memory`)
+      .send({ summary: "Should fail" });
+    expect(res.status).toBe(401);
+  });
+
+  it("DELETE /conversations/:id/memory → 401 without auth", async () => {
+    const res = await request(app).delete(`/api/conversations/${convAId}/memory`);
+    expect(res.status).toBe(401);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -223,6 +235,112 @@ describe("cross-user ownership enforcement", () => {
       .get(`/api/conversations/${convAId}/memory`)
       .set("Authorization", `Bearer ${tokenB}`);
     expect(res.status).toBe(404);
+  });
+
+  it("PATCH /conversations/:id/memory → 404 for user B and leaves the memory untouched", async () => {
+    await db
+      .update(conversations)
+      .set({ contextSummary: "Original memory", contextSummaryMessageCount: 4 })
+      .where(eq(conversations.id, convAId));
+
+    const res = await request(app)
+      .patch(`/api/conversations/${convAId}/memory`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ summary: "Hijacked memory" });
+    expect(res.status).toBe(404);
+
+    const [row] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, convAId));
+    expect(row.contextSummary).toBe("Original memory");
+  });
+
+  it("DELETE /conversations/:id/memory → 404 for user B and leaves the memory untouched", async () => {
+    const res = await request(app)
+      .delete(`/api/conversations/${convAId}/memory`)
+      .set("Authorization", `Bearer ${tokenB}`);
+    expect(res.status).toBe(404);
+
+    const [row] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, convAId));
+    expect(row.contextSummary).toBe("Original memory");
+
+    // Reset for later tests
+    await db
+      .update(conversations)
+      .set({ contextSummary: null, contextSummaryMessageCount: null })
+      .where(eq(conversations.id, convAId));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Owner can edit and clear the memory
+// ---------------------------------------------------------------------------
+
+describe("owner memory editing", () => {
+  it("PATCH /conversations/:id/memory → 200 replaces the summary (trimmed) and persists", async () => {
+    const res = await request(app)
+      .patch(`/api/conversations/${convAId}/memory`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ summary: "  The user loves hiking and has a dog named Rex.  " });
+    expect(res.status).toBe(200);
+    expect(res.body.summary).toBe("The user loves hiking and has a dog named Rex.");
+
+    const check = await request(app)
+      .get(`/api/conversations/${convAId}/memory`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(check.status).toBe(200);
+    expect(check.body.summary).toBe("The user loves hiking and has a dog named Rex.");
+  });
+
+  it("PATCH /conversations/:id/memory → 400 for empty, whitespace-only, missing, or too-long summaries", async () => {
+    for (const body of [
+      { summary: "" },
+      { summary: "   " },
+      {},
+      { summary: "x".repeat(2001) },
+    ]) {
+      const res = await request(app)
+        .patch(`/api/conversations/${convAId}/memory`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send(body);
+      expect(res.status).toBe(400);
+    }
+
+    // Memory unchanged after all the rejected writes.
+    const check = await request(app)
+      .get(`/api/conversations/${convAId}/memory`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(check.body.summary).toBe("The user loves hiking and has a dog named Rex.");
+  });
+
+  it("DELETE /conversations/:id/memory → 200 clears the summary and resets the watermark", async () => {
+    // Simulate an in-progress summariser watermark.
+    await db
+      .update(conversations)
+      .set({ contextSummaryMessageCount: 12 })
+      .where(eq(conversations.id, convAId));
+
+    const res = await request(app)
+      .delete(`/api/conversations/${convAId}/memory`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(res.status).toBe(200);
+    expect(res.body.summary).toBeNull();
+
+    const [row] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, convAId));
+    expect(row.contextSummary).toBeNull();
+    expect(row.contextSummaryMessageCount).toBeNull();
+
+    const check = await request(app)
+      .get(`/api/conversations/${convAId}/memory`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(check.body.summary).toBeNull();
   });
 });
 

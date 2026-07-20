@@ -1,7 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import {
+  clearCompanionMemory,
   getCompanionMemory,
   getCompanionSelf,
+  updateCompanionMemory,
   type CompanionInterest,
   type CompanionSelf,
 } from "@workspace/api-client-react";
@@ -16,6 +18,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -638,6 +641,15 @@ export function InnerSelfSheet({
   const [memory, setMemory] = useState<string | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState(false);
+  // Light control over the memory: inline editing, clearing (with an inline
+  // confirm so it works everywhere, including web), and save/clear progress.
+  const [memoryEditing, setMemoryEditing] = useState(false);
+  const [memoryDraft, setMemoryDraft] = useState("");
+  const [memorySaving, setMemorySaving] = useState(false);
+  const [memoryConfirmClear, setMemoryConfirmClear] = useState(false);
+  const [memoryActionError, setMemoryActionError] = useState<string | null>(
+    null,
+  );
 
   // Durable personal facts Empiri holds about the user, most salient first.
   const facts = self?.facts ?? [];
@@ -698,8 +710,72 @@ export function InnerSelfSheet({
     if (!visible) {
       setSelected(null);
       setMode("mind");
+      setMemoryEditing(false);
+      setMemoryConfirmClear(false);
+      setMemoryActionError(null);
     }
   }, [visible]);
+
+  const startMemoryEdit = () => {
+    if (memory == null) return;
+    setMemoryActionError(null);
+    setMemoryConfirmClear(false);
+    setMemoryDraft(memory);
+    setMemoryEditing(true);
+  };
+
+  const cancelMemoryEdit = () => {
+    setMemoryEditing(false);
+    setMemoryActionError(null);
+  };
+
+  const saveMemoryEdit = async () => {
+    if (conversationId == null || memorySaving) return;
+    const trimmed = memoryDraft.trim();
+    if (!trimmed) {
+      setMemoryActionError("The memory can't be empty — use Forget instead.");
+      return;
+    }
+    setMemorySaving(true);
+    setMemoryActionError(null);
+    try {
+      const updated = await updateCompanionMemory(conversationId, {
+        summary: trimmed,
+      });
+      setMemory(updated.summary ?? null);
+      setMemoryEditing(false);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        ).catch(() => {});
+      }
+    } catch {
+      setMemoryActionError("Couldn't save just now. Please try again.");
+    } finally {
+      setMemorySaving(false);
+    }
+  };
+
+  const clearMemory = async () => {
+    if (conversationId == null || memorySaving) return;
+    setMemorySaving(true);
+    setMemoryActionError(null);
+    try {
+      await clearCompanionMemory(conversationId);
+      setMemory(null);
+      setMemoryEditing(false);
+      setMemoryConfirmClear(false);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        ).catch(() => {});
+      }
+    } catch {
+      setMemoryActionError("Couldn't forget just now. Please try again.");
+    } finally {
+      setMemorySaving(false);
+    }
+  };
 
   // One shared heartbeat drives every node's glow.
   const pulse = useSharedValue(reduceMotion ? 0.5 : 0);
@@ -968,12 +1044,162 @@ export function InnerSelfSheet({
               >
                 {memory ? (
                   <>
-                    <View style={styles.memoryCard}>
-                      <Text style={styles.memoryText}>{memory}</Text>
-                    </View>
+                    {memoryEditing ? (
+                      <View style={styles.memoryCard}>
+                        <TextInput
+                          value={memoryDraft}
+                          onChangeText={setMemoryDraft}
+                          multiline
+                          autoFocus
+                          editable={!memorySaving}
+                          maxLength={2000}
+                          style={styles.memoryInput}
+                          placeholder="What should Empiri remember?"
+                          placeholderTextColor="rgba(255,255,255,0.35)"
+                          testID="memory-edit-input"
+                        />
+                        <View style={styles.memoryActionRow}>
+                          <Pressable
+                            onPress={cancelMemoryEdit}
+                            disabled={memorySaving}
+                            accessibilityRole="button"
+                            accessibilityLabel="Cancel editing"
+                            testID="memory-edit-cancel"
+                            style={({ pressed }) => [
+                              styles.memoryBtn,
+                              { opacity: pressed || memorySaving ? 0.6 : 1 },
+                            ]}
+                          >
+                            <Text style={styles.memoryBtnText}>Cancel</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={saveMemoryEdit}
+                            disabled={memorySaving}
+                            accessibilityRole="button"
+                            accessibilityLabel="Save memory"
+                            testID="memory-edit-save"
+                            style={({ pressed }) => [
+                              styles.memoryBtn,
+                              styles.memoryBtnPrimary,
+                              { opacity: pressed || memorySaving ? 0.7 : 1 },
+                            ]}
+                          >
+                            {memorySaving ? (
+                              <ActivityIndicator
+                                size="small"
+                                color="#0A0B12"
+                              />
+                            ) : (
+                              <Text style={styles.memoryBtnPrimaryText}>
+                                Save
+                              </Text>
+                            )}
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : (
+                      <>
+                        <View style={styles.memoryCard}>
+                          <Text style={styles.memoryText} testID="memory-text">
+                            {memory}
+                          </Text>
+                        </View>
+                        {memoryConfirmClear ? (
+                          <View style={styles.memoryActionRow}>
+                            <Text style={styles.memoryConfirmText}>
+                              Forget all of this?
+                            </Text>
+                            <Pressable
+                              onPress={() => setMemoryConfirmClear(false)}
+                              disabled={memorySaving}
+                              accessibilityRole="button"
+                              accessibilityLabel="Keep this memory"
+                              testID="memory-clear-cancel"
+                              style={({ pressed }) => [
+                                styles.memoryBtn,
+                                { opacity: pressed || memorySaving ? 0.6 : 1 },
+                              ]}
+                            >
+                              <Text style={styles.memoryBtnText}>Keep</Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={clearMemory}
+                              disabled={memorySaving}
+                              accessibilityRole="button"
+                              accessibilityLabel="Yes, forget it"
+                              testID="memory-clear-confirm"
+                              style={({ pressed }) => [
+                                styles.memoryBtn,
+                                styles.memoryBtnDanger,
+                                { opacity: pressed || memorySaving ? 0.7 : 1 },
+                              ]}
+                            >
+                              {memorySaving ? (
+                                <ActivityIndicator
+                                  size="small"
+                                  color="#FFB4C0"
+                                />
+                              ) : (
+                                <Text style={styles.memoryBtnDangerText}>
+                                  Forget
+                                </Text>
+                              )}
+                            </Pressable>
+                          </View>
+                        ) : (
+                          <View style={styles.memoryActionRow}>
+                            <Pressable
+                              onPress={startMemoryEdit}
+                              accessibilityRole="button"
+                              accessibilityLabel="Edit what Empiri remembers"
+                              testID="memory-edit"
+                              style={({ pressed }) => [
+                                styles.memoryBtn,
+                                { opacity: pressed ? 0.6 : 1 },
+                              ]}
+                            >
+                              <Feather
+                                name="edit-2"
+                                size={12}
+                                color="rgba(231,233,245,0.85)"
+                              />
+                              <Text style={styles.memoryBtnText}>Edit</Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => {
+                                setMemoryActionError(null);
+                                setMemoryConfirmClear(true);
+                              }}
+                              accessibilityRole="button"
+                              accessibilityLabel="Forget what Empiri remembers"
+                              testID="memory-clear"
+                              style={({ pressed }) => [
+                                styles.memoryBtn,
+                                { opacity: pressed ? 0.6 : 1 },
+                              ]}
+                            >
+                              <Feather
+                                name="trash-2"
+                                size={12}
+                                color="rgba(231,233,245,0.85)"
+                              />
+                              <Text style={styles.memoryBtnText}>Forget</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </>
+                    )}
+                    {memoryActionError ? (
+                      <Text
+                        style={styles.memoryActionErrorText}
+                        testID="memory-action-error"
+                      >
+                        {memoryActionError}
+                      </Text>
+                    ) : null}
                     <Text style={styles.memoryFootnote}>
                       A gentle recap Empiri keeps so our longer talks stay
-                      connected.
+                      connected. You can correct it or ask Empiri to forget.
                     </Text>
                   </>
                 ) : null}
@@ -1246,6 +1472,74 @@ const styles = StyleSheet.create({
     fontSize: 15.5,
     lineHeight: 24,
     color: "rgba(231,233,245,0.92)",
+  },
+  memoryInput: {
+    fontFamily: FONTS.regular,
+    fontSize: 15.5,
+    lineHeight: 24,
+    color: "rgba(231,233,245,0.92)",
+    minHeight: 120,
+    textAlignVertical: "top",
+    padding: 0,
+  },
+  memoryActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 12,
+  },
+  memoryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  memoryBtnText: {
+    fontFamily: FONTS.semibold,
+    fontSize: 13,
+    color: "rgba(231,233,245,0.85)",
+  },
+  memoryBtnPrimary: {
+    borderColor: "rgba(231,233,245,0.9)",
+    backgroundColor: "#E7E9F5",
+    minWidth: 72,
+    justifyContent: "center",
+  },
+  memoryBtnPrimaryText: {
+    fontFamily: FONTS.semibold,
+    fontSize: 13,
+    color: "#0A0B12",
+  },
+  memoryBtnDanger: {
+    borderColor: "rgba(255,126,150,0.5)",
+    backgroundColor: "rgba(255,126,150,0.12)",
+    minWidth: 82,
+    justifyContent: "center",
+  },
+  memoryBtnDangerText: {
+    fontFamily: FONTS.semibold,
+    fontSize: 13,
+    color: "#FFB4C0",
+  },
+  memoryConfirmText: {
+    flex: 1,
+    fontFamily: FONTS.medium,
+    fontSize: 13.5,
+    color: "rgba(255,255,255,0.65)",
+  },
+  memoryActionErrorText: {
+    fontFamily: FONTS.medium,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: "#FFB4C0",
+    marginTop: 10,
+    textAlign: "center",
   },
   memoryFootnote: {
     fontFamily: FONTS.regular,

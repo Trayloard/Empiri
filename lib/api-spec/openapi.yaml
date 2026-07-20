@@ -469,6 +469,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: updateCompanionMemory
+      tags: [companion]
+      summary: Edit what the companion remembers about the conversation
+      description: Replaces the rolling context summary with user-provided text so the user can correct or trim what the companion recalls.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCompanionMemoryInput"
+      responses:
+        "200":
+          description: The updated memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionMemory"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: clearCompanionMemory
+      tags: [companion]
+      summary: Clear what the companion remembers about the conversation
+      description: Removes the stored rolling context summary and resets the summariser watermark, returning the memory to its empty state.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The cleared memory (summary is null)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionMemory"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /voice/transcribe:
     post:
       operationId: transcribeAudio
@@ -948,6 +1020,16 @@ components:
         summary:
           type: [string, 'null']
           description: The rolling context summary of earlier messages, or null if nothing has been summarised yet.
+      required:
+        - summary
+    UpdateCompanionMemoryInput:
+      type: object
+      properties:
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: The corrected summary text the companion should remember.
       required:
         - summary
     CompanionSettings:

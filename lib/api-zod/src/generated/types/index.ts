@@ -42,3 +42,4 @@ export * from './speechInput';
 export * from './speechResult';
 export * from './transcribeInput';
 export * from './transcribeResult';
+export * from './updateCompanionMemoryInput';
