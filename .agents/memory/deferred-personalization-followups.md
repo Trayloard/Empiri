@@ -1,6 +1,6 @@
 ---
 name: Deferred personalization follow-ups
-description: Three feature ideas the user wants to be reminded about next session — proposed after companion personalization (Task #74) but cancelled by user.
+description: Three feature ideas the user wants to be reminded about next session — proposed after the companion-personalization work but cancelled by the user at the time.
 ---
 
 Remind the user of these at the start of the next session and ask if they'd like to tackle any of them.
