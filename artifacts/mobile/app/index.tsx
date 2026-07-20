@@ -134,11 +134,14 @@ export default function CompanionScreen() {
     error,
     failedTurn,
     isRecording,
+    isCallActive,
     settings,
     sendText,
     retryMessage,
     startListening,
     stopListening,
+    startCall,
+    endCall,
     toggleVoice,
     toggleNotifications,
     setCheckInCadence,
@@ -246,7 +249,13 @@ export default function CompanionScreen() {
   const busy = status === "thinking" || status === "transcribing" || status === "speaking";
 
   const handleMic = () => {
+    // In call mode the loop manages recording; tapping the mic does nothing.
+    if (isCallActive) return;
     if (isRecording) stopListening(); else startListening();
+  };
+
+  const handleMicLongPress = () => {
+    startCall().catch(() => {});
   };
   const handleRetry = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -408,10 +417,44 @@ export default function CompanionScreen() {
 
         {/* Input + bottom nav */}
         <View style={{ paddingBottom: bottomPad }}>
+          {/* In-call bar — shown above input during an audio-call loop */}
+          {isCallActive ? (
+            <View style={styles.callBar}>
+              <View style={styles.callStatusRow}>
+                <Feather name="mic" size={14} color={accent} />
+                <Text style={[styles.callStatusText, { color: accent }]}>
+                  {status === "listening"
+                    ? "Listening…"
+                    : status === "transcribing"
+                      ? "Transcribing…"
+                      : status === "thinking"
+                        ? "Thinking…"
+                        : status === "speaking"
+                          ? "Speaking…"
+                          : "In call"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={endCall}
+                accessibilityRole="button"
+                accessibilityLabel="End call"
+                testID="end-call-button"
+                style={({ pressed }) => [
+                  styles.endCallBtn,
+                  { backgroundColor: colors.destructive, opacity: pressed ? 0.75 : 1 },
+                ]}
+              >
+                <Feather name="phone-off" size={13} color="#fff" />
+                <Text style={styles.endCallText}>End call</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <ChatInput
             onSend={sendText}
             onMicPress={handleMic}
+            onMicLongPress={handleMicLongPress}
             isRecording={isRecording}
+            isCallActive={isCallActive}
             busy={busy}
             warmth={smoothWarmth}
           />
@@ -687,6 +730,37 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1, color: "#fff", fontSize: 13.5, fontFamily: FONTS.medium,
+  },
+  // In-call bar (shown above ChatInput when audio-call mode is active)
+  callBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 14,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  callStatusRow: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+  },
+  callStatusText: {
+    fontSize: 13.5, fontFamily: FONTS.medium,
+  },
+  endCallBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  endCallText: {
+    color: "#fff", fontSize: 13, fontFamily: FONTS.semibold,
   },
   // Bottom nav
   navRow: {

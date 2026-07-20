@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -10,15 +10,28 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { FONTS } from "@/constants/fonts";
 import { useColors } from "@/hooks/useColors";
 import { accentForWarmth, spectrumForWarmth } from "@/lib/accent";
 
+/** Duration of the hold needed to enter audio-call mode (ms). */
+const HOLD_DURATION_MS = 3000;
+
 interface ChatInputProps {
   onSend: (text: string) => void;
   onMicPress: () => void;
+  /** Called when the mic button has been held for 3 seconds. Launches call mode. */
+  onMicLongPress?: () => void;
   isRecording: boolean;
+  /** True while an audio-call loop is active — disables the mic button's tap/hold. */
+  isCallActive?: boolean;
   busy: boolean;
   /**
    * Smoothed personality warmth (see `useSmoothedWarmth`). Gently tints the
@@ -31,7 +44,9 @@ interface ChatInputProps {
 export function ChatInput({
   onSend,
   onMicPress,
+  onMicLongPress,
   isRecording,
+  isCallActive = false,
   busy,
   warmth = 0,
 }: ChatInputProps) {
@@ -39,10 +54,18 @@ export function ChatInput({
   const [text, setText] = useState("");
   const hasText = text.trim().length > 0;
 
-  // Personality-tinted variants of the brand gradient and its glow. Both are
-  // centre-anchored, so a neutral personality renders exactly as before.
   const spectrum = spectrumForWarmth(warmth, colors.spectrum);
   const glowColor = accentForWarmth(warmth, colors.spectrum[1], colors.spectrum);
+
+  // Hold-to-call progress ring: fills over HOLD_DURATION_MS while the mic
+  // button is pressed and held. Resets immediately on release or activation.
+  const holdProgress = useSharedValue(0);
+  const longPressFiredRef = useRef(false);
+
+  const holdRingStyle = useAnimatedStyle(() => ({
+    opacity: holdProgress.value * 0.9,
+    transform: [{ scale: 0.92 + holdProgress.value * 0.12 }],
+  }));
 
   const handleSend = () => {
     if (!hasText || busy) return;
@@ -60,6 +83,33 @@ export function ChatInput({
     onMicPress();
   };
 
+  const handlePressIn = () => {
+    if (isCallActive || !onMicLongPress) return;
+    longPressFiredRef.current = false;
+    holdProgress.value = withTiming(1, {
+      duration: HOLD_DURATION_MS,
+      easing: Easing.linear,
+    });
+  };
+
+  const handlePressOut = () => {
+    if (!longPressFiredRef.current) {
+      holdProgress.value = withTiming(0, { duration: 200 });
+    }
+  };
+
+  const handleLongPress = () => {
+    if (isCallActive || !onMicLongPress) return;
+    longPressFiredRef.current = true;
+    holdProgress.value = withTiming(0, { duration: 200 });
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      ).catch(() => {});
+    }
+    onMicLongPress();
+  };
+
   return (
     <View style={styles.container}>
       <View
@@ -67,7 +117,10 @@ export function ChatInput({
           styles.inputRow,
           {
             backgroundColor: colors.glass,
-            borderColor: isRecording ? colors.primary : colors.glassBorder,
+            borderColor:
+              isRecording || isCallActive
+                ? colors.primary
+                : colors.glassBorder,
           },
         ]}
       >
@@ -78,7 +131,13 @@ export function ChatInput({
         />
         <TextInput
           style={[styles.input, { color: colors.foreground }]}
-          placeholder={isRecording ? "Listening…" : "Message Empiri…"}
+          placeholder={
+            isCallActive
+              ? "Call in progress…"
+              : isRecording
+                ? "Listening…"
+                : "Message Empiri…"
+          }
           placeholderTextColor={colors.mutedForeground}
           value={text}
           onChangeText={setText}
@@ -112,41 +171,66 @@ export function ChatInput({
             </LinearGradient>
           </Pressable>
         ) : (
-          <Pressable
-            onPress={handleMic}
-            disabled={busy && !isRecording}
-            style={({ pressed }) => [
-              styles.buttonWrap,
-              {
-                opacity: pressed ? 0.8 : 1,
-                transform: [{ scale: isRecording ? 1.05 : 1 }],
-                shadowColor: isRecording
-                  ? colors.destructive
-                  : glowColor,
-              },
-            ]}
-            testID="mic-button"
-          >
-            {isRecording ? (
-              <View
+          <View style={styles.micWrap}>
+            {/* Hold-to-call progress ring — fills during the 3s hold */}
+            {onMicLongPress && !isCallActive ? (
+              <Animated.View
                 style={[
-                  styles.button,
-                  { backgroundColor: colors.destructive },
+                  styles.holdRing,
+                  { borderColor: glowColor },
+                  holdRingStyle,
                 ]}
-              >
-                <Feather name="square" size={18} color="#FFFFFF" />
-              </View>
-            ) : (
-              <LinearGradient
-                colors={spectrum}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.button}
-              >
-                <Feather name="mic" size={20} color="#FFFFFF" />
-              </LinearGradient>
-            )}
-          </Pressable>
+                pointerEvents="none"
+                testID="mic-hold-ring"
+              />
+            ) : null}
+            <Pressable
+              onPress={handleMic}
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
+              onLongPress={handleLongPress}
+              delayLongPress={HOLD_DURATION_MS}
+              disabled={(busy && !isRecording) || isCallActive}
+              style={({ pressed }) => [
+                styles.buttonWrap,
+                {
+                  opacity: pressed ? 0.8 : 1,
+                  transform: [{ scale: isRecording ? 1.05 : 1 }],
+                  shadowColor: isRecording ? colors.destructive : glowColor,
+                },
+              ]}
+              testID="mic-button"
+            >
+              {isRecording ? (
+                <View
+                  style={[
+                    styles.button,
+                    { backgroundColor: colors.destructive },
+                  ]}
+                >
+                  <Feather name="square" size={18} color="#FFFFFF" />
+                </View>
+              ) : isCallActive ? (
+                <LinearGradient
+                  colors={spectrum}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.button}
+                >
+                  <Feather name="phone" size={18} color="#FFFFFF" />
+                </LinearGradient>
+              ) : (
+                <LinearGradient
+                  colors={spectrum}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.button}
+                >
+                  <Feather name="mic" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              )}
+            </Pressable>
+          </View>
         )}
       </View>
     </View>
@@ -177,6 +261,21 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === "ios" ? 8 : 6,
     paddingBottom: Platform.OS === "ios" ? 8 : 6,
     fontFamily: FONTS.regular,
+  },
+  micWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  holdRing: {
+    position: "absolute",
+    top: -7,
+    bottom: -7,
+    left: -7,
+    right: -7,
+    borderRadius: 28,
+    borderWidth: 2.5,
+    pointerEvents: "none",
   },
   buttonWrap: {
     borderRadius: 21,

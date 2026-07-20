@@ -55,6 +55,7 @@ import {
   scheduleNudge,
   scheduleNudgeInSeconds,
 } from "@/lib/notifications";
+import { classifyVoiceError } from "@/lib/voiceErrors";
 import {
   adjustNudgeHoursForQuietHours,
   DEFAULT_QUIET_HOURS,
@@ -108,10 +109,17 @@ interface CompanionContextValue {
   error: string | null;
   failedTurn: FailedTurn | null;
   isRecording: boolean;
+  /** True while an audio-call mode loop is running. */
+  isCallActive: boolean;
   sendText: (content: string) => Promise<void>;
   retryMessage: () => Promise<void>;
   startListening: () => Promise<void>;
   stopListening: () => Promise<void>;
+  /** Start a continuous listen→transcribe→send→speak call loop. Triggered
+   * by a 3-second long-press on the mic button. */
+  startCall: () => Promise<void>;
+  /** End the active call loop and return to normal text-chat mode. */
+  endCall: () => void;
   toggleVoice: () => void;
   toggleNotifications: () => Promise<void>;
   setCheckInCadence: (cadence: CheckInCadence) => Promise<void>;
@@ -205,6 +213,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [failedTurn, setFailedTurn] = useState<FailedTurn | null>(null);
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isCallActive, setIsCallActive] = useState<boolean>(false);
   const [settings, setSettings] = useState<CompanionSettings | null>(null);
   const [sensesEnabled, setSensesEnabled] = useState<boolean>(false);
 
@@ -212,13 +221,23 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const failedTurnRef = useRef<FailedTurn | null>(null);
   const moodStateRef = useRef<CompanionMoodState>(moodState);
   const notificationsEnabledRef = useRef<boolean>(notificationsEnabled);
+  // Mirrors the isRecording state so callbacks that run in async contexts
+  // always see the current value without depending on the state directly.
+  const isRecordingRef = useRef<boolean>(false);
+  const isCallActiveRef = useRef<boolean>(false);
+  // Used by startCall to auto-stop each recording round after a timeout;
+  // cleared by endCall so the loop can exit promptly.
+  const callAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callRoundResolveRef = useRef<(() => void) | null>(null);
   const checkInCadenceRef = useRef<CheckInCadence>(checkInCadence);
   const quietHoursRef = useRef<QuietHours>(quietHours);
   const sensesEnabledRef = useRef<boolean>(false);
   const perceptsRef = useRef<Percept[]>([]);
   const lastShakeAtRef = useRef<number | null>(null);
   const batteryLowReportedRef = useRef<boolean>(false);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // LOW_QUALITY (mono, ~32 kbps) is plenty for Whisper speech recognition and
+  // keeps file sizes small enough to upload reliably on 4G connections.
+  const recorder = useAudioRecorder(RecordingPresets.LOW_QUALITY);
 
   // Keep refs in sync so timers/callbacks always see the latest values.
   useEffect(() => {
@@ -777,17 +796,20 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       await recorder.prepareToRecordAsync();
       recorder.record();
       setError(null);
+      isRecordingRef.current = true;
       setIsRecording(true);
       setStatus("listening");
     } catch {
       setError("Couldn't start recording. Try again.");
+      isRecordingRef.current = false;
       setIsRecording(false);
       setStatus("idle");
     }
   }, [recorder]);
 
   const stopListening = useCallback(async () => {
-    if (!isRecording) return;
+    if (!isRecordingRef.current) return;
+    isRecordingRef.current = false;
     setIsRecording(false);
     setStatus("transcribing");
     try {
@@ -800,19 +822,100 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      const format = Platform.OS === "ios" ? "m4a" : "m4a";
-      const { text } = await transcribeAudio({ audio: base64, format });
+      const { text } = await transcribeAudio({ audio: base64, format: "m4a" });
       if (!text.trim()) {
         setError("I didn't catch that. Try again.");
         setStatus("idle");
         return;
       }
       await sendText(text);
-    } catch {
-      setError("Couldn't understand the recording. Try again.");
+    } catch (err) {
+      setError(classifyVoiceError(err));
       setStatus("idle");
     }
-  }, [isRecording, recorder, sendText]);
+  }, [recorder, sendText]);
+
+  // ── Audio call mode ──────────────────────────────────────────────────────
+  // Holding the mic button for 3 s launches a continuous listen → transcribe
+  // → send → speak loop. Each round auto-stops after CALL_ROUND_MS; endCall
+  // breaks the loop immediately by unblocking the pending await.
+
+  const endCall = useCallback(() => {
+    isCallActiveRef.current = false;
+    setIsCallActive(false);
+    if (callAutoStopRef.current != null) {
+      clearTimeout(callAutoStopRef.current);
+      callAutoStopRef.current = null;
+    }
+    if (callRoundResolveRef.current != null) {
+      callRoundResolveRef.current();
+      callRoundResolveRef.current = null;
+    }
+    if (isRecordingRef.current) {
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setStatus("idle");
+      recorder.stop().catch(() => {});
+    }
+  }, [recorder]);
+
+  const startCall = useCallback(async () => {
+    if (isCallActiveRef.current) return;
+    if (conversationIdRef.current == null) return;
+
+    const CALL_ROUND_MS = 20_000;
+    // End the call automatically after this many consecutive failed rounds so
+    // a persistent network outage does not loop forever.
+    const MAX_CONSECUTIVE_ERRORS = 2;
+
+    isCallActiveRef.current = true;
+    setIsCallActive(true);
+
+    let consecutiveErrors = 0;
+
+    try {
+      while (isCallActiveRef.current) {
+        await startListening();
+
+        if (!isRecordingRef.current) {
+          // startListening failed (permissions denied, hardware error, etc.)
+          break;
+        }
+
+        // Wait for the round timeout or an early exit from endCall().
+        await new Promise<void>((resolve) => {
+          callRoundResolveRef.current = resolve;
+          callAutoStopRef.current = setTimeout(() => {
+            callRoundResolveRef.current = null;
+            resolve();
+          }, CALL_ROUND_MS);
+        });
+        callRoundResolveRef.current = null;
+        callAutoStopRef.current = null;
+
+        if (!isCallActiveRef.current) break;
+
+        // Transcribe → send → speak; errors are surfaced via setError inside
+        // stopListening, but we also track them locally to bail on outages.
+        let roundFailed = false;
+        await stopListening().catch(() => {
+          roundFailed = true;
+        });
+
+        if (roundFailed) {
+          consecutiveErrors += 1;
+          if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) break;
+        } else {
+          consecutiveErrors = 0;
+        }
+
+        if (!isCallActiveRef.current) break;
+      }
+    } finally {
+      isCallActiveRef.current = false;
+      setIsCallActive(false);
+    }
+  }, [startListening, stopListening]);
 
   const toggleVoice = useCallback(() => {
     setVoiceEnabled((prev) => {
@@ -1032,10 +1135,13 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         error,
         failedTurn,
         isRecording,
+        isCallActive,
         sendText,
         retryMessage,
         startListening,
         stopListening,
+        startCall,
+        endCall,
         toggleVoice,
         toggleNotifications,
         setCheckInCadence,
