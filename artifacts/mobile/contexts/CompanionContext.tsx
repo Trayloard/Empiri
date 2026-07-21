@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  companionCheckIn,
+  companionCheckInFull,
   createConversation,
   devRegressSelf,
   fetchStream,
@@ -147,6 +147,15 @@ interface CompanionContextValue {
   sensesEnabled: boolean;
   /** Flip the senses opt-in; turning it off discards anything already sensed. */
   toggleSenses: () => void;
+  /**
+   * The reflection thought Empiri composed while the user was away, together
+   * with the message ID it is keyed to for dismissal tracking. Null when no
+   * reflection is due (short absence) or the user has already dismissed it.
+   */
+  pendingReflection: { thought: string; messageId: number } | null;
+  /** Dismiss the current reflection card and persist the decision so it won't
+   * reappear for this absence even after the app is restarted. */
+  dismissReflection: () => Promise<void>;
   retryInit: () => void;
   dismissError: () => void;
   signOut: () => Promise<void>;
@@ -177,6 +186,12 @@ const MOOD_KEY = "empiri.moodState";
 const NOTIF_KEY = "empiri.notificationsEnabled";
 const CADENCE_KEY = "empiri.checkInCadence";
 const QUIET_HOURS_KEY = "empiri.quietHours";
+/**
+ * AsyncStorage key prefix for tracking which reflection card the user has
+ * dismissed. Stored as `${prefix}.${conversationId}` → string message ID.
+ * Keyed by conversation so switching chats shows the right dismissal state.
+ */
+const REFLECTION_DISMISSED_PREFIX = "empiri.reflection.dismissed";
 
 const NUDGE_BODY = "I've been thinking about you — come say hi when you can. 🧡";
 
@@ -233,6 +248,10 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const [isCallActive, setIsCallActive] = useState<boolean>(false);
   const [settings, setSettings] = useState<CompanionSettings | null>(null);
   const [sensesEnabled, setSensesEnabled] = useState<boolean>(false);
+  const [pendingReflection, setPendingReflection] = useState<{
+    thought: string;
+    messageId: number;
+  } | null>(null);
 
   const conversationIdRef = useRef<number | null>(null);
   const failedTurnRef = useRef<FailedTurn | null>(null);
@@ -370,13 +389,26 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       try {
         const current = computeMood(state);
         const percepts = drainPercepts();
-        const greeting = await companionCheckIn(convId, {
+        const result = await companionCheckInFull(convId, {
           hoursAway: current.hoursAway,
           mood: current.label,
           missingYou: current.missingYou,
           ...(percepts ? { percepts } : {}),
         });
+        // Separate the message from the optional reflection thought so the
+        // message lands in the thread immediately and the card appears above.
+        const { reflectionThought, ...greeting } = result;
         setMessages((prev) => [...prev, greeting]);
+        if (reflectionThought) {
+          // Only show the reflection if the user hasn't already dismissed this
+          // exact check-in message.  The dismissed state is persisted across
+          // restarts via AsyncStorage so it survives an app close.
+          const dismissedKey = `${REFLECTION_DISMISSED_PREFIX}.${convId}`;
+          const dismissedId = await AsyncStorage.getItem(dismissedKey).catch(() => null);
+          if (dismissedId !== String(greeting.id)) {
+            setPendingReflection({ thought: reflectionThought, messageId: greeting.id });
+          }
+        }
         if (voiceEnabled) {
           setStatus("speaking");
           await playSpeechRef.current(greeting.content);
@@ -1237,6 +1269,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     failedTurnRef.current = null;
     setFailedTurn(null);
     setError(null);
+    setPendingReflection(null);
     setStatus("idle");
     await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
   }, []);
@@ -1252,6 +1285,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     failedTurnRef.current = null;
     setFailedTurn(null);
     setError(null);
+    setPendingReflection(null);
     setStatus("idle");
     await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
   }, []);
@@ -1260,6 +1294,16 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     const updated = await updateCompanionSettings(patch);
     setSettings(updated);
   }, []);
+
+  const dismissReflection = useCallback(async () => {
+    if (!pendingReflection) return;
+    const convId = conversationIdRef.current;
+    if (convId != null) {
+      const key = `${REFLECTION_DISMISSED_PREFIX}.${convId}`;
+      await AsyncStorage.setItem(key, String(pendingReflection.messageId)).catch(() => {});
+    }
+    setPendingReflection(null);
+  }, [pendingReflection]);
 
   const retryInit = useCallback(() => {
     initialize();
@@ -1298,6 +1342,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     setMoodState(fresh);
     setMood(computeMood(fresh));
     setSettings(null);
+    setPendingReflection(null);
 
     await logout();
   }, [logout]);
@@ -1338,6 +1383,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         setQuietHours,
         sensesEnabled,
         toggleSenses,
+        pendingReflection,
+        dismissReflection,
         retryInit,
         dismissError,
         signOut,

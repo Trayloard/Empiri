@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
-  companionCheckIn,
+  companionCheckInFull,
   createConversation,
   getConversation,
   listConversations,
@@ -110,7 +110,7 @@ const mockListMessages =
   listMessages as jest.MockedFunction<typeof listMessages>;
 const mockSendMessage = sendMessage as jest.MockedFunction<typeof sendMessage>;
 const mockCompanionCheckIn =
-  companionCheckIn as jest.MockedFunction<typeof companionCheckIn>;
+  companionCheckInFull as jest.MockedFunction<typeof companionCheckInFull>;
 
 function makeMessage(
   id: number,
@@ -447,9 +447,10 @@ describe("CompanionContext proactive check-in", () => {
       }),
     );
     mockListMessages.mockResolvedValue([makeMessage(1, "user", "earlier hi")]);
-    mockCompanionCheckIn.mockResolvedValue(
-      makeMessage(2, "assistant", "I missed you — how have you been?"),
-    );
+    mockCompanionCheckIn.mockResolvedValue({
+      ...makeMessage(2, "assistant", "I missed you — how have you been?"),
+      reflectionThought: null,
+    });
 
     const { result } = await renderReadyCompanion();
 

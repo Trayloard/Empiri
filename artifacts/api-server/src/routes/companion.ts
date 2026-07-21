@@ -678,7 +678,10 @@ router.post("/conversations/:id/checkin", async (req, res) => {
     .values({ conversationId: id, role: "assistant", content: reply })
     .returning();
 
-  res.json(toApiMessage(assistantMessage));
+  // Include the reflection thought alongside the message so the mobile client
+  // can surface a "while you were away" card without an extra round-trip.
+  // null when no reflection was due (short absence) or the AI call timed out.
+  res.json({ ...toApiMessage(assistantMessage), reflectionThought: reflectionThought ?? null });
 
   // A check-in is Empiri reaching out, not the user feeding it: persist the
   // time-decay so striving keeps growing during quiet stretches (best-effort).

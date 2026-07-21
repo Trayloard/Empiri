@@ -156,6 +156,8 @@ export default function CompanionScreen() {
     setQuietHours,
     sensesEnabled,
     toggleSenses,
+    pendingReflection,
+    dismissReflection,
     retryInit,
     dismissError,
     devTriggerCheckIn,
@@ -459,6 +461,39 @@ export default function CompanionScreen() {
               </Text>
             </View>
           ) : (
+            <>
+              {/* "While you were away" reflection card — shown when Empiri
+                  composed a thought during the user's absence. Dismissible;
+                  dismissal is persisted so the card stays gone after a restart. */}
+              {pendingReflection ? (
+                <View
+                  style={[
+                    styles.reflectionCard,
+                    {
+                      backgroundColor: `${accent}14`,
+                      borderColor: `${accent}30`,
+                    },
+                  ]}
+                >
+                  <View style={styles.reflectionHeader}>
+                    <Feather name="moon" size={12} color={accent} />
+                    <Text style={[styles.reflectionLabel, { color: accent }]}>
+                      While you were away
+                    </Text>
+                    <Pressable
+                      onPress={() => { dismissReflection().catch(() => {}); }}
+                      hitSlop={10}
+                      accessibilityLabel="Dismiss reflection"
+                      accessibilityRole="button"
+                    >
+                      <Feather name="x" size={14} color={accent} style={{ opacity: 0.7 }} />
+                    </Pressable>
+                  </View>
+                  <Text style={[styles.reflectionText, { color: colors.foreground }]}>
+                    {pendingReflection.thought}
+                  </Text>
+                </View>
+              ) : null}
             <FlatList
               data={reversed}
               inverted
@@ -478,6 +513,7 @@ export default function CompanionScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             />
+            </>
           )}
         </View>
 
@@ -857,6 +893,35 @@ const styles = StyleSheet.create({
   renameBtnText: {
     fontSize: 14.5,
     fontFamily: FONTS.semibold,
+  },
+  // "While you were away" reflection card
+  reflectionCard: {
+    marginHorizontal: 14,
+    marginBottom: 6,
+    marginTop: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  reflectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  reflectionLabel: {
+    flex: 1,
+    fontSize: 11.5,
+    fontFamily: FONTS.semibold,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  reflectionText: {
+    fontSize: 14.5,
+    fontFamily: FONTS.regular,
+    lineHeight: 20,
+    fontStyle: "italic",
   },
   errorBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,

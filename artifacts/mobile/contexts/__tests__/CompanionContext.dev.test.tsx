@@ -5,7 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 
 import {
-  companionCheckIn,
+  companionCheckInFull,
   createConversation,
   listMessages,
   type Message,
@@ -88,7 +88,7 @@ const mockCreateConversation =
 const mockListMessages =
   listMessages as jest.MockedFunction<typeof listMessages>;
 const mockCompanionCheckIn =
-  companionCheckIn as jest.MockedFunction<typeof companionCheckIn>;
+  companionCheckInFull as jest.MockedFunction<typeof companionCheckInFull>;
 const mockSchedule =
   Notifications.scheduleNotificationAsync as jest.MockedFunction<
     typeof Notifications.scheduleNotificationAsync
@@ -141,9 +141,10 @@ beforeEach(async () => {
 
 describe("CompanionContext dev shortcuts", () => {
   it("devTriggerCheckIn fires a greeting immediately, ignoring the time-away threshold", async () => {
-    mockCompanionCheckIn.mockResolvedValue(
-      makeMessage(2, "assistant", "Hey — just thinking of you!"),
-    );
+    mockCompanionCheckIn.mockResolvedValue({
+      ...makeMessage(2, "assistant", "Hey — just thinking of you!"),
+      reflectionThought: null,
+    });
 
     const { result } = await renderReadyCompanion();
 
