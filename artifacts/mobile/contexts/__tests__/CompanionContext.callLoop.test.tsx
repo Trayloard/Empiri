@@ -1,4 +1,5 @@
 import React from "react";
+import { AppState } from "react-native";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -278,6 +279,50 @@ describe("Audio call loop — startCall / endCall", () => {
       await waitFor(() => expect(callFinished).toBe(true));
     } finally {
       jest.useRealTimers();
+    }
+  });
+
+  it("backgrounding the app mid-call ends the call cleanly", async () => {
+    // Capture the AppState listener registered by the backgrounding effect.
+    const listeners: ((state: string) => void)[] = [];
+    const addEventListenerSpy = jest
+      .spyOn(AppState, "addEventListener")
+      .mockImplementation((_event: string, cb: (state: string) => void) => {
+        listeners.push(cb);
+        return { remove: () => {} };
+      });
+
+    const { result } = await renderReadyCompanion();
+
+    jest.useFakeTimers({
+      doNotFake: ["setImmediate", "nextTick", "queueMicrotask"],
+    });
+    try {
+      let callFinished = false;
+      act(() => {
+        result.current.startCall().finally(() => {
+          callFinished = true;
+        });
+      });
+      await tick(0);
+      await waitFor(() => expect(result.current.isCallActive).toBe(true));
+
+      // Simulate the OS moving the app to the background mid-call.
+      act(() => {
+        listeners.forEach((cb) => cb("background"));
+      });
+      await tick(0);
+
+      // The call must end promptly — no 20 s wait.
+      await waitFor(() => expect(result.current.isCallActive).toBe(false));
+      await waitFor(() => expect(callFinished).toBe(true));
+
+      // Advancing past the original round timeout must not restart the call.
+      await tick(25_000);
+      expect(result.current.isCallActive).toBe(false);
+    } finally {
+      jest.useRealTimers();
+      addEventListenerSpy.mockRestore();
     }
   });
 });

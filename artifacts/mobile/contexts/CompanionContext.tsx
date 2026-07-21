@@ -623,6 +623,21 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [sensesEnabled]);
 
+  // End any active voice call when the app moves to the background so the
+  // recorder is never left open in an invisible state and temp .m4a files
+  // are cleaned up promptly. endCall() handles all cleanup: stops the
+  // recorder, resets audio mode, resolves the pending round promise, and
+  // clears the auto-stop timeout — so the loop exits on its next iteration.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active" && isCallActiveRef.current) {
+        endCall();
+      }
+    });
+    return () => sub.remove();
+  }, [endCall]);
+
   const clearFailedTurn = useCallback(() => {
     failedTurnRef.current = null;
     setFailedTurn(null);

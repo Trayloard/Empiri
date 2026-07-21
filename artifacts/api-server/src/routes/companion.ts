@@ -86,9 +86,46 @@ function lastContactBefore(history: Message[], excludeMessageId: number): number
   return latest;
 }
 
+/** Default title for newly-created conversations. */
+export const DEFAULT_TITLE = "New chat";
+
 /** Default settings used when no row exists yet (avoids a write on every request). */
 const DEFAULT_SETTINGS: Pick<CompanionSettings, "companionName" | "tone" | "personalityNote"> =
   { companionName: "Empiri", tone: "calm", personalityNote: "" };
+
+/**
+ * Returns companion settings for `userId` in the shape expected by
+ * `buildCompanionSystemPrompt` (`name` / `tone` / `personalityNote`).
+ * Falls back to in-memory defaults when no DB row exists yet.
+ */
+export async function getOrCreateCompanionSettings(userId: string): Promise<{
+  name: string;
+  tone: string;
+  personalityNote: string | null;
+}> {
+  const row = await loadSettings(userId);
+  return {
+    name: row.companionName,
+    tone: row.tone,
+    personalityNote: row.personalityNote ?? null,
+  };
+}
+
+/**
+ * Standalone ownership check — returns the conversation row when it exists
+ * and belongs to `userId`, otherwise returns null.
+ */
+export async function getOwnedConversation(
+  userId: string,
+  id: number,
+): Promise<(typeof conversations.$inferSelect) | null> {
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, id));
+  if (!row || row.ownerId !== userId) return null;
+  return row;
+}
 
 /**
  * Loads companion settings for a user from the DB.
