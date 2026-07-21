@@ -734,7 +734,9 @@ export function InnerSelfSheet({
   // Durable personal facts Empiri holds about the user, most salient first.
   const facts = self?.facts ?? [];
 
-  // Which fact key is currently being deleted (one at a time).
+  // Which fact key is awaiting inline confirmation before deletion.
+  const [confirmDeleteFactKey, setConfirmDeleteFactKey] = useState<string | null>(null);
+  // Which fact key is currently being deleted (in-flight API call).
   const [deletingFactKey, setDeletingFactKey] = useState<string | null>(null);
   // Error shown beneath the facts card when a delete fails.
   const [factDeleteError, setFactDeleteError] = useState<string | null>(null);
@@ -748,8 +750,18 @@ export function InnerSelfSheet({
     setMode(next);
   };
 
+  const confirmFactDelete = (key: string) => {
+    setFactDeleteError(null);
+    setConfirmDeleteFactKey(key);
+  };
+
+  const cancelFactDelete = () => {
+    setConfirmDeleteFactKey(null);
+  };
+
   const deleteFact = async (key: string) => {
     if (conversationId == null || deletingFactKey != null) return;
+    setConfirmDeleteFactKey(null);
     setFactDeleteError(null);
     setDeletingFactKey(key);
 
@@ -875,6 +887,7 @@ export function InnerSelfSheet({
       setMemoryEditing(false);
       setMemoryConfirmClear(false);
       setMemoryActionError(null);
+      setConfirmDeleteFactKey(null);
       setDeletingFactKey(null);
       setFactDeleteError(null);
       bgThemeRefreshFired.current = false;
@@ -1426,7 +1439,8 @@ export function InnerSelfSheet({
                   </>
                 ) : null}
 
-                {facts.length > 0 ? (
+                {/* Facts section — shown whether empty or not once the self has loaded */}
+                {self != null ? (
                   <>
                     <Text
                       style={[
@@ -1436,79 +1450,158 @@ export function InnerSelfSheet({
                     >
                       LITTLE THINGS I&apos;VE PICKED UP
                     </Text>
-                    <View style={styles.factsCard} testID="facts-card">
-                      {facts.map((fact, index) => (
-                        <View
-                          key={fact.key}
-                          style={[
-                            styles.factRow,
-                            index > 0 && styles.factRowDivider,
-                          ]}
-                        >
-                          <View
-                            style={[
-                              styles.factDot,
-                              {
-                                backgroundColor: sheetAccent,
-                                opacity:
-                                  0.35 +
-                                  0.65 *
-                                    Math.max(
-                                      0,
-                                      Math.min(1, fact.salience / 100),
-                                    ),
-                              },
-                            ]}
-                          />
-                          <Text style={styles.factText}>{fact.text}</Text>
-                          <Pressable
-                            onPress={() => deleteFact(fact.key)}
-                            disabled={deletingFactKey != null}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Forget this — ${fact.text}`}
-                            testID={`fact-delete-${fact.key}`}
-                            hitSlop={10}
-                            style={({ pressed }) => [
-                              styles.factDeleteBtn,
-                              {
-                                opacity:
-                                  pressed ||
-                                  deletingFactKey === fact.key
-                                    ? 0.35
-                                    : deletingFactKey != null
-                                      ? 0.3
-                                      : 0.65,
-                              },
-                            ]}
-                          >
-                            {deletingFactKey === fact.key ? (
-                              <ActivityIndicator
-                                size="small"
-                                color="rgba(231,233,245,0.7)"
-                              />
-                            ) : (
-                              <Feather
-                                name="x"
-                                size={15}
-                                color="rgba(231,233,245,0.9)"
-                              />
-                            )}
-                          </Pressable>
-                        </View>
-                      ))}
-                    </View>
-                    {factDeleteError ? (
+                    {facts.length === 0 ? (
                       <Text
-                        style={styles.memoryActionErrorText}
-                        testID="fact-delete-error"
+                        style={styles.factsEmptyText}
+                        testID="facts-empty"
                       >
-                        {factDeleteError}
+                        Nothing yet — as we keep chatting, little things
+                        you share will appear here.
                       </Text>
-                    ) : null}
-                    <Text style={styles.memoryFootnote}>
-                      Little things you&apos;ve shared — the ones we return to
-                      stay the brightest.
-                    </Text>
+                    ) : (
+                      <>
+                        <View style={styles.factsCard} testID="facts-card">
+                          {facts.map((fact, index) => (
+                            <View key={fact.key}>
+                              <View
+                                style={[
+                                  styles.factRow,
+                                  index > 0 && styles.factRowDivider,
+                                ]}
+                              >
+                                <View
+                                  style={[
+                                    styles.factDot,
+                                    {
+                                      backgroundColor: sheetAccent,
+                                      opacity:
+                                        0.35 +
+                                        0.65 *
+                                          Math.max(
+                                            0,
+                                            Math.min(1, fact.salience / 100),
+                                          ),
+                                    },
+                                  ]}
+                                />
+                                <Text style={styles.factText}>{fact.text}</Text>
+                                <Pressable
+                                  onPress={() =>
+                                    confirmDeleteFactKey === fact.key
+                                      ? cancelFactDelete()
+                                      : confirmFactDelete(fact.key)
+                                  }
+                                  disabled={deletingFactKey != null}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={
+                                    confirmDeleteFactKey === fact.key
+                                      ? "Cancel"
+                                      : `Forget this — ${fact.text}`
+                                  }
+                                  testID={`fact-delete-${fact.key}`}
+                                  hitSlop={10}
+                                  style={({ pressed }) => [
+                                    styles.factDeleteBtn,
+                                    {
+                                      opacity:
+                                        pressed ||
+                                        deletingFactKey === fact.key
+                                          ? 0.35
+                                          : deletingFactKey != null
+                                            ? 0.3
+                                            : 0.65,
+                                    },
+                                  ]}
+                                >
+                                  {deletingFactKey === fact.key ? (
+                                    <ActivityIndicator
+                                      size="small"
+                                      color="rgba(231,233,245,0.7)"
+                                    />
+                                  ) : (
+                                    <Feather
+                                      name="x"
+                                      size={15}
+                                      color="rgba(231,233,245,0.9)"
+                                    />
+                                  )}
+                                </Pressable>
+                              </View>
+                              {confirmDeleteFactKey === fact.key ? (
+                                <View
+                                  style={styles.factConfirmRow}
+                                  testID={`fact-confirm-${fact.key}`}
+                                >
+                                  <Text style={styles.memoryConfirmText}>
+                                    Forget this?
+                                  </Text>
+                                  <Pressable
+                                    onPress={cancelFactDelete}
+                                    disabled={deletingFactKey != null}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Keep this"
+                                    testID={`fact-confirm-keep-${fact.key}`}
+                                    style={({ pressed }) => [
+                                      styles.memoryBtn,
+                                      {
+                                        opacity:
+                                          pressed || deletingFactKey != null
+                                            ? 0.6
+                                            : 1,
+                                      },
+                                    ]}
+                                  >
+                                    <Text style={styles.memoryBtnText}>
+                                      Keep
+                                    </Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => deleteFact(fact.key)}
+                                    disabled={deletingFactKey != null}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Yes, forget it"
+                                    testID={`fact-confirm-forget-${fact.key}`}
+                                    style={({ pressed }) => [
+                                      styles.memoryBtn,
+                                      styles.memoryBtnDanger,
+                                      {
+                                        opacity:
+                                          pressed || deletingFactKey != null
+                                            ? 0.7
+                                            : 1,
+                                      },
+                                    ]}
+                                  >
+                                    {deletingFactKey === fact.key ? (
+                                      <ActivityIndicator
+                                        size="small"
+                                        color="#FFB4C0"
+                                      />
+                                    ) : (
+                                      <Text style={styles.memoryBtnDangerText}>
+                                        Forget
+                                      </Text>
+                                    )}
+                                  </Pressable>
+                                </View>
+                              ) : null}
+                            </View>
+                          ))}
+                        </View>
+                        {factDeleteError ? (
+                          <Text
+                            style={styles.memoryActionErrorText}
+                            testID="fact-delete-error"
+                          >
+                            {factDeleteError}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.memoryFootnote}>
+                          Little things you&apos;ve shared — the ones we return
+                          to stay the brightest.
+                        </Text>
+                      </>
+                    )}
                   </>
                 ) : null}
               </ScrollView>
@@ -1876,6 +1969,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 6,
+  },
+  factsEmptyText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13.5,
+    lineHeight: 20,
+    color: "rgba(231,233,245,0.45)",
+    marginTop: 8,
+    paddingHorizontal: 2,
+  },
+  factConfirmRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    backgroundColor: "rgba(255,180,192,0.06)",
+    borderRadius: 8,
+    marginTop: 2,
+    marginBottom: 4,
   },
   node: {
     position: "absolute",
