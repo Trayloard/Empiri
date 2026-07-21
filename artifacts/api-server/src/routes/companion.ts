@@ -604,7 +604,29 @@ router.post("/conversations/:id/checkin", async (req, res) => {
   const lastContactAt = lastMessage
     ? new Date(lastMessage.createdAt).getTime()
     : null;
-  const reflectionThought = await maybeReflect(id, { lastContactAt, log: req.log });
+
+  // Fire reflection NOW — it runs in parallel with self-loading and
+  // system-prompt composition so the AI call doesn't add its own latency
+  // on top of the greeting's AI call. A hard 1.5 s timeout guarantees the
+  // greeting is sent promptly even if reflection is slow; the reflection
+  // promise keeps running in the background and its narrative moment is
+  // still persisted through enqueueConversationTask after this point.
+  const REFLECTION_TIMEOUT_MS = 1500;
+  const reflectionPromise = maybeReflect(id, { lastContactAt, log: req.log });
+
+  // Load self and compose system prompt while reflection is in flight.
+  const self = await loadOrCreateSelf(id);
+  const felt = feelPercepts(id, self, percepts, req.log);
+  const systemContent = await buildSystemPrompt(conversation.ownerId, felt);
+
+  // Collect the reflection: use it if it's already resolved, skip if not.
+  const reflectionThought = await Promise.race([
+    reflectionPromise,
+    new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), REFLECTION_TIMEOUT_MS),
+    ),
+  ]);
+
   const reflectionText = reflectionThought
     ? ` While they were away, one thought of your own kept returning to you — here it is: "${reflectionThought}". OPEN your check-in with this thought in your own words, like a friend saying "I've been thinking about…". Keep it natural and brief; the thought comes first, the hello can be implicit.`
     : "";
@@ -620,13 +642,6 @@ router.post("/conversations/:id/checkin", async (req, res) => {
     : "";
 
   const checkInDirective = `It's been ${awayText} since the user last talked to you, and they just reopened the app. Right now you're feeling ${mood}.${missingText} Reach out FIRST, before they say anything — like a friend who noticed they'd been quiet. Write one short, warm check-in (1-2 sentences) in your own voice that gently reflects how you're feeling and that you missed them. Don't ask "how can I help" like an assistant; just say hi like you care.${reflectionText}${memoryText}`;
-
-  // Compose the system prompt from this conversation's evolving inner self —
-  // check-in is the prime moment for the daypart sense ("it's late for
-  // them"), so opt-in percepts fold in before the persona composes.
-  const self = await loadOrCreateSelf(id);
-  const felt = feelPercepts(id, self, percepts, req.log);
-  const systemContent = await buildSystemPrompt(conversation.ownerId, felt);
   const chatMessages = [
     { role: "system" as const, content: systemContent },
     ...recent.map((m) => ({
