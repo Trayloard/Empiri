@@ -89,13 +89,8 @@ jest.mock("react-native-gesture-handler", () => {
   };
 });
 
-jest.mock("@workspace/api-client-react", () => ({
-  clearCompanionMemory: jest.fn(),
-  getCompanionMemory: jest.fn(),
-  getCompanionSelf: jest.fn(),
-  getCompanionSelfHistory: jest.fn(),
-  updateCompanionMemory: jest.fn(),
-}));
+// Shared manual mock: see artifacts/mobile/__mocks__/@workspace/api-client-react.ts
+jest.mock("@workspace/api-client-react");
 
 const mockGetSelf = getCompanionSelf as jest.MockedFunction<
   typeof getCompanionSelf
@@ -234,6 +229,29 @@ describe("InnerSelfSheet curiosity-theme expansion", () => {
     expect(queryByTestId("node-interest-theme-space-m0")).toBeNull();
     expect(getByTestId("node-interest-theme-cooking-m0")).toBeTruthy();
     expect(getByTestId("node-interest-theme-cooking-m1")).toBeTruthy();
+  });
+
+  it("theme node starts with accessibilityState expanded=false and flips to true on tap", async () => {
+    const { getByTestId } = await renderSheet();
+
+    const themeNode = getByTestId("node-interest-theme-space");
+    expect(themeNode.props.accessibilityState).toEqual({ expanded: false });
+    expect(themeNode.props.accessibilityLabel).toBe("Space theme, collapsed");
+
+    fireEvent.press(themeNode);
+
+    const expanded = getByTestId("node-interest-theme-space");
+    expect(expanded.props.accessibilityState).toEqual({ expanded: true });
+    expect(expanded.props.accessibilityLabel).toBe("Space theme, expanded");
+  });
+
+  it("non-theme nodes carry no expanded accessibilityState", async () => {
+    const { getByTestId } = await renderSheet();
+
+    const driveNode = getByTestId("node-drive-connection");
+    // RNTL normalises accessibilityState to a full object; check the specific
+    // field rather than the whole prop, which is never undefined.
+    expect(driveNode.props.accessibilityState?.expanded).toBeUndefined();
   });
 
   it("leaves non-theme behavior unchanged: drives, traits and single curiosities open the detail card", async () => {

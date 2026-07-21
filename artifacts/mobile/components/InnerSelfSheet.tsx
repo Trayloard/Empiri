@@ -596,11 +596,14 @@ function NodeView({
   pulse,
   reduceMotion,
   onPress,
+  isExpanded,
 }: {
   node: GNode;
   pulse: SharedValue<number>;
   reduceMotion: boolean;
   onPress: (n: GNode) => void;
+  /** Defined only for theme nodes (those with a toggleId). */
+  isExpanded?: boolean;
 }) {
   const color = CAT_COLOR[node.category];
   // Hubs breathe at a steady base; leaves breathe brighter the higher their
@@ -623,11 +626,17 @@ function NodeView({
     onPress(node);
   };
 
+  const a11yLabel =
+    node.toggleId != null
+      ? `${node.detail.title} theme, ${isExpanded ? "expanded" : "collapsed"}`
+      : `${node.detail.title}. ${node.detail.role}`;
+
   return (
     <Pressable
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={`${node.detail.title}. ${node.detail.role}`}
+      accessibilityLabel={a11yLabel}
+      accessibilityState={node.toggleId != null ? { expanded: isExpanded ?? false } : undefined}
       testID={`node-${node.id}`}
       style={[
         styles.node,
@@ -1084,6 +1093,11 @@ export function InnerSelfSheet({
                       pulse={pulse}
                       reduceMotion={reduceMotion}
                       onPress={handleNodePress}
+                      isExpanded={
+                        n.toggleId != null
+                          ? expandedThemes.has(n.toggleId)
+                          : undefined
+                      }
                     />
                   ))}
                 </View>
