@@ -997,7 +997,9 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
     isCallActiveRef.current = true;
     callForcesVoiceRef.current = true;
-    setIsCallActive(true);
+    // setIsCallActive(true) is deferred until startListening confirms that
+    // recording actually started. If permission is denied or a hardware error
+    // fires, we exit without ever showing the "call active" indicator.
 
     let consecutiveErrors = 0;
 
@@ -1009,6 +1011,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           // startListening failed (permissions denied, hardware error, etc.)
           break;
         }
+
+        // Recording confirmed — surface the active indicator now. React
+        // deduplicates redundant setStates, so calling this on every
+        // successful round is safe and never triggers an extra render.
+        setIsCallActive(true);
 
         // Wait for the round timeout or an early exit from endCall().
         await new Promise<void>((resolve) => {

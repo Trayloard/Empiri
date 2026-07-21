@@ -449,3 +449,98 @@ describe("Audio call loop — startListening failure exits immediately", () => {
     }
   });
 });
+
+describe("Audio call loop — isCallActive never flashes true on a failed startListening", () => {
+  /**
+   * startCall used to set isCallActive=true before awaiting startListening.
+   * If permission was denied, React committed a render with isCallActive=true
+   * before the finally block reset it — causing the UI to briefly flash the
+   * "call active" indicator even though recording never started.
+   *
+   * The fix: setIsCallActive(true) is deferred until after startListening
+   * confirms isRecordingRef.current === true.
+   *
+   * This test locks that invariant in. It checks isCallActive synchronously
+   * after all microtasks have flushed — if isCallActive was ever committed
+   * as true, React Testing Library would reflect it here.
+   */
+
+  it("isCallActive is false throughout when permission is denied — never flashes true", async () => {
+    const { result } = await renderReadyCompanion();
+
+    (
+      AudioModule.requestRecordingPermissionsAsync as jest.Mock
+    ).mockResolvedValueOnce({ granted: false });
+
+    jest.useFakeTimers({
+      doNotFake: ["setImmediate", "nextTick", "queueMicrotask"],
+    });
+    try {
+      // Track every isCallActive value that React commits while the call
+      // attempt runs. We collect values by reading the hook result after each
+      // state flush — if isCallActive is ever true, the array will contain it.
+      const observedCallActive: boolean[] = [];
+
+      let callFinished = false;
+      act(() => {
+        result.current.startCall().finally(() => {
+          callFinished = true;
+        });
+      });
+
+      // Capture the state immediately after the first act flush (where the
+      // old implementation would have committed isCallActive=true).
+      observedCallActive.push(result.current.isCallActive);
+
+      // Flush the permission-check microtask so startListening can resolve.
+      await tick(0);
+      observedCallActive.push(result.current.isCallActive);
+
+      await waitFor(() => expect(callFinished).toBe(true));
+      observedCallActive.push(result.current.isCallActive);
+
+      // isCallActive must have been false at every observed render.
+      expect(observedCallActive.every((v) => v === false)).toBe(true);
+      expect(result.current.isCallActive).toBe(false);
+      expect(result.current.status).toBe("idle");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("isCallActive becomes true only after a successful startListening", async () => {
+    const { result } = await renderReadyCompanion();
+
+    jest.useFakeTimers({
+      doNotFake: ["setImmediate", "nextTick", "queueMicrotask"],
+    });
+    try {
+      // isCallActive must stay false until recording starts.
+      expect(result.current.isCallActive).toBe(false);
+
+      act(() => {
+        result.current.startCall();
+      });
+
+      // Before flushing microtasks (startListening hasn't resolved yet):
+      // isCallActive must still be false even though startCall was called.
+      expect(result.current.isCallActive).toBe(false);
+
+      // Flush the permission check and prepareToRecordAsync — startListening
+      // succeeds, recording starts, setIsCallActive(true) fires.
+      await tick(0);
+
+      await waitFor(() => expect(result.current.isCallActive).toBe(true));
+      expect(result.current.status).toBe("listening");
+
+      // Clean up.
+      act(() => {
+        result.current.endCall();
+      });
+      await tick(0);
+      await waitFor(() => expect(result.current.isCallActive).toBe(false));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
