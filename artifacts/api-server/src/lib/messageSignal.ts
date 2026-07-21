@@ -334,13 +334,24 @@ export function queueSelfEvolution(
       const self = await loadOrCreateSelf(conversationId);
       const evolved = evolve(self, signal);
       await saveSelf(conversationId, evolved);
-      await maybeSnapshotSelf(conversationId, evolved);
+      // Snapshot failures are logged separately so they surface with the
+      // conversationId for traceability and do not abort the biography
+      // condensation that follows (a missed snapshot is a history gap, not
+      // a broken evolution).
+      try {
+        await maybeSnapshotSelf(conversationId, evolved);
+      } catch (err) {
+        log?.error(
+          { err, conversationId },
+          "Snapshot write failed; growth history may have a gap",
+        );
+      }
       // After the fold is safely saved: turn a full archive into a chapter.
       // Still inside this conversation's queue entry, so no other fold can
       // interleave; its own failures never disturb the saved evolution.
       await maybeCondenseBiography(conversationId, evolved, log);
     } catch (err) {
-      log?.error({ err }, "Failed to evolve companion self");
+      log?.error({ err, conversationId }, "Failed to evolve companion self");
     }
   });
 }

@@ -426,3 +426,53 @@ describe("queueSelfEvolution: biography condensation", () => {
     expect(log.warn).toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Snapshot write failure handling
+// ---------------------------------------------------------------------------
+describe("queueSelfEvolution: snapshot write failure", () => {
+  const validAnalysisReply = modelReply({
+    topics: [],
+    connection: 0.5,
+    curiosity: 0.3,
+    novelty: 0.2,
+    expression: 0.3,
+  });
+
+  beforeEach(() => {
+    createMock.mockReset();
+    loadSelfMock.mockReset();
+    saveSelfMock.mockReset();
+    snapshotMock.mockReset();
+    createMock.mockResolvedValue(validAnalysisReply);
+    loadSelfMock.mockResolvedValue(createSelf(NEURO_PARAMS));
+    saveSelfMock.mockResolvedValue(undefined);
+  });
+
+  it("logs the snapshot error with conversationId when the DB insert fails", async () => {
+    const dbError = new Error("db connection lost");
+    snapshotMock.mockRejectedValue(dbError);
+    const log = { warn: vi.fn(), error: vi.fn() };
+
+    await queueSelfEvolution(999, "hello", log);
+
+    expect(log.error).toHaveBeenCalledTimes(1);
+    expect(log.error).toHaveBeenCalledWith(
+      expect.objectContaining({ err: dbError, conversationId: 999 }),
+      expect.stringMatching(/snapshot/i),
+    );
+  });
+
+  it("does not throw and still saves the evolved self when the snapshot write fails", async () => {
+    snapshotMock.mockRejectedValue(new Error("db down"));
+    const log = { warn: vi.fn(), error: vi.fn() };
+
+    // Must resolve cleanly — no unhandled rejection.
+    await expect(queueSelfEvolution(999, "hello", log)).resolves.toBeUndefined();
+
+    // The evolution itself was persisted despite the snapshot failure.
+    expect(saveSelfMock).toHaveBeenCalledOnce();
+    // The snapshot error must NOT leak into the outer "evolution failed" log path.
+    expect(log.error).toHaveBeenCalledTimes(1);
+  });
+});
