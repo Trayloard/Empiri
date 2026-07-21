@@ -31,6 +31,7 @@ export {
   type Chapter,
   type CoreSelfData,
   type Interest,
+  type NarrativeLine,
 } from "./blocks/coreSelf";
 export { pendingBiographyLines, applyChapter } from "./biography";
 export {

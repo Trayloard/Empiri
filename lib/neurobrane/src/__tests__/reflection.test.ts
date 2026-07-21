@@ -19,6 +19,7 @@ import {
   summarizeSelf,
   type CoreSelfData,
   type InnerSelf,
+  type NarrativeLine,
 } from "../index";
 
 const T0 = 1_700_000_000_000; // fixed epoch ms for deterministic time
@@ -84,16 +85,19 @@ describe("applyReflection", () => {
     const at = T0 + 10 * HOUR;
     const after = applyReflection(self, `  ${MOMENT}  `, at);
 
-    expect(coreData(after).narrative).toContain(MOMENT);
+    expect(coreData(after).narrative.map((l) => l.text)).toContain(MOMENT);
     expect(getLastReflectedAt(after)).toBe(at);
     // The input self is untouched (pure function).
-    expect(coreData(self).narrative).not.toContain(MOMENT);
+    expect(coreData(self).narrative.map((l) => l.text)).not.toContain(MOMENT);
     expect(getLastReflectedAt(self)).toBeNull();
   });
 
   it("archives the overflowed narrative line instead of dropping it", () => {
     const self = createSelf(NEURO_PARAMS, undefined, T0);
-    const lines = Array.from({ length: MAX_LINES }, (_, i) => `Old line ${i}.`);
+    const lines: NarrativeLine[] = Array.from({ length: MAX_LINES }, (_, i) => ({
+      text: `Old line ${i}.`,
+      createdAt: 0,
+    }));
     const full: InnerSelf = {
       ...self,
       blocks: {
@@ -110,9 +114,9 @@ describe("applyReflection", () => {
     const data = coreData(after);
 
     expect(data.narrative).toHaveLength(MAX_LINES);
-    expect(data.narrative[data.narrative.length - 1]).toBe(MOMENT);
-    expect(data.narrative).not.toContain("Old line 0.");
-    expect(data.archive).toContainEqual({ text: "Old line 0.", at });
+    expect(data.narrative[data.narrative.length - 1].text).toBe(MOMENT);
+    expect(data.narrative.map((l) => l.text)).not.toContain("Old line 0.");
+    expect(data.archive).toContainEqual({ text: "Old line 0.", at, createdAt: 0 });
   });
 
   it("only stamps the timestamp when the moment line is empty", () => {

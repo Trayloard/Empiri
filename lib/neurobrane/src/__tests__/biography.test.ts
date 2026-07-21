@@ -15,6 +15,7 @@ import {
   type CoreSelfData,
   type InnerSelf,
   type InteractionSignal,
+  type NarrativeLine,
 } from "../index";
 
 const T0 = 1_700_000_000_000; // fixed epoch ms for deterministic time
@@ -72,7 +73,7 @@ function selfWithCore(data: CoreSelfData, now: number = T0): InnerSelf {
 }
 
 /** A signal + data pair whose fold pushes ONE new narrative line. */
-function crossingSetup(narrative: string[]) {
+function crossingSetup(narrative: NarrativeLine[]) {
   // affinity 50 + reinforceGain 11 crosses newInterestThreshold 55.
   const data = coreData({
     interests: [{ topic: "jazz", affinity: 50, display: "Jazz" }],
@@ -83,18 +84,21 @@ function crossingSetup(narrative: string[]) {
 
 describe("core-self: narrative overflow archiving", () => {
   it("archives (dated) the lines that slide out instead of dropping them", () => {
-    const lines = Array.from({ length: MAX_LINES }, (_, i) => `line ${i}`);
+    const lines: NarrativeLine[] = Array.from({ length: MAX_LINES }, (_, i) => ({
+      text: `line ${i}`,
+      createdAt: T0,
+    }));
     const { data, signal } = crossingSetup(lines);
 
     const next = coreSelfBlock.applyInteraction(data, signal, NEURO_PARAMS, CTX);
 
     expect(next.narrative).toHaveLength(MAX_LINES);
-    expect(next.narrative[next.narrative.length - 1]).toContain("jazz");
-    expect(next.archive).toEqual([{ text: "line 0", at: T0 }]);
+    expect(next.narrative[next.narrative.length - 1].text).toContain("jazz");
+    expect(next.archive).toEqual([{ text: "line 0", at: T0, createdAt: T0 }]);
   });
 
   it("does not archive anything while the narrative is below its cap", () => {
-    const { data, signal } = crossingSetup(["line 0"]);
+    const { data, signal } = crossingSetup([{ text: "line 0", createdAt: T0 }]);
     const next = coreSelfBlock.applyInteraction(data, signal, NEURO_PARAMS, CTX);
     expect(next.narrative).toHaveLength(2);
     expect(next.archive).toEqual([]);
@@ -105,7 +109,10 @@ describe("core-self: narrative overflow archiving", () => {
       text: `old ${i}`,
       at: T0 - (BIO.archiveMax - i) * DAY,
     }));
-    const lines = Array.from({ length: MAX_LINES }, (_, i) => `line ${i}`);
+    const lines: NarrativeLine[] = Array.from({ length: MAX_LINES }, (_, i) => ({
+      text: `line ${i}`,
+      createdAt: T0,
+    }));
     const { data, signal } = crossingSetup(lines);
     data.archive = archive;
 
@@ -113,7 +120,7 @@ describe("core-self: narrative overflow archiving", () => {
 
     expect(next.archive).toHaveLength(BIO.archiveMax);
     expect(next.archive[0].text).toBe("old 1");
-    expect(next.archive[next.archive.length - 1]).toEqual({ text: "line 0", at: T0 });
+    expect(next.archive[next.archive.length - 1]).toEqual({ text: "line 0", at: T0, createdAt: T0 });
   });
 });
 
@@ -128,7 +135,7 @@ describe("core-self: legacy state migration", () => {
     const normalized = normalizeCoreSelf(legacy);
     expect(normalized.archive).toEqual([]);
     expect(normalized.chapters).toEqual([]);
-    expect(normalized.narrative).toEqual(["an old line"]);
+    expect(normalized.narrative).toEqual([{ text: "an old line", createdAt: 0 }]);
   });
 
   it("applyInteraction and decay preserve archive and chapters", () => {

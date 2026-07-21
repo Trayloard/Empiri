@@ -201,6 +201,13 @@ export interface CompanionChapter {
    * older chapters (show only the chapter text in that case).
    */
   sourceLines?: string[];
+  /**
+   * Epoch ms of the earliest moment a memory in this chapter was originally
+   * written. Prefer this over `from` for display — it reflects when the
+   * memory was made, not when it was filed. Absent for older chapters; fall
+   * back to `from`.
+   */
+  memoryDate?: number;
 }
 
 /**

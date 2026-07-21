@@ -34,11 +34,27 @@ export interface Interest {
   display?: string;
 }
 
+/**
+ * A single line of the rolling self-narrative, stamped with the moment it was
+ * originally written (not the moment it may later overflow to the archive).
+ */
+export interface NarrativeLine {
+  text: string;
+  /** Epoch ms when this line was first written into the narrative. */
+  createdAt: number;
+}
+
 /** A narrative line that overflowed the rolling window, dated for condensation. */
 export interface ArchivedLine {
   text: string;
-  /** Epoch ms when the line slid out of the rolling narrative (drop time, not creation time). */
+  /** Epoch ms when the line slid out of the rolling narrative (drop time). */
   at: number;
+  /**
+   * Epoch ms when the narrative line was originally written (creation time).
+   * Absent for archive entries created before this field was introduced;
+   * falls back to `at` in that case.
+   */
+  createdAt?: number;
 }
 
 /** A condensed, dated chapter of the shared story ("Back in July you…"). */
@@ -58,12 +74,21 @@ export interface Chapter {
    * fully backwards-compatible.
    */
   sourceLines?: string[];
+  /**
+   * Epoch ms of the earliest moment a memory was originally WRITTEN —
+   * distinct from `from`, which tracks the archive drop-time. Used to display
+   * the correct date to the user ("when it happened", not "when it was filed").
+   * Absent for chapters written before this field was introduced; UI falls back
+   * to `from` in that case.
+   */
+  memoryDate?: number;
 }
 
 export interface CoreSelfData {
   traits: Record<string, number>;
   interests: Interest[];
-  narrative: string[];
+  /** Rolling self-narrative, each line stamped with its original creation time. */
+  narrative: NarrativeLine[];
   /** Overflowed narrative lines awaiting AI condensation into a chapter. */
   archive: ArchivedLine[];
   /** The condensed life story so far, oldest chapter first. */
@@ -76,10 +101,17 @@ export interface CoreSelfData {
  * Missing fields become empty — a lossless migration.
  */
 export function normalizeCoreSelf(data: Partial<CoreSelfData> | CoreSelfData): CoreSelfData {
+  // Narrative may be a legacy string[] (pre-NarrativeLine era). Convert each
+  // string to a NarrativeLine with createdAt: 0 so the rest of the code
+  // always sees a uniform shape without information loss.
+  const rawNarrative = Array.isArray(data.narrative) ? data.narrative : [];
+  const narrative: NarrativeLine[] = rawNarrative.map((l: unknown) =>
+    typeof l === "string" ? { text: l, createdAt: 0 } : (l as NarrativeLine),
+  );
   return {
     traits: data.traits ?? {},
     interests: data.interests ?? [],
-    narrative: data.narrative ?? [],
+    narrative,
     archive: Array.isArray(data.archive) ? data.archive : [],
     chapters: Array.isArray(data.chapters) ? data.chapters : [],
   };
@@ -96,11 +128,18 @@ export function appendNarrativeLines(
   lines: string[],
   now: number,
   params: NeuroParams,
-): { narrative: string[]; archive: ArchivedLine[] } {
+): { narrative: NarrativeLine[]; archive: ArchivedLine[] } {
   const { narrative, biography } = params.coreSelf;
-  const all = [...data.narrative, ...lines];
+  // Stamp incoming string lines with their creation time NOW so they carry a
+  // real timestamp if they later overflow to the archive.
+  const newLines: NarrativeLine[] = lines.map((text) => ({ text, createdAt: now }));
+  const all = [...data.narrative, ...newLines];
   const overflowCount = Math.max(0, all.length - narrative.maxLines);
-  const overflowed = all.slice(0, overflowCount).map((text) => ({ text, at: now }));
+  // Carry each line's original createdAt into the archive entry so chapters
+  // can later display "when the memory was made", not "when it was filed".
+  const overflowed: ArchivedLine[] = all
+    .slice(0, overflowCount)
+    .map((l) => ({ text: l.text, at: now, createdAt: l.createdAt }));
   const archive = [...data.archive, ...overflowed].slice(-biography.archiveMax);
   return { narrative: all.slice(-narrative.maxLines), archive };
 }
@@ -149,7 +188,9 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
       }))
       .filter((i) => i.topic.length > 0)
       .slice(0, params.coreSelf.interest.maxCount);
-    const narrative = (seed?.narrative ?? []).slice(-params.coreSelf.narrative.maxLines);
+    const narrative: NarrativeLine[] = (seed?.narrative ?? [])
+      .slice(-params.coreSelf.narrative.maxLines)
+      .map((text) => ({ text, createdAt: 0 }));
     return { traits, interests, narrative, archive: [], chapters: [] };
   },
 
@@ -212,7 +253,7 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
       const before = data.interests.find((p) => p.topic === i.topic)?.affinity ?? 0;
       const crossed = before < narrative.newInterestThreshold;
       const alreadyMentioned =
-        data.narrative.some((l) => l.includes(i.topic)) ||
+        data.narrative.some((l) => l.text.includes(i.topic)) ||
         addedLines.some((l) => l.includes(i.topic));
       if (crossed && !alreadyMentioned) {
         addedLines.push(`You've found yourself increasingly drawn to ${i.topic} lately.`);
@@ -282,7 +323,7 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
     if (topInterests.length > 0) {
       parts.push(`Lately you've grown genuinely curious about ${joinNatural(topInterests)}.`);
     }
-    if (data.narrative.length > 0) parts.push(data.narrative[data.narrative.length - 1]);
+    if (data.narrative.length > 0) parts.push(data.narrative[data.narrative.length - 1].text);
 
     // A whisper of the longer story: the most recent chapter, plus at most one
     // older chapter that still resonates with a current surfaced interest.
@@ -318,8 +359,9 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
         text: c.text,
         themes: [...c.themes],
         ...(c.sourceLines ? { sourceLines: [...c.sourceLines] } : {}),
+        ...(c.memoryDate !== undefined ? { memoryDate: c.memoryDate } : {}),
       }));
-    return { traits, interests, narrative: [...data.narrative], chapters };
+    return { traits, interests, narrative: data.narrative.map((l) => l.text), chapters };
   },
 };
 

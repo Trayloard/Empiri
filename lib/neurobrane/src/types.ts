@@ -295,6 +295,7 @@ export interface FactSummary {
   /** How firmly the fact is held right now (0..100). */
   salience: number;
 }
+/** @internal — read the field docs on {@link Chapter} */
 export interface ChapterSummary {
   /** Epoch ms of the earliest moment the chapter covers. */
   from: NowMs;
@@ -309,6 +310,12 @@ export interface ChapterSummary {
    * chapters written after this field was introduced; older chapters omit it.
    */
   sourceLines?: string[];
+  /**
+   * Epoch ms of the earliest moment a memory in this chapter was originally
+   * written. Prefer this over `from` for user-facing date display. Absent for
+   * chapters written before this field was introduced; fall back to `from`.
+   */
+  memoryDate?: NowMs;
 }
 
 /** What a single block contributes to the friendly summary. */

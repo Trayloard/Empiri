@@ -569,7 +569,7 @@ export function GrowthTimeline({
                         <View style={styles.chapterHeader}>
                           <View style={styles.chapterHeaderText}>
                             <Text style={styles.chapterWhen}>
-                              {chapterPeriodLabel(c.from, c.to)}
+                              {chapterPeriodLabel(c.memoryDate ?? c.from, c.to)}
                             </Text>
                             <Text style={styles.chapterText}>{c.text}</Text>
                           </View>

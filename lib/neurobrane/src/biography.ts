@@ -59,14 +59,26 @@ export function applyChapter(
   const { maxChapters } = params.coreSelf.biography;
   const consume = Math.max(0, Math.min(consumedCount, core.archive.length));
 
+  const consumedLines = core.archive.slice(0, consume);
+
   // Capture the archive lines that are being consumed so users can later
   // revisit the raw memories that were condensed into this chapter.
-  const sourceLines = core.archive.slice(0, consume).map((l) => l.text);
+  const sourceLines = consumedLines.map((l) => l.text);
+
+  // Use the earliest CREATION time of the consumed lines as the chapter's
+  // display date — this reflects when the memories were originally made, not
+  // when they overflowed into the archive. Falls back to the archive drop-time
+  // (`at`) for entries that pre-date creation-time tracking.
+  const memoryDate =
+    consumedLines.length > 0
+      ? Math.min(...consumedLines.map((l) => l.createdAt ?? l.at))
+      : undefined;
 
   const newChapter: Chapter = {
     ...chapter,
     themes: [...chapter.themes],
     ...(sourceLines.length > 0 ? { sourceLines } : {}),
+    ...(memoryDate !== undefined ? { memoryDate } : {}),
   };
 
   const chapters = [...core.chapters, newChapter]

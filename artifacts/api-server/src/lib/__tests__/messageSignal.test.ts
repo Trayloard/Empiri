@@ -383,6 +383,7 @@ describe("queueSelfEvolution: biography condensation", () => {
       text: "Back then you talked a lot about jazz.",
       themes: ["jazz"],
       sourceLines: Array.from({ length: THRESHOLD }, (_, i) => `archived line ${i}`),
+      memoryDate: T0,
     });
   });
 
