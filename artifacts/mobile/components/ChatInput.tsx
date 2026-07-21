@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -16,6 +16,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import type { MutableRefObject } from "react";
 
 import { FONTS } from "@/constants/fonts";
 import { useColors } from "@/hooks/useColors";
@@ -39,6 +40,12 @@ interface ChatInputProps {
    * omitted) keeps today's exact brand gradient.
    */
   warmth?: number;
+  /**
+   * Ref supplied by CompanionContext whose `.current` is the normalised
+   * microphone volume (0 = silent, 1 = loud). Updated by the native metering
+   * callback — reading it here keeps the animation off the React render cycle.
+   */
+  micVolumeRef?: MutableRefObject<number>;
 }
 
 export function ChatInput({
@@ -49,6 +56,7 @@ export function ChatInput({
   isCallActive = false,
   busy,
   warmth = 0,
+  micVolumeRef,
 }: ChatInputProps) {
   const colors = useColors();
   const [text, setText] = useState("");
@@ -56,6 +64,45 @@ export function ChatInput({
 
   const spectrum = spectrumForWarmth(warmth, colors.spectrum);
   const glowColor = accentForWarmth(warmth, colors.spectrum[1], colors.spectrum);
+
+  // ── Volume-reactive pulse animation ──────────────────────────────────────
+  // pulseScale drives the recording button's scale (1.0 = silent, up to 1.18
+  // at full volume). The effect polls the micVolumeRef every 120 ms — refs
+  // don't re-render React, so we poll from a JS interval and hand off to
+  // Reanimated via withTiming for buttery smooth native animation.
+  const pulseScale = useSharedValue(1);
+
+  useEffect(() => {
+    if (!isRecording || !micVolumeRef) {
+      pulseScale.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
+      return;
+    }
+    const id = setInterval(() => {
+      const vol = micVolumeRef.current; // 0–1
+      // Scale between 1.0 (silence) and 1.18 (loud).
+      pulseScale.value = withTiming(1 + vol * 0.18, {
+        duration: 110,
+        easing: Easing.out(Easing.quad),
+      });
+    }, 120);
+    return () => {
+      clearInterval(id);
+      pulseScale.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
+    };
+  }, [isRecording, micVolumeRef, pulseScale]);
+
+  const pulseButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }],
+  }));
+
+  // Glow ring: expands and fades-in proportionally to the current scale.
+  const pulseRingStyle = useAnimatedStyle(() => {
+    const excess = pulseScale.value - 1; // 0 → 0.18
+    return {
+      opacity: excess * 5.5,           // 0 when silent, ~1 when loud
+      transform: [{ scale: pulseScale.value * 1.25 }],
+    };
+  });
 
   // Hold-to-call progress ring: fills over HOLD_DURATION_MS while the mic
   // button is pressed and held. Resets immediately on release or activation.
@@ -175,6 +222,17 @@ export function ChatInput({
           </Pressable>
         ) : (
           <View style={styles.micWrap}>
+            {/* Volume-reactive glow ring — visible only while recording */}
+            {isRecording ? (
+              <Animated.View
+                style={[
+                  styles.holdRing,
+                  { borderColor: colors.destructive },
+                  pulseRingStyle,
+                ]}
+                pointerEvents="none"
+              />
+            ) : null}
             {/* Hold-to-call progress ring — fills during the 3s hold */}
             {onMicLongPress && !isCallActive ? (
               <Animated.View
@@ -187,52 +245,54 @@ export function ChatInput({
                 testID="mic-hold-ring"
               />
             ) : null}
-            <Pressable
-              onPress={handleMic}
-              onPressIn={handlePressIn}
-              onPressOut={handlePressOut}
-              onLongPress={handleLongPress}
-              delayLongPress={HOLD_DURATION_MS}
-              disabled={(busy && !isRecording) || isCallActive}
-              style={({ pressed }) => [
-                styles.buttonWrap,
-                {
-                  opacity: pressed ? 0.8 : 1,
-                  transform: [{ scale: isRecording ? 1.05 : 1 }],
-                  shadowColor: isRecording ? colors.destructive : glowColor,
-                },
-              ]}
-              testID="mic-button"
-            >
-              {isRecording ? (
-                <View
-                  style={[
-                    styles.button,
-                    { backgroundColor: colors.destructive },
-                  ]}
-                >
-                  <Feather name="square" size={18} color="#FFFFFF" />
-                </View>
-              ) : isCallActive ? (
-                <LinearGradient
-                  colors={spectrum}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.button}
-                >
-                  <Feather name="phone" size={18} color="#FFFFFF" />
-                </LinearGradient>
-              ) : (
-                <LinearGradient
-                  colors={spectrum}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.button}
-                >
-                  <Feather name="mic" size={20} color="#FFFFFF" />
-                </LinearGradient>
-              )}
-            </Pressable>
+            {/* Animated wrapper drives the volume-reactive scale */}
+            <Animated.View style={isRecording ? pulseButtonStyle : undefined}>
+              <Pressable
+                onPress={handleMic}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                onLongPress={handleLongPress}
+                delayLongPress={HOLD_DURATION_MS}
+                disabled={(busy && !isRecording) || isCallActive}
+                style={({ pressed }) => [
+                  styles.buttonWrap,
+                  {
+                    opacity: pressed ? 0.8 : 1,
+                    shadowColor: isRecording ? colors.destructive : glowColor,
+                  },
+                ]}
+                testID="mic-button"
+              >
+                {isRecording ? (
+                  <View
+                    style={[
+                      styles.button,
+                      { backgroundColor: colors.destructive },
+                    ]}
+                  >
+                    <Feather name="square" size={18} color="#FFFFFF" />
+                  </View>
+                ) : isCallActive ? (
+                  <LinearGradient
+                    colors={spectrum}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.button}
+                  >
+                    <Feather name="phone" size={18} color="#FFFFFF" />
+                  </LinearGradient>
+                ) : (
+                  <LinearGradient
+                    colors={spectrum}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.button}
+                  >
+                    <Feather name="mic" size={20} color="#FFFFFF" />
+                  </LinearGradient>
+                )}
+              </Pressable>
+            </Animated.View>
           </View>
         )}
       </View>

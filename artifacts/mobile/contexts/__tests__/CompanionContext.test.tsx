@@ -7,6 +7,7 @@ import {
   companionCheckIn,
   createConversation,
   getConversation,
+  listConversations,
   listMessages,
   renameConversation,
   sendMessage,
@@ -709,5 +710,92 @@ describe("CompanionContext conversation title persistence", () => {
     expect(result.current.conversationTitle).toBe("Empiri");
     // The stored pointer is cleared so the next account can't inherit it.
     expect(await AsyncStorage.getItem(CONVERSATION_KEY)).toBeNull();
+  });
+});
+
+describe("CompanionContext stale conversation pointer recovery", () => {
+  const CONVERSATION_KEY = "empiri.conversationId";
+  const mockListConversations =
+    listConversations as jest.MockedFunction<typeof listConversations>;
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  afterEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it("silently resumes an existing server conversation when the stored id returns 404", async () => {
+    // The device has a stale pointer (id 99) that no longer exists on the server.
+    await AsyncStorage.setItem(CONVERSATION_KEY, "99");
+
+    // First listMessages call (for the stale id) — signals the id is gone.
+    const notFound = Object.assign(new Error("Not Found"), { status: 404 });
+    mockListMessages
+      .mockRejectedValueOnce(notFound)
+      // Second call: loading history for the resumed conversation.
+      .mockResolvedValueOnce([makeMessage(10, "user", "old message")]);
+
+    // The account still has a valid conversation on the server.
+    mockListConversations.mockResolvedValue([
+      {
+        id: 5,
+        title: "Restored chat",
+        createdAt: new Date("2026-06-12T00:00:00.000Z").toISOString(),
+      },
+    ]);
+
+    const { result } = await renderReadyCompanion();
+
+    // The app recovers without an error screen.
+    expect(result.current.initializing).toBe(false);
+    expect(result.current.initError).toBeNull();
+
+    // The active conversation is now the one from the server.
+    expect(result.current.conversationId).toBe(5);
+
+    // AsyncStorage now points at the valid id so the next restart is fast.
+    expect(await AsyncStorage.getItem(CONVERSATION_KEY)).toBe("5");
+
+    // createConversation must NOT have been called — we resumed an existing one.
+    expect(mockCreateConversation).not.toHaveBeenCalled();
+
+    // History from the resumed conversation is loaded.
+    expect(result.current.messages.some((m) => m.content === "old message")).toBe(true);
+  });
+
+  it("creates a fresh conversation when the stored id 404s and the account has no conversations", async () => {
+    // The device has a stale pointer (id 99).
+    await AsyncStorage.setItem(CONVERSATION_KEY, "99");
+
+    // listMessages for the stale id → 404.
+    const notFound = Object.assign(new Error("Not Found"), { status: 404 });
+    mockListMessages.mockRejectedValueOnce(notFound);
+
+    // The account has no conversations at all.
+    mockListConversations.mockResolvedValue([]);
+
+    // The new conversation the server creates.
+    mockCreateConversation.mockResolvedValue({
+      id: 42,
+      title: "Empiri",
+      createdAt: new Date("2026-06-12T00:00:00.000Z").toISOString(),
+    });
+
+    const { result } = await renderReadyCompanion();
+
+    // The app recovers without an error screen.
+    expect(result.current.initializing).toBe(false);
+    expect(result.current.initError).toBeNull();
+
+    // createConversation was called because there was nothing to resume.
+    expect(mockCreateConversation).toHaveBeenCalledTimes(1);
+
+    // The context points at the freshly created conversation.
+    expect(result.current.conversationId).toBe(42);
+
+    // The new id is persisted so the next cold start finds a valid pointer.
+    expect(await AsyncStorage.getItem(CONVERSATION_KEY)).toBe("42");
   });
 });

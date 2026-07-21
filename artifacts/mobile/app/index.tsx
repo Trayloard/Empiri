@@ -141,6 +141,7 @@ export default function CompanionScreen() {
     failedTurn,
     isRecording,
     isCallActive,
+    micVolumeRef,
     settings,
     sendText,
     retryMessage,
@@ -534,6 +535,7 @@ export default function CompanionScreen() {
             isCallActive={isCallActive}
             busy={busy}
             warmth={smoothWarmth}
+            micVolumeRef={micVolumeRef}
           />
           {/* Nav row — replaces scattered corner buttons */}
           <View style={styles.navRow}>

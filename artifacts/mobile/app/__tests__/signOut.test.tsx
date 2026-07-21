@@ -165,13 +165,28 @@ jest.mock("react-native-keyboard-controller", () => {
   };
 });
 
-// Official reanimated mock + useReducedMotion (not included in the bundled mock).
+// Fully inline reanimated mock — avoids bootstrapping the worklets runtime
+// (react-native-reanimated/mock does so and throws in Jest). Covers every
+// API that app/index.tsx uses directly.
 jest.mock("react-native-reanimated", () => {
-  const official = require("react-native-reanimated/mock");
+  const { View } = require("react-native");
+  const sv = (v: unknown) => ({ value: v });
   return {
-    ...official,
+    __esModule: true,
+    default: { View },
+    useSharedValue: sv,
+    useAnimatedStyle: () => ({}),
     useReducedMotion: () => false,
-    default: { ...official.default },
+    withTiming: (v: unknown) => v,
+    withSpring: (v: unknown) => v,
+    Easing: {
+      linear: 0,
+      inOut: () => () => 0,
+      out: () => () => 0,
+      cubic: () => 0,
+      quad: () => 0,
+    },
+    Animated: { View },
   };
 });
 

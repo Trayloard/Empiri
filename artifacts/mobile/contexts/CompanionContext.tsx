@@ -120,6 +120,13 @@ interface CompanionContextValue {
   isRecording: boolean;
   /** True while an audio-call mode loop is running. */
   isCallActive: boolean;
+  /**
+   * Ref whose `.current` is the normalised microphone volume (0 = silent,
+   * 1 = loud) while a recording is in progress; 0 at all other times.
+   * Consumers read this ref from their own animation loops — it does NOT
+   * trigger React re-renders, keeping the UI thread light.
+   */
+  micVolumeRef: React.MutableRefObject<number>;
   sendText: (content: string) => Promise<void>;
   retryMessage: () => Promise<void>;
   startListening: () => Promise<void>;
@@ -251,7 +258,21 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   // HIGH_QUALITY gives better results with background noise and non-English
   // speech (e.g. German). ~128 kbps AAC; a 20-second clip ≈ 320 KB, well
   // under the 50 MB body limit on the API server.
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  //
+  // micVolumeRef holds the current normalised input level (0–1) that
+  // ChatInput reads from its own animation loop. Using a ref avoids
+  // triggering a React re-render on every metering tick.
+  const micVolumeRef = useRef<number>(0);
+  // Stores the setInterval handle that polls recorder.getStatus().metering
+  // while a recording is active. Cleared in stopListening and endCall.
+  const meterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // isMeteringEnabled tells the native layer to compute dBFS level on each
+  // status tick; we read it synchronously via recorder.getStatus() from our
+  // own 120 ms polling interval so we don't have to fight the callback type.
+  const recorder = useAudioRecorder({
+    ...RecordingPresets.HIGH_QUALITY,
+    isMeteringEnabled: true,
+  });
 
   // Keep refs in sync so timers/callbacks always see the latest values.
   useEffect(() => {
@@ -841,11 +862,30 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       isRecordingRef.current = true;
       setIsRecording(true);
       setStatus("listening");
+      // Poll metering every 120 ms and write to the ref that ChatInput reads.
+      // recorder.getStatus() is synchronous and returns RecorderState which
+      // includes the dBFS metering value when isMeteringEnabled is true.
+      meterIntervalRef.current = setInterval(() => {
+        if (!isRecordingRef.current) return;
+        try {
+          const s = recorder.getStatus();
+          const db = typeof s.metering === "number" ? s.metering : -160;
+          // Map −60 dB (quiet) … −10 dB (loud) onto 0…1.
+          micVolumeRef.current = Math.max(0, Math.min(1, (db + 60) / 50));
+        } catch {
+          // getStatus() may be unavailable in some environments (e.g. tests);
+          // keep the ref at 0 so the animation shows no pulse.
+        }
+      }, 120);
     } catch {
       setError("Couldn't start recording. Try again.");
       isRecordingRef.current = false;
       setIsRecording(false);
       setStatus("idle");
+      if (meterIntervalRef.current != null) {
+        clearInterval(meterIntervalRef.current);
+        meterIntervalRef.current = null;
+      }
     }
   }, [recorder]);
 
@@ -855,6 +895,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const stopListening = useCallback(async (): Promise<boolean> => {
     if (!isRecordingRef.current) return false;
     isRecordingRef.current = false;
+    if (meterIntervalRef.current != null) {
+      clearInterval(meterIntervalRef.current);
+      meterIntervalRef.current = null;
+    }
+    micVolumeRef.current = 0;
     setIsRecording(false);
     setStatus("transcribing");
     let uri: string | null = null;
@@ -868,9 +913,23 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         setStatus("idle");
         return false;
       }
+      // Guard against empty recordings (e.g. the user tapped too quickly).
+      // An empty file produces an invalid base64 payload that the server
+      // cannot decode — bail early with a clear user-facing message.
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+      if (!fileInfo.exists || ("size" in fileInfo && fileInfo.size === 0)) {
+        setError("Recording was empty — hold the button and speak.");
+        setStatus("idle");
+        return false;
+      }
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
+      if (!base64 || base64.length < 100) {
+        setError("Recording was too short — try holding the button longer.");
+        setStatus("idle");
+        return false;
+      }
       const { text } = await transcribeAudio({ audio: base64, format: "m4a" });
       if (!text.trim()) {
         setError("I didn't catch that. Try again.");
@@ -900,6 +959,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const endCall = useCallback(() => {
     isCallActiveRef.current = false;
     callForcesVoiceRef.current = false;
+    if (meterIntervalRef.current != null) {
+      clearInterval(meterIntervalRef.current);
+      meterIntervalRef.current = null;
+    }
+    micVolumeRef.current = 0;
     setIsCallActive(false);
     if (callAutoStopRef.current != null) {
       clearTimeout(callAutoStopRef.current);
@@ -1253,6 +1317,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         failedTurn,
         isRecording,
         isCallActive,
+        micVolumeRef,
         sendText,
         retryMessage,
         startListening,
