@@ -281,7 +281,9 @@ export function GrowthTimeline({
   const gained = Math.max(0, nowInteractions - firstInteractions);
   // Served oldest-first by the API; sort defensively so the story always
   // reads chronologically.
-  const chapters = [...(self?.chapters ?? [])].sort((a, b) => a.from - b.from);
+  const chapters = [...(self?.chapters ?? [])].sort(
+    (a, b) => (a.memoryDate ?? a.from) - (b.memoryDate ?? b.from),
+  );
 
   return (
     <Animated.View style={[styles.flex, fadeStyle]} testID="growth-timeline">

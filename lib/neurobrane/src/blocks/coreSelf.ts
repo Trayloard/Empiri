@@ -352,7 +352,7 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
         display: i.display ?? i.topic,
       }));
     const chapters: ChapterSummary[] = [...data.chapters]
-      .sort((a, b) => a.from - b.from)
+      .sort((a, b) => (a.memoryDate ?? a.from) - (b.memoryDate ?? b.from))
       .map((c) => ({
         from: c.from,
         to: c.to,
