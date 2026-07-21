@@ -51,6 +51,13 @@ export interface Chapter {
   text: string;
   /** Core themes of the period (normalized topic keys). */
   themes: string[];
+  /**
+   * The raw narrative lines that were archived and then condensed into this
+   * chapter. Populated by `applyChapter`; absent for chapters written before
+   * this field was introduced. Optional so persisted chapters without it stay
+   * fully backwards-compatible.
+   */
+  sourceLines?: string[];
 }
 
 export interface CoreSelfData {
@@ -305,7 +312,13 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
       }));
     const chapters: ChapterSummary[] = [...data.chapters]
       .sort((a, b) => a.from - b.from)
-      .map((c) => ({ from: c.from, to: c.to, text: c.text, themes: [...c.themes] }));
+      .map((c) => ({
+        from: c.from,
+        to: c.to,
+        text: c.text,
+        themes: [...c.themes],
+        ...(c.sourceLines ? { sourceLines: [...c.sourceLines] } : {}),
+      }));
     return { traits, interests, narrative: [...data.narrative], chapters };
   },
 };

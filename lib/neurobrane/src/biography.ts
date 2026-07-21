@@ -59,7 +59,17 @@ export function applyChapter(
   const { maxChapters } = params.coreSelf.biography;
   const consume = Math.max(0, Math.min(consumedCount, core.archive.length));
 
-  const chapters = [...core.chapters, { ...chapter, themes: [...chapter.themes] }]
+  // Capture the archive lines that are being consumed so users can later
+  // revisit the raw memories that were condensed into this chapter.
+  const sourceLines = core.archive.slice(0, consume).map((l) => l.text);
+
+  const newChapter: Chapter = {
+    ...chapter,
+    themes: [...chapter.themes],
+    ...(sourceLines.length > 0 ? { sourceLines } : {}),
+  };
+
+  const chapters = [...core.chapters, newChapter]
     .sort((a, b) => a.from - b.from)
     .slice(-maxChapters);
 

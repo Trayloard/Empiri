@@ -101,6 +101,9 @@ export function GrowthTimeline({
   // null means no active touch (readout hidden).
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
 
+  // Which chapter row is expanded (showing source lines). Key = `${c.from}`.
+  const [expandedChapterKey, setExpandedChapterKey] = useState<string | null>(null);
+
   useEffect(() => {
     if (conversationId == null) return;
     let cancelled = false;
@@ -533,31 +536,96 @@ export function GrowthTimeline({
             </Text>
           ) : (
             <View style={styles.chapterList}>
-              {chapters.map((c, i) => (
-                <View key={`${c.from}-${i}`} style={styles.chapterRow}>
-                  <View style={styles.chapterRail}>
-                    <View style={styles.chapterDot} />
-                    {i < chapters.length - 1 ? (
-                      <View style={styles.chapterLine} />
-                    ) : null}
-                  </View>
-                  <View style={styles.chapterBody}>
-                    <Text style={styles.chapterWhen}>
-                      {chapterPeriodLabel(c.from, c.to)}
-                    </Text>
-                    <Text style={styles.chapterText}>{c.text}</Text>
-                    {c.themes.length > 0 ? (
-                      <View style={styles.themeRow}>
-                        {c.themes.map((t) => (
-                          <View key={t} style={styles.themeChip}>
-                            <Text style={styles.themeChipText}>{t}</Text>
+              {chapters.map((c, i) => {
+                const key = `${c.from}`;
+                const isExpanded = expandedChapterKey === key;
+                const hasLines = (c.sourceLines?.length ?? 0) > 0;
+                return (
+                  <View key={`${c.from}-${i}`} style={styles.chapterRow}>
+                    <View style={styles.chapterRail}>
+                      <View style={styles.chapterDot} />
+                      {i < chapters.length - 1 ? (
+                        <View style={styles.chapterLine} />
+                      ) : null}
+                    </View>
+                    <View style={styles.chapterBody}>
+                      <Pressable
+                        onPress={() =>
+                          setExpandedChapterKey(isExpanded ? null : key)
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isExpanded
+                            ? "Collapse chapter"
+                            : "Tap to see the memories behind this chapter"
+                        }
+                        accessibilityState={{ expanded: isExpanded }}
+                        testID={`chapter-row-${i}`}
+                        style={({ pressed }) => [
+                          styles.chapterPressable,
+                          pressed && { opacity: 0.75 },
+                        ]}
+                      >
+                        <View style={styles.chapterHeader}>
+                          <View style={styles.chapterHeaderText}>
+                            <Text style={styles.chapterWhen}>
+                              {chapterPeriodLabel(c.from, c.to)}
+                            </Text>
+                            <Text style={styles.chapterText}>{c.text}</Text>
                           </View>
-                        ))}
-                      </View>
-                    ) : null}
+                          <Feather
+                            name={isExpanded ? "chevron-up" : "chevron-down"}
+                            size={14}
+                            color="rgba(255,255,255,0.3)"
+                            style={styles.chapterChevron}
+                          />
+                        </View>
+                        {c.themes.length > 0 ? (
+                          <View style={styles.themeRow}>
+                            {c.themes.map((t) => (
+                              <View key={t} style={styles.themeChip}>
+                                <Text style={styles.themeChipText}>{t}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        ) : null}
+                      </Pressable>
+
+                      {isExpanded ? (
+                        <View
+                          style={styles.chapterExpanded}
+                          testID={`chapter-expanded-${i}`}
+                        >
+                          {hasLines ? (
+                            <>
+                              <Text style={styles.chapterExpandedLabel}>
+                                MOMENTS BEHIND THIS CHAPTER
+                              </Text>
+                              {c.sourceLines!.map((line, li) => (
+                                <View
+                                  key={li}
+                                  style={styles.chapterSourceRow}
+                                >
+                                  <View style={styles.chapterSourceDot} />
+                                  <Text style={styles.chapterSourceText}>
+                                    {line}
+                                  </Text>
+                                </View>
+                              ))}
+                            </>
+                          ) : (
+                            <Text style={styles.chapterNoSourceText}>
+                              This chapter was written before I started keeping
+                              the individual memories — only the summary is
+                              available.
+                            </Text>
+                          )}
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>
@@ -785,6 +853,20 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingBottom: 18,
   },
+  chapterPressable: {
+    paddingVertical: 2,
+  },
+  chapterHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  chapterHeaderText: {
+    flex: 1,
+  },
+  chapterChevron: {
+    marginTop: 6,
+  },
   chapterWhen: {
     fontFamily: MONO,
     fontSize: 11,
@@ -797,6 +879,47 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: "rgba(255,255,255,0.86)",
     marginTop: 5,
+  },
+  chapterExpanded: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.07)",
+  },
+  chapterExpandedLabel: {
+    fontFamily: MONO,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    color: "rgba(255,255,255,0.3)",
+    marginBottom: 8,
+  },
+  chapterSourceRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginBottom: 8,
+  },
+  chapterSourceDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "rgba(181,140,255,0.5)",
+    marginTop: 6,
+    flexShrink: 0,
+  },
+  chapterSourceText: {
+    flex: 1,
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "rgba(255,255,255,0.55)",
+  },
+  chapterNoSourceText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "rgba(255,255,255,0.3)",
+    fontStyle: "italic",
   },
   themeRow: {
     flexDirection: "row",

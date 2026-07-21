@@ -304,6 +304,11 @@ export interface ChapterSummary {
   text: string;
   /** Core themes of the period (normalized topic keys, up to a few). */
   themes: string[];
+  /**
+   * The raw narrative lines condensed into this chapter. Present only for
+   * chapters written after this field was introduced; older chapters omit it.
+   */
+  sourceLines?: string[];
 }
 
 /** What a single block contributes to the friendly summary. */
