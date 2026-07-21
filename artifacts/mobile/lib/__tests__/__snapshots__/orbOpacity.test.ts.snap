@@ -1,0 +1,711 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ambientBlobOpacity — snapshot grid matches stored opacity table across trait grid (rest / content / active) 1`] = `
+[
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.1,
+      "left": 0.15,
+      "right": 0.1824,
+      "top": 0.24,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 1,
+    "opacities": {
+      "bottom": 0.1,
+      "left": 0.15,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.144,
+      "left": 0.192,
+      "right": 0.1824,
+      "top": 0.24,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 0.15,
+    "opacities": {
+      "bottom": 0.1755,
+      "left": 0.234,
+      "right": 0.2223,
+      "top": 0.2925,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 0.22,
+    "opacities": {
+      "bottom": 0.1902,
+      "left": 0.2536,
+      "right": 0.24092,
+      "top": 0.317,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 1,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.144,
+      "left": 0.192,
+      "right": 0.2274,
+      "top": 0.24,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 0.22,
+    "opacities": {
+      "bottom": 0.1902,
+      "left": 0.2536,
+      "right": 0.28592,
+      "top": 0.317,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.144,
+      "left": 0.192,
+      "right": 0.4824,
+      "top": 0.24,
+    },
+    "warmthShift": 1,
+  },
+  {
+    "baseIntensity": 0.48,
+    "glowBoost": 1,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.68,
+      "top": 0.5,
+    },
+    "warmthShift": 1,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.1,
+      "left": 0.15,
+      "right": 0.3344,
+      "top": 0.44,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 1,
+    "opacities": {
+      "bottom": 0.1,
+      "left": 0.15,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.264,
+      "left": 0.352,
+      "right": 0.3344,
+      "top": 0.44,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 0.15,
+    "opacities": {
+      "bottom": 0.2955,
+      "left": 0.394,
+      "right": 0.3743,
+      "top": 0.4925,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 0.22,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 1,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.264,
+      "left": 0.352,
+      "right": 0.3794,
+      "top": 0.44,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 0.22,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.425,
+      "top": 0.5,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.264,
+      "left": 0.352,
+      "right": 0.6344,
+      "top": 0.44,
+    },
+    "warmthShift": 1,
+  },
+  {
+    "baseIntensity": 0.88,
+    "glowBoost": 1,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.68,
+      "top": 0.5,
+    },
+    "warmthShift": 1,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.1,
+      "left": 0.15,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 1,
+    "opacities": {
+      "bottom": 0.1,
+      "left": 0.15,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 0.15,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 0.22,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 1,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.38,
+      "top": 0.5,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.425,
+      "top": 0.5,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 0.22,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.425,
+      "top": 0.5,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 0,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.68,
+      "top": 0.5,
+    },
+    "warmthShift": 1,
+  },
+  {
+    "baseIntensity": 1,
+    "glowBoost": 1,
+    "opacities": {
+      "bottom": 0.3,
+      "left": 0.4,
+      "right": 0.68,
+      "top": 0.5,
+    },
+    "warmthShift": 1,
+  },
+]
+`;
+
+exports[`orbBlobOpacity — snapshot edge clamp (sad mood) edge warmthShift/glowBoost values are clamped correctly 1`] = `
+[
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.632,
+      "core": 0.4675,
+      "halo": 0.216,
+      "orange": -0.1664,
+      "pink": -0.16,
+      "purple": 0.532,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "glowBoost": 1,
+    "opacities": {
+      "blue": 1,
+      "core": 0.8925,
+      "halo": 0.45,
+      "orange": -0,
+      "pink": 0.1,
+      "purple": 1,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.432,
+      "core": 0.4675,
+      "halo": 0.216,
+      "orange": 0.1536,
+      "pink": 0.24,
+      "purple": 0.432,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 0.15,
+    "opacities": {
+      "blue": 0.567,
+      "core": 0.53125,
+      "halo": 0.2835,
+      "orange": 0.2016,
+      "pink": 0.315,
+      "purple": 0.567,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 0.22,
+    "opacities": {
+      "blue": 0.63,
+      "core": 0.561,
+      "halo": 0.315,
+      "orange": 0.224,
+      "pink": 0.35,
+      "purple": 0.63,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 1,
+    "opacities": {
+      "blue": 0.9,
+      "core": 0.8925,
+      "halo": 0.45,
+      "orange": 0.7,
+      "pink": 0.85,
+      "purple": 0.9,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.402,
+      "core": 0.4675,
+      "halo": 0.216,
+      "orange": 0.2016,
+      "pink": 0.3,
+      "purple": 0.417,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "glowBoost": 0.22,
+    "opacities": {
+      "blue": 0.6,
+      "core": 0.561,
+      "halo": 0.315,
+      "orange": 0.538,
+      "pink": 0.655,
+      "purple": 0.615,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.3,
+      "core": 0.4675,
+      "halo": 0.216,
+      "orange": 0.656,
+      "pink": 0.808,
+      "purple": 0.35,
+    },
+    "warmthShift": 1,
+  },
+  {
+    "glowBoost": 1,
+    "opacities": {
+      "blue": 0.7,
+      "core": 0.8925,
+      "halo": 0.45,
+      "orange": 1,
+      "pink": 1,
+      "purple": 0.8,
+    },
+    "warmthShift": 1,
+  },
+]
+`;
+
+exports[`orbBlobOpacity — snapshot grid (bright mood) matches stored opacity table across trait grid 1`] = `
+[
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 1,
+      "core": 0.85,
+      "halo": 0.45,
+      "orange": -0,
+      "pink": 0.1,
+      "purple": 1,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "glowBoost": 1,
+    "opacities": {
+      "blue": 1,
+      "core": 1,
+      "halo": 0.45,
+      "orange": -0,
+      "pink": 0.1,
+      "purple": 1,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.9,
+      "core": 0.85,
+      "halo": 0.45,
+      "orange": 0.7,
+      "pink": 0.85,
+      "purple": 0.9,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 0.15,
+    "opacities": {
+      "blue": 0.9,
+      "core": 0.91375,
+      "halo": 0.45,
+      "orange": 0.7,
+      "pink": 0.85,
+      "purple": 0.9,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 0.22,
+    "opacities": {
+      "blue": 0.9,
+      "core": 0.9435,
+      "halo": 0.45,
+      "orange": 0.7,
+      "pink": 0.85,
+      "purple": 0.9,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 1,
+    "opacities": {
+      "blue": 0.9,
+      "core": 1,
+      "halo": 0.45,
+      "orange": 0.7,
+      "pink": 0.85,
+      "purple": 0.9,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.87,
+      "core": 0.85,
+      "halo": 0.45,
+      "orange": 0.748,
+      "pink": 0.91,
+      "purple": 0.885,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "glowBoost": 0.22,
+    "opacities": {
+      "blue": 0.87,
+      "core": 0.9435,
+      "halo": 0.45,
+      "orange": 0.748,
+      "pink": 0.91,
+      "purple": 0.885,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.7,
+      "core": 0.85,
+      "halo": 0.45,
+      "orange": 1,
+      "pink": 1,
+      "purple": 0.8,
+    },
+    "warmthShift": 1,
+  },
+  {
+    "glowBoost": 1,
+    "opacities": {
+      "blue": 0.7,
+      "core": 1,
+      "halo": 0.45,
+      "orange": 1,
+      "pink": 1,
+      "purple": 0.8,
+    },
+    "warmthShift": 1,
+  },
+]
+`;
+
+exports[`orbBlobOpacity — snapshot grid (content mood) matches stored opacity table across trait grid 1`] = `
+[
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.992,
+      "core": 0.765,
+      "halo": 0.396,
+      "orange": -0.0384,
+      "pink": 0.04,
+      "purple": 0.892,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "glowBoost": 1,
+    "opacities": {
+      "blue": 1,
+      "core": 1,
+      "halo": 0.45,
+      "orange": -0,
+      "pink": 0.1,
+      "purple": 1,
+    },
+    "warmthShift": -1,
+  },
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.792,
+      "core": 0.765,
+      "halo": 0.396,
+      "orange": 0.616,
+      "pink": 0.748,
+      "purple": 0.792,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 0.15,
+    "opacities": {
+      "blue": 0.9,
+      "core": 0.82875,
+      "halo": 0.45,
+      "orange": 0.7,
+      "pink": 0.85,
+      "purple": 0.9,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 0.22,
+    "opacities": {
+      "blue": 0.9,
+      "core": 0.8585,
+      "halo": 0.45,
+      "orange": 0.7,
+      "pink": 0.85,
+      "purple": 0.9,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 1,
+    "opacities": {
+      "blue": 0.9,
+      "core": 1,
+      "halo": 0.45,
+      "orange": 0.7,
+      "pink": 0.85,
+      "purple": 0.9,
+    },
+    "warmthShift": 0,
+  },
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.762,
+      "core": 0.765,
+      "halo": 0.396,
+      "orange": 0.664,
+      "pink": 0.808,
+      "purple": 0.777,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "glowBoost": 0.22,
+    "opacities": {
+      "blue": 0.87,
+      "core": 0.8585,
+      "halo": 0.45,
+      "orange": 0.748,
+      "pink": 0.91,
+      "purple": 0.885,
+    },
+    "warmthShift": 0.15,
+  },
+  {
+    "glowBoost": 0,
+    "opacities": {
+      "blue": 0.592,
+      "core": 0.765,
+      "halo": 0.396,
+      "orange": 0.936,
+      "pink": 1,
+      "purple": 0.692,
+    },
+    "warmthShift": 1,
+  },
+  {
+    "glowBoost": 1,
+    "opacities": {
+      "blue": 0.7,
+      "core": 1,
+      "halo": 0.45,
+      "orange": 1,
+      "pink": 1,
+      "purple": 0.8,
+    },
+    "warmthShift": 1,
+  },
+]
+`;

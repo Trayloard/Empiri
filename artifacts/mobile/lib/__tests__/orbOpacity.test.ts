@@ -326,3 +326,100 @@ describe("ambientBlobOpacity", () => {
     expect(ambientBlobOpacity("right", 5, 5, 5)).toBeLessThanOrEqual(0.75);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Snapshot suite — records exact opacity values across a {warmthShift,
+// glowBoost} grid so any formula change produces an explicit diff.
+// ---------------------------------------------------------------------------
+
+const TRAIT_GRID = [
+  { warmthShift: -1, glowBoost: 0 },
+  { warmthShift: -1, glowBoost: 1 },
+  { warmthShift: 0, glowBoost: 0 },
+  { warmthShift: 0, glowBoost: 0.15 },
+  { warmthShift: 0, glowBoost: 0.22 },
+  { warmthShift: 0, glowBoost: 1 },
+  { warmthShift: 0.15, glowBoost: 0 },
+  { warmthShift: 0.15, glowBoost: 0.22 },
+  { warmthShift: 1, glowBoost: 0 },
+  { warmthShift: 1, glowBoost: 1 },
+] as const;
+
+function round6(n: number) {
+  return Math.round(n * 1e6) / 1e6;
+}
+
+describe("orbBlobOpacity — snapshot grid (content mood)", () => {
+  const { intensity, coreBoost } = MOOD_DYNAMICS.content;
+
+  it("matches stored opacity table across trait grid", () => {
+    const table = TRAIT_GRID.map(({ warmthShift, glowBoost }) => ({
+      warmthShift,
+      glowBoost,
+      opacities: Object.fromEntries(
+        ORB_KINDS.map((k) => [
+          k,
+          round6(orbBlobOpacity(k, intensity, coreBoost, glowBoost, warmthShift)),
+        ]),
+      ),
+    }));
+    expect(table).toMatchSnapshot();
+  });
+});
+
+describe("orbBlobOpacity — snapshot grid (bright mood)", () => {
+  const { intensity, coreBoost } = MOOD_DYNAMICS.bright;
+
+  it("matches stored opacity table across trait grid", () => {
+    const table = TRAIT_GRID.map(({ warmthShift, glowBoost }) => ({
+      warmthShift,
+      glowBoost,
+      opacities: Object.fromEntries(
+        ORB_KINDS.map((k) => [
+          k,
+          round6(orbBlobOpacity(k, intensity, coreBoost, glowBoost, warmthShift)),
+        ]),
+      ),
+    }));
+    expect(table).toMatchSnapshot();
+  });
+});
+
+describe("orbBlobOpacity — snapshot edge clamp (sad mood)", () => {
+  const { intensity, coreBoost } = MOOD_DYNAMICS.sad;
+
+  it("edge warmthShift/glowBoost values are clamped correctly", () => {
+    const table = TRAIT_GRID.map(({ warmthShift, glowBoost }) => ({
+      warmthShift,
+      glowBoost,
+      opacities: Object.fromEntries(
+        ORB_KINDS.map((k) => [
+          k,
+          round6(orbBlobOpacity(k, intensity, coreBoost, glowBoost, warmthShift)),
+        ]),
+      ),
+    }));
+    expect(table).toMatchSnapshot();
+  });
+});
+
+describe("ambientBlobOpacity — snapshot grid", () => {
+  const BASE_INTENSITIES = [0.48, 0.88, 1.0] as const;
+
+  it("matches stored opacity table across trait grid (rest / content / active)", () => {
+    const table = BASE_INTENSITIES.flatMap((baseIntensity) =>
+      TRAIT_GRID.map(({ warmthShift, glowBoost }) => ({
+        baseIntensity,
+        warmthShift,
+        glowBoost,
+        opacities: Object.fromEntries(
+          AMBIENT_KINDS.map((k) => [
+            k,
+            round6(ambientBlobOpacity(k, baseIntensity, glowBoost, warmthShift)),
+          ]),
+        ),
+      })),
+    );
+    expect(table).toMatchSnapshot();
+  });
+});
