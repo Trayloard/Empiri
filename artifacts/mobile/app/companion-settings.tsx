@@ -266,6 +266,45 @@ export default function CompanionSettingsScreen() {
             </Text>
           </View>
 
+          {/* Evolution log entry point */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
+              Growth
+            </Text>
+            <Pressable
+              onPress={() => router.push("/evolution-log")}
+              accessibilityRole="button"
+              accessibilityLabel="Open the evolution log"
+              style={({ pressed }) => [
+                styles.linkRow,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: pressed ? colors.muted : "transparent",
+                },
+              ]}
+            >
+              <Feather
+                name="trending-up"
+                size={18}
+                color={colors.primary}
+                style={styles.linkIcon}
+              />
+              <View style={styles.linkText}>
+                <Text style={[styles.linkLabel, { color: colors.foreground }]}>
+                  Evolution log
+                </Text>
+                <Text style={[styles.linkDesc, { color: colors.mutedForeground }]}>
+                  See how your companion has grown over time.
+                </Text>
+              </View>
+              <Feather
+                name="chevron-right"
+                size={18}
+                color={colors.mutedForeground}
+              />
+            </Pressable>
+          </View>
+
           {/* Save button */}
           <Pressable
             onPress={handleSave}
@@ -381,6 +420,30 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   toneDesc: {
+    fontSize: 12.5,
+    fontFamily: FONTS.regular,
+    marginTop: 2,
+  },
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  linkIcon: {
+    marginRight: 12,
+  },
+  linkText: {
+    flex: 1,
+  },
+  linkLabel: {
+    fontSize: 15,
+    fontFamily: FONTS.semibold,
+    letterSpacing: -0.2,
+  },
+  linkDesc: {
     fontSize: 12.5,
     fontFamily: FONTS.regular,
     marginTop: 2,
