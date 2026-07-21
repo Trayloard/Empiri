@@ -32,7 +32,13 @@ var mockTapEnd: ((e: { x: number }) => void) | undefined;
 var mockPanBegin: ((e: { x: number }) => void) | undefined;
 var mockPanMove: ((e: { x: number }) => void) | undefined;
 var mockPanEnd: (() => void) | undefined;
+var mockSelectionAsync: jest.Mock;
 /* eslint-enable no-var */
+
+jest.mock("expo-haptics", () => {
+  mockSelectionAsync = jest.fn().mockResolvedValue(undefined);
+  return { selectionAsync: mockSelectionAsync };
+});
 
 jest.mock("@expo/vector-icons", () => ({ Feather: () => null }));
 
@@ -287,6 +293,44 @@ describe("GrowthTimeline scrubber — pan gesture", () => {
     expect(within(getByTestId("scrubber-readout")).getByText("now")).toBeTruthy();
     // SELF has warmth = 62 at the 'now' point.
     expect(getByText("62")).toBeTruthy();
+  });
+});
+
+describe("GrowthTimeline scrubber — haptic feedback", () => {
+  it("fires selectionAsync when the active index changes during a pan", async () => {
+    await renderAndWait();
+
+    // Pan begin at x=0 → snaps to index 0 (was null) — index changed, haptic fires.
+    await act(async () => {
+      mockPanBegin?.({ x: 0 });
+    });
+
+    expect(mockSelectionAsync).toHaveBeenCalledTimes(1);
+
+    // Pan move to a very large x → snaps to index 2 (was 0) — index changed, haptic fires.
+    await act(async () => {
+      mockPanMove?.({ x: 999_999 });
+    });
+
+    expect(mockSelectionAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not fire selectionAsync when the pan stays over the same index", async () => {
+    await renderAndWait();
+
+    // Pan begin at x=0 → index 0.
+    await act(async () => {
+      mockPanBegin?.({ x: 0 });
+    });
+    expect(mockSelectionAsync).toHaveBeenCalledTimes(1);
+
+    // Pan move by a tiny amount that still resolves to index 0.
+    await act(async () => {
+      mockPanMove?.({ x: 1 });
+    });
+
+    // Still just one call — no extra haptic for staying on the same point.
+    expect(mockSelectionAsync).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -25,6 +25,8 @@ import Animated, {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Circle, Line, Path } from "react-native-svg";
 
+import * as Haptics from "expo-haptics";
+
 import { FONTS } from "@/constants/fonts";
 import { accentForWarmth } from "@/lib/accent";
 import {
@@ -100,6 +102,13 @@ export function GrowthTimeline({
   // Scrubber state — which point is the user currently touching?
   // null means no active touch (readout hidden).
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  // Ref mirror of activeIdx so the onScrubTouch callback can compare without
+  // adding activeIdx to its deps (which would cause chartGesture to recompute
+  // on every snap).
+  const activeIdxRef = useRef<number | null>(null);
+  useEffect(() => {
+    activeIdxRef.current = activeIdx;
+  }, [activeIdx]);
 
   // Which chapter row is expanded (showing source lines). Key = `${c.from}`.
   const [expandedChapterKey, setExpandedChapterKey] = useState<string | null>(null);
@@ -139,11 +148,16 @@ export function GrowthTimeline({
   const xsRef = useRef<number[]>([]);
 
   // JS-thread callback: compute nearest index and update React state.
+  // Fires a haptic tick when the snap target changes (dial-like feedback).
   const onScrubTouch = useCallback(
     (touchX: number) => {
       const xNorm = Math.max(0, Math.min(1, touchX / chartW));
       const idx = nearestTimelineIndex(xNorm, xsRef.current);
-      setActiveIdx(idx < 0 ? null : idx);
+      const nextIdx = idx < 0 ? null : idx;
+      if (nextIdx !== activeIdxRef.current) {
+        Haptics.selectionAsync().catch(() => {});
+      }
+      setActiveIdx(nextIdx);
     },
     [chartW],
   );
