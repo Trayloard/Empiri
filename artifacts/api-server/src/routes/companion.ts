@@ -34,7 +34,7 @@ import {
   queueSelfEvolution,
   type SignalLogger,
 } from "../lib/messageSignal";
-import { maybeReflect } from "../lib/reflection";
+import { maybeReflect, primeReflection, takeCachedReflection } from "../lib/reflection";
 import { getSelfHistory, maybeSnapshotSelf } from "../lib/selfSnapshots";
 import {
   buildContextMessages,
@@ -420,11 +420,12 @@ router.post("/conversations/:id/messages", async (req, res) => {
   // latency; failures are logged inside and never affect the response.
   void queueSelfEvolution(id, content, req.log);
 
-  // Eigenleben: if this was the first message after a long absence, let
-  // Empiri reflect on the time apart — the thought lands as a moment in the
-  // self-narrative (and colours the next persona compose). Fire-and-forget:
-  // adds no latency and can never affect the reply.
-  void maybeReflect(id, {
+  // Eigenleben: if this was the first message after a long absence, prime
+  // Empiri's reflection so the thought is already resolved (or in flight)
+  // if a check-in fires on the same process instance. The promise is cached
+  // in reflection.ts; a concurrent check-in will consume it via
+  // takeCachedReflection. Fire-and-forget — adds no latency here.
+  primeReflection(id, {
     lastContactAt: lastContactBefore(history, userMessage.id),
     log: req.log,
   });
@@ -557,9 +558,9 @@ router.post("/conversations/:id/messages/stream", async (req, res) => {
   // analysis (with heuristic fallback) never delays or breaks the reply.
   void queueSelfEvolution(id, content, req.log);
 
-  // Eigenleben: first message after a long absence → reflect on the time
-  // apart (narrative moment only; fire-and-forget, never affects the reply).
-  void maybeReflect(id, {
+  // Eigenleben: prime the reflection so a concurrent check-in can consume
+  // it instantly from the in-process cache. Fire-and-forget — no latency.
+  primeReflection(id, {
     lastContactAt: lastContactBefore(history, userMessage.id),
     log: req.log,
   });
@@ -605,14 +606,16 @@ router.post("/conversations/:id/checkin", async (req, res) => {
     ? new Date(lastMessage.createdAt).getTime()
     : null;
 
-  // Fire reflection NOW — it runs in parallel with self-loading and
-  // system-prompt composition so the AI call doesn't add its own latency
-  // on top of the greeting's AI call. A hard 1.5 s timeout guarantees the
-  // greeting is sent promptly even if reflection is slow; the reflection
-  // promise keeps running in the background and its narrative moment is
-  // still persisted through enqueueConversationTask after this point.
+  // Start reflection in parallel with self-loading and system-prompt
+  // composition. If the message route already called primeReflection (user
+  // sent a message and a check-in near-simultaneously), the cached promise
+  // is in flight and may already be done — we consume it for free. If there
+  // is no cached promise (pure check-in flow), we start a fresh generation.
+  // Either way a 1.5 s timeout ensures the greeting is never held back by a
+  // slow AI call; the promise keeps running and persists the moment regardless.
   const REFLECTION_TIMEOUT_MS = 1500;
-  const reflectionPromise = maybeReflect(id, { lastContactAt, log: req.log });
+  const reflectionPromise =
+    takeCachedReflection(id) ?? maybeReflect(id, { lastContactAt, log: req.log });
 
   // Load self and compose system prompt while reflection is in flight.
   const self = await loadOrCreateSelf(id);

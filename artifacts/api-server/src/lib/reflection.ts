@@ -139,6 +139,50 @@ async function composeReflection(
 }
 
 /**
+ * In-process cache of reflection promises, keyed by conversation ID.
+ *
+ * Populated by `primeReflection` (called eagerly from the message route when
+ * the user returns after a long absence), consumed once by the check-in route
+ * via `takeCachedReflection`. Within a single server process this means the
+ * AI call has a head start by the time the check-in arrives; on Autoscale a
+ * cache miss is normal and the check-in falls back to starting fresh with a
+ * 1.5 s timeout.
+ */
+const cachedReflections = new Map<number, Promise<string | null>>();
+
+/**
+ * Start a reflection in the background and cache the promise so a subsequent
+ * check-in on the same process can consume it without waiting for the full AI
+ * round-trip. No-op if a prime is already in flight for this conversation.
+ * Never throws.
+ */
+export function primeReflection(
+  conversationId: number,
+  opts: { lastContactAt: number | null; now?: number; log?: SignalLogger },
+): void {
+  if (cachedReflections.has(conversationId)) return;
+  const promise = maybeReflect(conversationId, opts).finally(() => {
+    if (cachedReflections.get(conversationId) === promise) {
+      cachedReflections.delete(conversationId);
+    }
+  });
+  cachedReflections.set(conversationId, promise);
+}
+
+/**
+ * Return and remove the cached reflection promise for this conversation, or
+ * null if no prime has been started. One-shot: calling this clears the entry
+ * so the check-in and the message route cannot both consume the same thought.
+ */
+export function takeCachedReflection(
+  conversationId: number,
+): Promise<string | null> | null {
+  const p = cachedReflections.get(conversationId) ?? null;
+  if (p) cachedReflections.delete(conversationId);
+  return p;
+}
+
+/**
  * Compose a reflection for a returning user, if one is due. Returns the
  * first-person thought (for the check-in directive) or null when the absence
  * was too short, this absence was already reflected on, or the AI call

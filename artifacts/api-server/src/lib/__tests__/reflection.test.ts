@@ -19,8 +19,10 @@ vi.mock("../messageSignal", () => ({
 import {
   buildReflectionDigest,
   maybeReflect,
+  primeReflection,
   REFLECTION_MIN_HOURS,
   sanitizeReflection,
+  takeCachedReflection,
 } from "../reflection";
 
 const T0 = 1_700_000_000_000;
@@ -210,6 +212,71 @@ describe("maybeReflect", () => {
     );
     await maybeReflect(1, { lastContactAt, now });
     expect(saveSelfMock).toHaveBeenCalledOnce();
+  });
+});
+
+// ── primeReflection + takeCachedReflection ────────────────────────────────────
+
+describe("primeReflection / takeCachedReflection", () => {
+  const now = T0 + LONG_ABSENCE_MS;
+  const lastContactAt = T0;
+
+  it("takeCachedReflection returns null when nothing has been primed", () => {
+    expect(takeCachedReflection(999)).toBeNull();
+  });
+
+  it("primeReflection caches the promise and takeCachedReflection returns it", async () => {
+    createMock.mockResolvedValueOnce(
+      modelReply({ thought: "Cached thought.", moment: "A cached moment." }),
+    );
+
+    primeReflection(42, { lastContactAt, now });
+    const cached = takeCachedReflection(42);
+    expect(cached).not.toBeNull();
+    const thought = await cached;
+    expect(thought).toBe("Cached thought.");
+  });
+
+  it("takeCachedReflection clears the cache (one-shot)", async () => {
+    createMock.mockResolvedValueOnce(
+      modelReply({ thought: "One-shot.", moment: "A moment." }),
+    );
+
+    primeReflection(43, { lastContactAt, now });
+    const p = takeCachedReflection(43);
+    // Await so the promise doesn't leak into the next test
+    await p;
+    expect(takeCachedReflection(43)).toBeNull();
+  });
+
+  it("primeReflection is a no-op when a promise is already in flight", async () => {
+    createMock.mockResolvedValue(
+      modelReply({ thought: "First.", moment: "m." }),
+    );
+
+    primeReflection(44, { lastContactAt, now });
+    primeReflection(44, { lastContactAt, now });  // no-op: 44 already in cache
+    // Consume and await to confirm only one AI call was made
+    const p = takeCachedReflection(44);
+    await p;
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a check-in can consume a cached promise with no extra AI call", async () => {
+    createMock.mockResolvedValueOnce(
+      modelReply({ thought: "Pre-computed.", moment: "m." }),
+    );
+
+    primeReflection(45, { lastContactAt, now });
+    const cached = takeCachedReflection(45);
+    expect(cached).not.toBeNull();
+
+    const result = await Promise.race([
+      cached!,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+    ]);
+    expect(result).toBe("Pre-computed.");
+    expect(createMock).toHaveBeenCalledTimes(1);
   });
 });
 
