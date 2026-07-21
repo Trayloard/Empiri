@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -694,6 +695,7 @@ export function InnerSelfSheet({
   warmth = 0,
   companionName = "Empiri",
 }: InnerSelfSheetProps) {
+  const router = useRouter();
   const name = companionName.trim() || "Empiri";
   // Centre-anchored personality tint — neutral warmth keeps today's accent.
   const sheetAccent = accentForWarmth(warmth, SHEET_ACCENT, SHEET_SPECTRUM);
@@ -1073,6 +1075,17 @@ export function InnerSelfSheet({
             <Animated.View style={[styles.aliveDot, aliveStyle]} />
             <Text style={styles.aliveText}>ALIVE</Text>
           </View>
+
+          <Pressable
+            onPress={() => { onClose(); router.push("/evolution-log"); }}
+            testID="evolution-log-btn"
+            accessibilityRole="button"
+            accessibilityLabel="Evolution log"
+            hitSlop={12}
+            style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Feather name="trending-up" size={20} color="#E7E9F5" />
+          </Pressable>
         </View>
 
         <View style={styles.segmentWrap}>
