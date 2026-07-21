@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import {
   clearCompanionMemory,
+  deleteCompanionFact,
   getCompanionMemory,
   getCompanionSelf,
   updateCompanionMemory,
@@ -9,7 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -726,8 +727,17 @@ export function InnerSelfSheet({
   const [selfAttempt, setSelfAttempt] = useState(0);
   const [memoryAttempt, setMemoryAttempt] = useState(0);
 
+  // Tracks whether a background theme refresh has fired for the current
+  // sheet open. Reset when the sheet closes so each open gets one refresh.
+  const bgThemeRefreshFired = useRef(false);
+
   // Durable personal facts Empiri holds about the user, most salient first.
   const facts = self?.facts ?? [];
+
+  // Which fact key is currently being deleted (one at a time).
+  const [deletingFactKey, setDeletingFactKey] = useState<string | null>(null);
+  // Error shown beneath the facts card when a delete fails.
+  const [factDeleteError, setFactDeleteError] = useState<string | null>(null);
 
   const switchMode = (next: SheetMode) => {
     if (next === mode) return;
@@ -738,14 +748,90 @@ export function InnerSelfSheet({
     setMode(next);
   };
 
+  const deleteFact = async (key: string) => {
+    if (conversationId == null || deletingFactKey != null) return;
+    setFactDeleteError(null);
+    setDeletingFactKey(key);
+
+    // Optimistically remove from local state so the UI responds instantly.
+    const previousFacts = self?.facts ?? [];
+    setSelf((prev) =>
+      prev ? { ...prev, facts: prev.facts.filter((f) => f.key !== key) } : prev,
+    );
+
+    try {
+      await deleteCompanionFact(conversationId, key);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        ).catch(() => {});
+      }
+    } catch {
+      // Restore on failure.
+      setSelf((prev) =>
+        prev ? { ...prev, facts: previousFacts } : prev,
+      );
+      setFactDeleteError("Couldn't remove that just now. Please try again.");
+    } finally {
+      setDeletingFactKey(null);
+    }
+  };
+
   useEffect(() => {
     if (!visible || conversationId == null) return;
     let cancelled = false;
     setLoading(true);
     setError(false);
+
+    // Only the very first attempt per sheet open fires the background theme
+    // refresh. Retries skip it so they don't add unexpected extra fetches.
+    const shouldFireBgRefresh = !bgThemeRefreshFired.current;
+    bgThemeRefreshFired.current = true;
+
     getCompanionSelf(conversationId)
       .then((data) => {
-        if (!cancelled) setSelf(data);
+        if (!cancelled) {
+          setSelf(data);
+
+          if (shouldFireBgRefresh) {
+            // Poll for fresh themes after the server's background LLM recompute.
+            // The server returns cached (possibly stale or null) themes immediately
+            // and starts a background model call; we wait increasing delays to
+            // give it time to finish before each re-fetch.
+            //
+            // Termination: stop when themes CHANGE from the initial value
+            // (compared by JSON serialisation), which handles both the
+            // null-→-non-null path AND the stale-non-null-→-fresh path.
+            // If the budget is exhausted without a change, we give up silently;
+            // the next sheet open will have a warmer cache.
+            const initialThemesKey = JSON.stringify(data.themes);
+            const DELAYS_MS = [2000, 4000, 6000];
+            let attempt = 0;
+
+            const poll = () => {
+              if (cancelled || attempt >= DELAYS_MS.length) return;
+              const delay = DELAYS_MS[attempt++];
+              setTimeout(() => {
+                if (cancelled) return;
+                getCompanionSelf(conversationId)
+                  .then((fresh) => {
+                    if (cancelled) return;
+                    if (JSON.stringify(fresh.themes) !== initialThemesKey) {
+                      // Themes changed — apply and stop polling.
+                      setSelf((prev) =>
+                        prev ? { ...prev, themes: fresh.themes } : prev,
+                      );
+                    } else {
+                      // Same as before — try again after the next delay.
+                      poll();
+                    }
+                  })
+                  .catch(() => poll());
+              }, delay);
+            };
+            poll();
+          }
+        }
       })
       .catch(() => {
         if (!cancelled) setError(true);
@@ -789,6 +875,9 @@ export function InnerSelfSheet({
       setMemoryEditing(false);
       setMemoryConfirmClear(false);
       setMemoryActionError(null);
+      setDeletingFactKey(null);
+      setFactDeleteError(null);
+      bgThemeRefreshFired.current = false;
     }
   }, [visible]);
 
@@ -1372,9 +1461,50 @@ export function InnerSelfSheet({
                             ]}
                           />
                           <Text style={styles.factText}>{fact.text}</Text>
+                          <Pressable
+                            onPress={() => deleteFact(fact.key)}
+                            disabled={deletingFactKey != null}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Forget this — ${fact.text}`}
+                            testID={`fact-delete-${fact.key}`}
+                            hitSlop={10}
+                            style={({ pressed }) => [
+                              styles.factDeleteBtn,
+                              {
+                                opacity:
+                                  pressed ||
+                                  deletingFactKey === fact.key
+                                    ? 0.35
+                                    : deletingFactKey != null
+                                      ? 0.3
+                                      : 0.65,
+                              },
+                            ]}
+                          >
+                            {deletingFactKey === fact.key ? (
+                              <ActivityIndicator
+                                size="small"
+                                color="rgba(231,233,245,0.7)"
+                              />
+                            ) : (
+                              <Feather
+                                name="x"
+                                size={15}
+                                color="rgba(231,233,245,0.9)"
+                              />
+                            )}
+                          </Pressable>
                         </View>
                       ))}
                     </View>
+                    {factDeleteError ? (
+                      <Text
+                        style={styles.memoryActionErrorText}
+                        testID="fact-delete-error"
+                      >
+                        {factDeleteError}
+                      </Text>
+                    ) : null}
                     <Text style={styles.memoryFootnote}>
                       Little things you&apos;ve shared — the ones we return to
                       stay the brightest.
@@ -1739,6 +1869,13 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     lineHeight: 21,
     color: "rgba(231,233,245,0.92)",
+  },
+  factDeleteBtn: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
   },
   node: {
     position: "absolute",

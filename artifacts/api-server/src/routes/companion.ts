@@ -11,7 +11,15 @@ import {
   type Tone,
 } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
-import { composePersona, perceive, project, summarizeSelf } from "@workspace/neurobrane";
+import {
+  composePersona,
+  perceive,
+  project,
+  summarizeSelf,
+  MEMORY_BLOCK_ID,
+  normalizeFactKey,
+  type MemoryData,
+} from "@workspace/neurobrane";
 import {
   CompanionCheckInBody,
   CreateConversationBody,
@@ -20,7 +28,7 @@ import {
   UpdateCompanionMemoryBody,
 } from "@workspace/api-zod";
 import { loadOrCreateSelf, saveSelf } from "../lib/companionSelf";
-import { getInterestThemes } from "../lib/interestThemes";
+import { getInterestThemesCached } from "../lib/interestThemes";
 import {
   enqueueConversationTask,
   queueSelfEvolution,
@@ -684,7 +692,7 @@ router.get("/conversations/:id/self", async (req, res) => {
 
   let themes: Record<string, string> | null = null;
   try {
-    themes = await getInterestThemes(conversation.id, summary.interests);
+    themes = await getInterestThemesCached(conversation.id, summary.interests);
   } catch (err) {
     req.log.error({ err }, "Failed to group curiosities by meaning");
   }
@@ -737,6 +745,42 @@ router.patch("/conversations/:id/memory", async (req, res) => {
     .returning();
 
   res.json({ summary: updated.contextSummary });
+});
+
+// Delete a single learned fact from the companion's long-term memory. The
+// fact is identified by its normalised slot key. If the key is not found the
+// response is still 200 — idempotent: the end-state (key absent) is the same.
+router.delete("/conversations/:id/companion/facts/:key", async (req, res) => {
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
+
+  const rawKey = typeof req.params.key === "string" ? req.params.key : "";
+  const key = normalizeFactKey(rawKey);
+  if (!key) {
+    res.status(400).json({ error: "Invalid fact key" });
+    return;
+  }
+
+  const self = await loadOrCreateSelf(conversation.id);
+  const memoryEnvelope = self.blocks[MEMORY_BLOCK_ID];
+  if (memoryEnvelope) {
+    const data = memoryEnvelope.data as MemoryData;
+    const filtered = data.facts.filter((f) => f.key !== key);
+    if (filtered.length !== data.facts.length) {
+      await saveSelf(conversation.id, {
+        ...self,
+        blocks: {
+          ...self.blocks,
+          [MEMORY_BLOCK_ID]: {
+            ...memoryEnvelope,
+            data: { ...data, facts: filtered },
+          },
+        },
+      });
+    }
+  }
+
+  res.json({ ok: true });
 });
 
 // Clear what the companion remembers: remove the stored summary and reset the

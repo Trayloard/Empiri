@@ -134,3 +134,58 @@ export async function getInterestThemes(
   inFlight.set(conversationId, task);
   return task;
 }
+
+/**
+ * Non-blocking variant of `getInterestThemes` for use in latency-sensitive
+ * paths (e.g. the self endpoint that the mind-map reads on open).
+ *
+ * Returns whatever is in the DB cache right now — even if the topic set has
+ * changed since the last compute — and fires a background recompute when the
+ * signature is stale or absent. The caller never waits for the model; it just
+ * gets the best available grouping immediately.
+ *
+ * Fewer than two interests can never form a theme; returns {} in that case.
+ */
+export async function getInterestThemesCached(
+  conversationId: number,
+  interests: InterestSummary[],
+): Promise<Record<string, string> | null> {
+  if (interests.length < 2) return {};
+
+  const signature = themeSignature(interests.map((it) => it.topic));
+
+  const [row] = await db
+    .select({ interestThemes: companionSelves.interestThemes })
+    .from(companionSelves)
+    .where(eq(companionSelves.conversationId, conversationId));
+  const cached = row?.interestThemes;
+
+  if (cached && cached.signature === signature) {
+    return cached.themes;
+  }
+
+  // Signature mismatch or no cache — kick off a background recompute so the
+  // next fetch (or the client's background refresh) can pick up fresh themes.
+  if (!inFlight.has(conversationId)) {
+    const task = (async () => {
+      try {
+        const themes = await computeThemes(interests);
+        const cache: InterestThemeCache = { signature, themes };
+        await db
+          .update(companionSelves)
+          .set({ interestThemes: cache })
+          .where(eq(companionSelves.conversationId, conversationId));
+        return themes;
+      } catch {
+        return cached ? cached.themes : null;
+      } finally {
+        inFlight.delete(conversationId);
+      }
+    })();
+    inFlight.set(conversationId, task);
+  }
+
+  // Return immediately — stale cache is better than nothing; null signals
+  // "no grouping yet" so the client falls back to its heuristic grouping.
+  return cached ? cached.themes : null;
+}

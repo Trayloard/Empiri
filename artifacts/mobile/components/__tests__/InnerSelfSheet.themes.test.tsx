@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import {
   getCompanionMemory,
@@ -272,5 +272,151 @@ describe("InnerSelfSheet curiosity-theme expansion", () => {
     fireEvent.press(getByTestId("node-interest-1"));
     expect(getByTestId("node-detail")).toBeTruthy();
     expect(getByText("Hiking")).toBeTruthy();
+  });
+});
+
+/**
+ * Background theme refresh tests.
+ *
+ * When the server returns `themes: null` on the initial load (no cache yet),
+ * the sheet renders immediately using the heuristic fallback grouping and then
+ * silently re-fetches after a delay to pick up the freshly-computed themes.
+ * Uses fake timers to control the polling delays without real waits.
+ */
+describe("InnerSelfSheet background theme refresh", () => {
+  const SELF_NO_THEMES: CompanionSelf = {
+    drives: [{ key: "connection", level: 40, striving: 55 }],
+    traits: [{ key: "warmth", value: 62 }],
+    interests: [
+      { topic: "galaxies", display: "Galaxies", affinity: 70 },
+      { topic: "astrophysics", display: "Astrophysics", affinity: 55 },
+      { topic: "stars", display: "Stars", affinity: 80 },
+    ],
+    narrative: [],
+    facts: [],
+    chapters: [],
+    interactions: 5,
+    ageHours: 2,
+    themes: null,
+  };
+
+  const SELF_WITH_THEMES: CompanionSelf = {
+    ...SELF_NO_THEMES,
+    themes: {
+      galaxies: "Space",
+      astrophysics: "Space",
+      stars: "Space",
+    },
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
+    jest.clearAllMocks();
+  });
+
+  it("renders the map immediately with null themes and silently applies fresh themes after the first background poll", async () => {
+    // Initial load: no cached themes yet (server is computing in background).
+    // Background polls: first returns null (still computing), second returns
+    // fresh themes — verifying the poll-until-success chain works.
+    mockGetSelf
+      .mockResolvedValueOnce(SELF_NO_THEMES)
+      .mockResolvedValueOnce(SELF_NO_THEMES)
+      .mockResolvedValueOnce(SELF_WITH_THEMES);
+    mockGetMemory.mockResolvedValue({ summary: null });
+
+    const { findByTestId, queryByTestId } = render(
+      <InnerSelfSheet {...defaultProps} />,
+    );
+
+    // Map appears immediately — theme grouping never blocks the initial render.
+    expect(await findByTestId("node-you")).toBeTruthy();
+    // With themes=null, individual interest nodes are shown (heuristic can't
+    // group across unrelated roots like "galaxies", "astrophysics", "stars"),
+    // and the server-driven Space theme node does not exist yet.
+    expect(queryByTestId("node-interest-theme-space")).toBeNull();
+    expect(findByTestId("node-interest-0")).toBeTruthy();
+
+    // First background poll fires after the 2 s delay — server still computing,
+    // themes still null; the poll schedules the next attempt automatically.
+    await act(async () => { jest.advanceTimersByTime(2001); });
+    expect(queryByTestId("node-interest-theme-space")).toBeNull();
+
+    // Second background poll fires after the 4 s delay — themes are now ready.
+    await act(async () => { jest.advanceTimersByTime(4001); });
+
+    // Themes applied silently: the Space group node now exists.
+    expect(await findByTestId("node-interest-theme-space")).toBeTruthy();
+    // Exactly three calls: initial + two background polls.
+    expect(mockGetSelf).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops polling as soon as the first poll returns non-null themes", async () => {
+    // First poll already returns themes — only two total calls expected.
+    mockGetSelf
+      .mockResolvedValueOnce(SELF_NO_THEMES)
+      .mockResolvedValueOnce(SELF_WITH_THEMES);
+    mockGetMemory.mockResolvedValue({ summary: null });
+
+    const { findByTestId } = render(<InnerSelfSheet {...defaultProps} />);
+    expect(await findByTestId("node-you")).toBeTruthy();
+
+    // Fire the first (and only) background poll.
+    await act(async () => { jest.advanceTimersByTime(2001); });
+
+    // Themes applied; poll chain stopped — the call count is exactly 2.
+    expect(await findByTestId("node-interest-theme-space")).toBeTruthy();
+    expect(mockGetSelf).toHaveBeenCalledTimes(2);
+  });
+
+  it("replaces stale non-null cached themes once the server finishes recomputing", async () => {
+    // Stale cache: galaxies and stars grouped under Space, but astrophysics is
+    // missing (the server received the new interest set and is recomputing).
+    const STALE: CompanionSelf = {
+      ...SELF_NO_THEMES,
+      themes: { galaxies: "Space", stars: "Space" },
+    };
+    // Fresh themes after server recompute includes astrophysics in the group.
+    const FRESH: CompanionSelf = {
+      ...SELF_NO_THEMES,
+      themes: { galaxies: "Space", stars: "Space", astrophysics: "Space" },
+    };
+
+    // Initial load and first poll both return stale themes;
+    // second poll returns freshly computed themes.
+    mockGetSelf
+      .mockResolvedValueOnce(STALE)
+      .mockResolvedValueOnce(STALE)
+      .mockResolvedValueOnce(FRESH);
+    mockGetMemory.mockResolvedValue({ summary: null });
+
+    const { findByTestId, queryByTestId } = render(
+      <InnerSelfSheet {...defaultProps} />,
+    );
+
+    // Map renders immediately with stale grouping — Space theme is present
+    // (galaxies + stars), but astrophysics is not yet a member of any theme;
+    // it appears as an individual node at its original array index (1).
+    expect(await findByTestId("node-you")).toBeTruthy();
+    expect(queryByTestId("node-interest-theme-space")).toBeTruthy();
+    expect(queryByTestId("node-interest-1")).toBeTruthy();
+
+    // First poll fires (2 s) — still stale, poll continues.
+    await act(async () => { jest.advanceTimersByTime(2001); });
+    expect(queryByTestId("node-interest-theme-space")).toBeTruthy();
+    expect(queryByTestId("node-interest-1")).toBeTruthy();
+
+    // Second poll fires (4 s more) — fresh themes arrive.
+    await act(async () => { jest.advanceTimersByTime(4001); });
+
+    // After the recompute, astrophysics is part of the Space theme:
+    // individual astrophysics node is gone, Space theme node remains.
+    expect(await findByTestId("node-interest-theme-space")).toBeTruthy();
+    expect(queryByTestId("node-interest-1")).toBeNull();
+    expect(mockGetSelf).toHaveBeenCalledTimes(3);
   });
 });
