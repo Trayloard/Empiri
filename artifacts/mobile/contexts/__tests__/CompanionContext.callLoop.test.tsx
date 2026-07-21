@@ -390,4 +390,62 @@ describe("Audio call loop — startListening failure exits immediately", () => {
       jest.useRealTimers();
     }
   });
+
+  it("clears the mic error automatically when the next startCall succeeds", async () => {
+    /**
+     * Scenario: permission denied on attempt 1 → error banner shown.
+     * User fixes the permission and tries again. On attempt 2, recording
+     * starts successfully → setError(null) fires inside startListening →
+     * the error banner disappears without the user needing to dismiss it.
+     */
+    const { result } = await renderReadyCompanion();
+
+    jest.useFakeTimers({
+      doNotFake: ["setImmediate", "nextTick", "queueMicrotask"],
+    });
+    try {
+      // ── Attempt 1: permission denied ──────────────────────────────────────
+      (
+        AudioModule.requestRecordingPermissionsAsync as jest.Mock
+      ).mockResolvedValueOnce({ granted: false });
+
+      let call1Finished = false;
+      act(() => {
+        result.current.startCall().finally(() => {
+          call1Finished = true;
+        });
+      });
+      await tick(0);
+
+      await waitFor(() => expect(call1Finished).toBe(true));
+      await waitFor(() => expect(result.current.isCallActive).toBe(false));
+
+      // The error message is shown after the first failed attempt.
+      expect(result.current.error).toBe(
+        "Microphone access is needed to talk to Empiri.",
+      );
+      expect(result.current.status).toBe("idle");
+
+      // ── Attempt 2: permission granted (default mock) ──────────────────────
+      act(() => {
+        result.current.startCall();
+      });
+      // Flush the permission check and prepareToRecordAsync awaits.
+      await tick(0);
+
+      // Recording has started — status is "listening" and error is gone.
+      await waitFor(() => expect(result.current.status).toBe("listening"));
+      expect(result.current.error).toBeNull();
+      expect(result.current.isCallActive).toBe(true);
+
+      // Clean up the running call loop.
+      act(() => {
+        result.current.endCall();
+      });
+      await tick(0);
+      await waitFor(() => expect(result.current.isCallActive).toBe(false));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
