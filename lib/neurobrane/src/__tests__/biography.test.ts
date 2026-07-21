@@ -135,7 +135,7 @@ describe("core-self: legacy state migration", () => {
     const normalized = normalizeCoreSelf(legacy);
     expect(normalized.archive).toEqual([]);
     expect(normalized.chapters).toEqual([]);
-    expect(normalized.narrative).toEqual([{ text: "an old line", createdAt: 0 }]);
+    expect(normalized.narrative).toEqual([{ text: "an old line" }]);
   });
 
   it("applyInteraction and decay preserve archive and chapters", () => {

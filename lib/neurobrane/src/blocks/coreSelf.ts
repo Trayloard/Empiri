@@ -40,8 +40,13 @@ export interface Interest {
  */
 export interface NarrativeLine {
   text: string;
-  /** Epoch ms when this line was first written into the narrative. */
-  createdAt: number;
+  /**
+   * Epoch ms when this line was first written into the narrative.
+   * Absent for lines that predate this field (legacy string entries migrated
+   * from old persisted state). When absent, archive overflow falls back to
+   * the drop-time (`ArchivedLine.at`) for date calculations.
+   */
+  createdAt?: number;
 }
 
 /** A narrative line that overflowed the rolling window, dated for condensation. */
@@ -102,11 +107,12 @@ export interface CoreSelfData {
  */
 export function normalizeCoreSelf(data: Partial<CoreSelfData> | CoreSelfData): CoreSelfData {
   // Narrative may be a legacy string[] (pre-NarrativeLine era). Convert each
-  // string to a NarrativeLine with createdAt: 0 so the rest of the code
-  // always sees a uniform shape without information loss.
+  // string to a NarrativeLine WITHOUT a createdAt so that downstream code
+  // (archive overflow, chapter memoryDate) can fall back to the archive
+  // drop-time rather than 0 (epoch 1970), which would produce wrong dates.
   const rawNarrative = Array.isArray(data.narrative) ? data.narrative : [];
   const narrative: NarrativeLine[] = rawNarrative.map((l: unknown) =>
-    typeof l === "string" ? { text: l, createdAt: 0 } : (l as NarrativeLine),
+    typeof l === "string" ? { text: l } : (l as NarrativeLine),
   );
   return {
     traits: data.traits ?? {},
@@ -137,9 +143,15 @@ export function appendNarrativeLines(
   const overflowCount = Math.max(0, all.length - narrative.maxLines);
   // Carry each line's original createdAt into the archive entry so chapters
   // can later display "when the memory was made", not "when it was filed".
+  // Legacy lines without a createdAt get no createdAt on the archive entry
+  // either — applyChapter falls back to `at` for those (safe, avoids 1970).
   const overflowed: ArchivedLine[] = all
     .slice(0, overflowCount)
-    .map((l) => ({ text: l.text, at: now, createdAt: l.createdAt }));
+    .map((l) =>
+      l.createdAt !== undefined
+        ? { text: l.text, at: now, createdAt: l.createdAt }
+        : { text: l.text, at: now },
+    );
   const archive = [...data.archive, ...overflowed].slice(-biography.archiveMax);
   return { narrative: all.slice(-narrative.maxLines), archive };
 }
@@ -188,9 +200,11 @@ export const coreSelfBlock: BlockDefinition<CoreSelfData> = {
       }))
       .filter((i) => i.topic.length > 0)
       .slice(0, params.coreSelf.interest.maxCount);
+    // Seed narrative strings are pre-existing text with no known creation time;
+    // omit createdAt so archive fallback uses the overflow time, not epoch 0.
     const narrative: NarrativeLine[] = (seed?.narrative ?? [])
       .slice(-params.coreSelf.narrative.maxLines)
-      .map((text) => ({ text, createdAt: 0 }));
+      .map((text) => ({ text }));
     return { traits, interests, narrative, archive: [], chapters: [] };
   },
 

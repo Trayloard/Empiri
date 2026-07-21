@@ -96,7 +96,6 @@ describe("applyReflection", () => {
     const self = createSelf(NEURO_PARAMS, undefined, T0);
     const lines: NarrativeLine[] = Array.from({ length: MAX_LINES }, (_, i) => ({
       text: `Old line ${i}.`,
-      createdAt: 0,
     }));
     const full: InnerSelf = {
       ...self,
@@ -116,7 +115,7 @@ describe("applyReflection", () => {
     expect(data.narrative).toHaveLength(MAX_LINES);
     expect(data.narrative[data.narrative.length - 1].text).toBe(MOMENT);
     expect(data.narrative.map((l) => l.text)).not.toContain("Old line 0.");
-    expect(data.archive).toContainEqual({ text: "Old line 0.", at, createdAt: 0 });
+    expect(data.archive).toContainEqual({ text: "Old line 0.", at });
   });
 
   it("only stamps the timestamp when the moment line is empty", () => {
