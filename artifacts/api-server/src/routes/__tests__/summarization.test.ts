@@ -230,5 +230,17 @@ describe("POST /conversations/:id/messages — context-window summarisation", ()
     const systemMessages = callArgs.messages.filter((m) => m.role === "system");
     const summaryInjected = systemMessages.some((m) => m.content.includes(existingSummary));
     expect(summaryInjected).toBe(true);
+
+    // Negative assertion: messages that slid out of the context window must
+    // NOT appear verbatim in the exchange messages sent to the LLM.  The
+    // first seeded message ("Seeded message 1") is old enough to be outside
+    // the CONTEXT_WINDOW_SIZE tail, so it should be represented only by the
+    // summary — not as a raw exchange message.
+    const exchangeMessages = callArgs.messages.filter((m) => m.role !== "system");
+    const oldMessageLeaked = exchangeMessages.some((m) => m.content === "Seeded message 1");
+    expect(oldMessageLeaked).toBe(false);
+
+    // The total exchange messages must not exceed the window size.
+    expect(exchangeMessages.length).toBeLessThanOrEqual(CONTEXT_WINDOW_SIZE);
   });
 });
