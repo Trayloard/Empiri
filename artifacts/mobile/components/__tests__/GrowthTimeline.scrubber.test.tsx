@@ -185,7 +185,8 @@ async function renderAndWait() {
   );
   // findByTestId retries with act() until the async history fetch resolves
   // and the chart becomes visible — same pattern as GrowthTimeline.retry.test.tsx.
-  await utils.findByTestId("growth-timeline");
+  // Extended timeout covers first-test module warm-up latency.
+  await utils.findByTestId("growth-timeline", undefined, { timeout: 5000 });
   return utils;
 }
 
@@ -216,7 +217,7 @@ describe("GrowthTimeline scrubber — pan gesture", () => {
     expect(queryByTestId("scrubber-readout")).toBeTruthy();
   });
 
-  it("hides the readout immediately when the pan ends", async () => {
+  it("keeps the readout visible after the pan ends (linger period)", async () => {
     const { queryByTestId } = await renderAndWait();
 
     await act(async () => {
@@ -224,10 +225,49 @@ describe("GrowthTimeline scrubber — pan gesture", () => {
     });
     expect(queryByTestId("scrubber-readout")).toBeTruthy();
 
+    jest.useFakeTimers();
+    try {
+      await act(async () => {
+        mockPanEnd?.();
+      });
+      // Still visible — linger period active.
+      expect(queryByTestId("scrubber-readout")).toBeTruthy();
+
+      // Advance past the 1200 ms linger.
+      act(() => { jest.advanceTimersByTime(1300); });
+      expect(queryByTestId("scrubber-readout")).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("a new pan begun during the linger cancels the hide timer", async () => {
+    const { queryByTestId } = await renderAndWait();
+
     await act(async () => {
-      mockPanEnd?.();
+      mockPanBegin?.({ x: 0 });
     });
-    expect(queryByTestId("scrubber-readout")).toBeNull();
+
+    jest.useFakeTimers();
+    try {
+      // Release — starts 1200 ms linger.
+      await act(async () => { mockPanEnd?.(); });
+      expect(queryByTestId("scrubber-readout")).toBeTruthy();
+
+      // New pan begins within the linger — cancels the pending hide.
+      await act(async () => { mockPanBegin?.({ x: 999_999 }); });
+
+      // Advance well past where the original timer would have fired.
+      act(() => { jest.advanceTimersByTime(2000); });
+      expect(queryByTestId("scrubber-readout")).toBeTruthy();
+
+      // Clean up — end the pan and let the new linger expire.
+      await act(async () => { mockPanEnd?.(); });
+      act(() => { jest.advanceTimersByTime(1300); });
+      expect(queryByTestId("scrubber-readout")).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("selects the first snapshot when panning at x = 0", async () => {
@@ -426,10 +466,14 @@ describe("GrowthTimeline scrubber — tap gesture", () => {
       // Readout must still be visible because the pan took over
       expect(queryByTestId("scrubber-readout")).toBeTruthy();
 
-      // Pan ends — readout hides
+      // Pan ends — starts the 1200 ms pan linger.
       await act(async () => {
         mockPanEnd?.();
       });
+      // Still visible during linger.
+      expect(queryByTestId("scrubber-readout")).toBeTruthy();
+      // Advance past linger.
+      act(() => { jest.advanceTimersByTime(1300); });
       expect(queryByTestId("scrubber-readout")).toBeNull();
     } finally {
       jest.useRealTimers();

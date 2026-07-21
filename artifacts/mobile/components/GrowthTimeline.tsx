@@ -162,40 +162,70 @@ export function GrowthTimeline({
     [chartW],
   );
 
-  const tapDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Linger-and-fade: after a gesture ends the readout stays visible for a
+  // moment before fading out so the user has time to read the values.
+  const lingerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Readout opacity — animated to 0 at the tail end of the linger period.
+  const readoutOpacity = useSharedValue(1);
+  const readoutFadeStyle = useAnimatedStyle(() => ({ opacity: readoutOpacity.value }));
 
-  const onScrubRelease = useCallback(() => {
-    setActiveIdx(null);
-    if (tapDismissRef.current != null) {
-      clearTimeout(tapDismissRef.current);
-      tapDismissRef.current = null;
+  const clearLinger = useCallback(() => {
+    if (lingerTimerRef.current != null) {
+      clearTimeout(lingerTimerRef.current);
+      lingerTimerRef.current = null;
     }
-  }, []);
+    if (fadeTimerRef.current != null) {
+      clearTimeout(fadeTimerRef.current);
+      fadeTimerRef.current = null;
+    }
+    readoutOpacity.value = 1;
+  }, [readoutOpacity]);
 
-  // On tap: show the readout then auto-dismiss after 1.5 s so the user has
-  // time to read the values without having to hold the chart.
+  // Start a unified linger timer. After `delayMs` the readout hides; the last
+  // 200 ms (skipped when reduce-motion is on) fade the opacity to 0 first.
+  const startLinger = useCallback(
+    (delayMs: number) => {
+      clearLinger();
+      const fadeDuration = reduceMotion ? 0 : 200;
+      const fadeDelay = delayMs - fadeDuration;
+      if (fadeDelay > 0 && fadeDuration > 0) {
+        fadeTimerRef.current = setTimeout(() => {
+          fadeTimerRef.current = null;
+          readoutOpacity.value = withTiming(0, { duration: fadeDuration });
+        }, fadeDelay);
+      }
+      lingerTimerRef.current = setTimeout(() => {
+        lingerTimerRef.current = null;
+        setActiveIdx(null);
+        readoutOpacity.value = 1; // reset so it's fully opaque on next touch
+      }, delayMs);
+    },
+    [clearLinger, readoutOpacity, reduceMotion],
+  );
+
+  // Pan release: linger ~1200 ms before hiding.
+  const onScrubRelease = useCallback(() => {
+    startLinger(1200);
+  }, [startLinger]);
+
+  // On tap: show the readout then linger 1.5 s (same mechanism as pan linger).
   const onTapEnd = useCallback(
     (touchX: number) => {
       onScrubTouch(touchX);
-      if (tapDismissRef.current != null) clearTimeout(tapDismissRef.current);
-      tapDismissRef.current = setTimeout(() => {
-        tapDismissRef.current = null;
-        setActiveIdx(null);
-      }, 1500);
+      startLinger(1500);
     },
-    [onScrubTouch],
+    [onScrubTouch, startLinger],
   );
 
-  // Cancel any pending tap-dismiss when a pan starts.
+  // Cancel any pending linger when a new pan begins so the readout tracks the
+  // fresh touch position without disappearing mid-scrub.
   const onPanBegin = useCallback(
     (touchX: number) => {
-      if (tapDismissRef.current != null) {
-        clearTimeout(tapDismissRef.current);
-        tapDismissRef.current = null;
-      }
+      clearLinger();
       onScrubTouch(touchX);
     },
-    [onScrubTouch],
+    [clearLinger, onScrubTouch],
   );
 
   const chartGesture = useMemo(() => {
@@ -415,7 +445,7 @@ export function GrowthTimeline({
 
               {/* Scrubber readout — slides in when the user touches the chart */}
               {activeIdx !== null ? (
-                <View style={styles.readout} testID="scrubber-readout">
+                <Animated.View style={[styles.readout, readoutFadeStyle]} testID="scrubber-readout">
                   <Text style={styles.readoutDate}>
                     {points[activeIdx].isNow
                       ? "now"
@@ -449,7 +479,7 @@ export function GrowthTimeline({
                       </View>
                     ) : null}
                   </View>
-                </View>
+                </Animated.View>
               ) : (
                 <View style={styles.legend}>
                   {TRAIT_META.map((t) => {
