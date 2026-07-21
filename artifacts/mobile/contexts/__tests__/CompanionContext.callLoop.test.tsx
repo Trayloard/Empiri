@@ -5,6 +5,7 @@ import {
   createConversation,
   listMessages,
 } from "@workspace/api-client-react";
+import { AudioModule } from "expo-audio";
 import { CompanionProvider, useCompanion } from "../CompanionContext";
 
 /**
@@ -18,6 +19,9 @@ import { CompanionProvider, useCompanion } from "../CompanionContext";
  *     the loop starts the next round.
  *  4. Consecutive-error bail-out — after MAX_CONSECUTIVE_ERRORS (4) rounds
  *     where stopListening returns false, the loop exits on its own.
+ *  5. startListening failure — when startListening cannot start recording
+ *     (e.g. mic permission denied), the loop exits immediately on the first
+ *     attempt without spinning or retrying.
  *
  * Recorder uri is intentionally null in the mock so every stopListening call
  * short-circuits and returns false (no audio to transcribe). This drives
@@ -276,6 +280,112 @@ describe("Audio call loop — startCall / endCall", () => {
       // No endCall needed — the loop self-terminates.
       await waitFor(() => expect(result.current.isCallActive).toBe(false));
       await waitFor(() => expect(callFinished).toBe(true));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe("Audio call loop — startListening failure exits immediately", () => {
+  /**
+   * When startListening cannot begin recording (e.g. mic permission denied,
+   * native hardware error), `isRecordingRef.current` stays false. The call
+   * loop detects this after awaiting startListening() and breaks immediately
+   * — no 20 s round timer is armed, no second listen attempt is made, and
+   * startCall() settles with isCallActive returning to false.
+   *
+   * We simulate the failure by making the permission check return
+   * `{ granted: false }` for one call. This exercises the exact branch in
+   * startListening that returns early without setting isRecordingRef.current,
+   * which is the same path taken for any other failure mode (hardware error,
+   * setAudioModeAsync throw, etc.).
+   */
+
+  it("exits the call loop when startListening fails on the first attempt — no retry, no hanging timer", async () => {
+    const { result } = await renderReadyCompanion();
+
+    // Deny the mic permission just for this test so startListening returns
+    // early without ever setting isRecordingRef.current = true.
+    (
+      AudioModule.requestRecordingPermissionsAsync as jest.Mock
+    ).mockResolvedValueOnce({ granted: false });
+
+    jest.useFakeTimers({
+      doNotFake: ["setImmediate", "nextTick", "queueMicrotask"],
+    });
+    try {
+      let callFinished = false;
+
+      act(() => {
+        result.current.startCall().finally(() => {
+          callFinished = true;
+        });
+      });
+
+      // Flush the permission-check microtask so startListening can resolve.
+      await tick(0);
+
+      // The loop detects the failure and exits without waiting 20 s.
+      await waitFor(() => expect(result.current.isCallActive).toBe(false));
+      await waitFor(() => expect(callFinished).toBe(true));
+
+      // Status returns to idle — never stuck in "listening".
+      expect(result.current.status).toBe("idle");
+
+      // startListening was attempted exactly once — the loop did not retry.
+      expect(
+        AudioModule.requestRecordingPermissionsAsync,
+      ).toHaveBeenCalledTimes(1);
+
+      // No 20 s round timer was armed: advancing well past it must leave
+      // everything quiet (no second startCall, no errors thrown).
+      await tick(25_000);
+      expect(result.current.isCallActive).toBe(false);
+      // Still called only once — no extra startListening attempts fired.
+      expect(
+        AudioModule.requestRecordingPermissionsAsync,
+      ).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("exits the call loop when startListening throws (native hardware error)", async () => {
+    const { result } = await renderReadyCompanion();
+
+    // Make the permission call itself throw — simulates a native crash inside
+    // AudioModule. startListening's catch block sets status back to idle and
+    // leaves isRecordingRef.current = false, so the call loop breaks.
+    (
+      AudioModule.requestRecordingPermissionsAsync as jest.Mock
+    ).mockRejectedValueOnce(new Error("Native audio module unavailable"));
+
+    jest.useFakeTimers({
+      doNotFake: ["setImmediate", "nextTick", "queueMicrotask"],
+    });
+    try {
+      let callFinished = false;
+
+      act(() => {
+        result.current.startCall().finally(() => {
+          callFinished = true;
+        });
+      });
+
+      await tick(0);
+
+      // The loop must exit cleanly with no uncaught rejection.
+      await waitFor(() => expect(result.current.isCallActive).toBe(false));
+      await waitFor(() => expect(callFinished).toBe(true));
+
+      expect(result.current.status).toBe("idle");
+      expect(
+        AudioModule.requestRecordingPermissionsAsync,
+      ).toHaveBeenCalledTimes(1);
+
+      // No timer re-fires after the failure.
+      await tick(25_000);
+      expect(result.current.isCallActive).toBe(false);
     } finally {
       jest.useRealTimers();
     }
