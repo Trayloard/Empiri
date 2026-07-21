@@ -314,7 +314,7 @@ export default function CompanionSettingsScreen() {
             style={({ pressed }) => [
               styles.saveBtn,
               {
-                backgroundColor: colors.primary,
+                backgroundColor: saved ? colors.primary : colors.primary,
                 opacity: saving ? 0.6 : pressed ? 0.85 : 1,
               },
             ]}

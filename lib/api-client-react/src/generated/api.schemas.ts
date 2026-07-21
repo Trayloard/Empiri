@@ -317,3 +317,6 @@ state?: string;
 iss?: string;
 };
 
+export type CompanionSettingsEnvelope = CompanionSettings;
+export type UpdateCompanionSettingsRequest = CompanionSettingsInput;
+

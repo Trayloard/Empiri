@@ -6,12 +6,13 @@ import { useAuthRequest } from "expo-auth-session";
 import { AuthProvider, useAuth } from "../auth";
 
 /**
- * End-to-end regression tests for the mobile sign-in flow.
+ * Unit tests for the mobile sign-in flow (useAuth hook + AuthProvider).
  *
  * Coverage:
  *  1. Unauthenticated on first launch (no stored token).
  *  2. Session restored from SecureStore on mount.
- *  3. Successful OIDC callback → token exchange → user authenticated.
+ *  3. Successful OIDC callback → POST /api/mobile-auth/token-exchange (asserts
+ *     URL, method, body) → token stored → user authenticated.
  *  4. Token exchange returning 401 → user stays unauthenticated, nothing stored.
  *  5. login() delegates to expo-auth-session's promptAsync.
  */
@@ -36,7 +37,6 @@ jest.mock("expo-auth-session", () => ({
 }));
 
 // ── expo-secure-store ─────────────────────────────────────────────────────────
-// Inline factory avoids hoisting/TDZ issues with external variables.
 jest.mock("expo-secure-store", () => ({
   getItemAsync: jest.fn(),
   setItemAsync: jest.fn(),
@@ -67,6 +67,9 @@ const MOCK_USER = {
   profileImageUrl: null,
 };
 
+const TOKEN_EXCHANGE_URL = "https://test.example.com/api/mobile-auth/token-exchange";
+const ME_URL = "https://test.example.com/api/auth/user";
+
 // ── Setup / teardown ──────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -92,7 +95,7 @@ describe("Auth sign-in flow", () => {
 
   it("restores an existing session from SecureStore on mount", async () => {
     mockGetItemAsync.mockResolvedValue("stored-session-token");
-    global.fetch = jest.fn().mockResolvedValueOnce({
+    (globalThis as Record<string, unknown>).fetch = jest.fn().mockResolvedValueOnce({
       ok: true,
       json: async () => ({ user: MOCK_USER }),
     });
@@ -103,7 +106,7 @@ describe("Auth sign-in flow", () => {
     expect(result.current.user?.id).toBe("user-1");
   });
 
-  it("successful OIDC callback → token exchange → user authenticated + token stored", async () => {
+  it("successful OIDC callback → POST to token-exchange (correct URL/method/body) → token stored → user authenticated", async () => {
     mockUseAuthRequest.mockReturnValue([
       { codeVerifier: "pkce-verifier-abc" },
       { type: "success", params: { code: "auth-code-xyz", state: "state-123" } },
@@ -114,7 +117,7 @@ describe("Auth sign-in flow", () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce("session-token-new");
 
-    global.fetch = jest.fn()
+    const fetchMock = jest.fn()
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ token: "session-token-new" }),
@@ -123,9 +126,19 @@ describe("Auth sign-in flow", () => {
         ok: true,
         json: async () => ({ user: MOCK_USER }),
       });
+    (globalThis as Record<string, unknown>).fetch = fetchMock;
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    const [exchangeUrl, exchangeInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(exchangeUrl).toBe(TOKEN_EXCHANGE_URL);
+    expect(exchangeInit.method).toBe("POST");
+    const body = JSON.parse(exchangeInit.body as string) as Record<string, unknown>;
+    expect(body).toMatchObject({ code: "auth-code-xyz", code_verifier: "pkce-verifier-abc" });
+
+    const [meUrl] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(meUrl).toBe(ME_URL);
 
     expect(mockSetItemAsync).toHaveBeenCalledWith(
       "auth_session_token",
@@ -144,14 +157,21 @@ describe("Auth sign-in flow", () => {
 
     mockGetItemAsync.mockResolvedValue(null);
 
-    global.fetch = jest.fn().mockResolvedValueOnce({
+    const fetchMock = jest.fn().mockResolvedValueOnce({
       ok: false,
       status: 401,
       json: async () => ({ error: "invalid_grant" }),
     });
+    (globalThis as Record<string, unknown>).fetch = fetchMock;
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const [exchangeUrl, exchangeInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(exchangeUrl).toBe(TOKEN_EXCHANGE_URL);
+    expect(exchangeInit.method).toBe("POST");
+    const body = JSON.parse(exchangeInit.body as string) as Record<string, unknown>;
+    expect(body).toMatchObject({ code: "bad-auth-code" });
 
     expect(mockSetItemAsync).not.toHaveBeenCalled();
     expect(result.current.isAuthenticated).toBe(false);

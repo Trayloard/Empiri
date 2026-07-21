@@ -38,4 +38,5 @@ for (const [key, value] of Object.entries(actual)) {
 );
 (mock.getConversation as jest.Mock).mockRejectedValue(new Error("not mocked"));
 
-module.exports = mock;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(module as any).exports = mock;

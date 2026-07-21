@@ -5,6 +5,7 @@
     "tsBuildInfoFile": ".tsbuildinfo",
     "baseUrl": ".",
     "strict": true,
+    "skipLibCheck": true,
     "paths": {
       "@/*": [
         "./*"
@@ -15,7 +16,8 @@
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "types/node-global.d.ts"
   ],
   "references": [
     {
