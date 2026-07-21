@@ -16,7 +16,7 @@ import { CompanionProvider, useCompanion } from "../CompanionContext";
  *     waiting for the timeout, and the call promise itself settles.
  *  3. Round auto-stop — the 20 s timer fires, stopListening is called, and
  *     the loop starts the next round.
- *  4. Consecutive-error bail-out — after MAX_CONSECUTIVE_ERRORS (2) rounds
+ *  4. Consecutive-error bail-out — after MAX_CONSECUTIVE_ERRORS (4) rounds
  *     where stopListening returns false, the loop exits on its own.
  *
  * Recorder uri is intentionally null in the mock so every stopListening call
@@ -234,7 +234,7 @@ describe("Audio call loop — startCall / endCall", () => {
     }
   });
 
-  it("auto-exits after MAX_CONSECUTIVE_ERRORS (2) consecutive failed rounds", async () => {
+  it("auto-exits after MAX_CONSECUTIVE_ERRORS (4) consecutive failed rounds", async () => {
     const { result } = await renderReadyCompanion();
 
     jest.useFakeTimers({
@@ -249,18 +249,28 @@ describe("Audio call loop — startCall / endCall", () => {
         });
       });
 
+      // Rounds 1–4: each timer fires, stopListening returns false (uri=null),
+      // consecutiveErrors increments. The loop only breaks when it reaches 4.
+
       // Round 1.
       await tick(0);
       await waitFor(() => expect(result.current.status).toBe("listening"));
-
-      // Round 1 timer fires → stopListening returns false → consecutiveErrors=1.
+      // Round 1 timer fires → consecutiveErrors=1 (< 4, loop continues).
       await tick(20_000);
 
-      // Round 2 starts.
+      // Round 2.
       await waitFor(() => expect(result.current.status).toBe("listening"));
+      // Round 2 timer fires → consecutiveErrors=2 (< 4, loop continues).
+      await tick(20_000);
 
-      // Round 2 timer fires → stopListening returns false → consecutiveErrors=2
-      // → MAX_CONSECUTIVE_ERRORS reached → loop breaks.
+      // Round 3.
+      await waitFor(() => expect(result.current.status).toBe("listening"));
+      // Round 3 timer fires → consecutiveErrors=3 (< 4, loop continues).
+      await tick(20_000);
+
+      // Round 4.
+      await waitFor(() => expect(result.current.status).toBe("listening"));
+      // Round 4 timer fires → consecutiveErrors=4 → MAX_CONSECUTIVE_ERRORS reached → loop breaks.
       await tick(20_000);
 
       // No endCall needed — the loop self-terminates.

@@ -248,9 +248,10 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const perceptsRef = useRef<Percept[]>([]);
   const lastShakeAtRef = useRef<number | null>(null);
   const batteryLowReportedRef = useRef<boolean>(false);
-  // LOW_QUALITY (mono, ~32 kbps) is plenty for Whisper speech recognition and
-  // keeps file sizes small enough to upload reliably on 4G connections.
-  const recorder = useAudioRecorder(RecordingPresets.LOW_QUALITY);
+  // HIGH_QUALITY gives better results with background noise and non-English
+  // speech (e.g. German). ~128 kbps AAC; a 20-second clip ≈ 320 KB, well
+  // under the 50 MB body limit on the API server.
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   // Keep refs in sync so timers/callbacks always see the latest values.
   useEffect(() => {
@@ -856,9 +857,13 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     isRecordingRef.current = false;
     setIsRecording(false);
     setStatus("transcribing");
+    let uri: string | null = null;
     try {
       await recorder.stop();
-      const uri = recorder.uri;
+      // Restore playback-friendly audio mode so TTS replies come through the
+      // speaker even on iOS (recording mode routes audio to the earpiece).
+      setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+      uri = recorder.uri ?? null;
       if (!uri) {
         setStatus("idle");
         return false;
@@ -878,6 +883,12 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       setError(classifyVoiceError(err));
       setStatus("idle");
       return false;
+    } finally {
+      // Always remove the temporary recording file to avoid accumulating
+      // .m4a files in the app's cache between sessions.
+      if (uri) {
+        FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+      }
     }
   }, [recorder, sendText]);
 
@@ -902,7 +913,12 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       isRecordingRef.current = false;
       setIsRecording(false);
       setStatus("idle");
-      recorder.stop().catch(() => {});
+      recorder.stop().catch(() => {}).finally(() => {
+        setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+      });
+    } else {
+      // Even if not recording, restore playback mode in case it was partially set.
+      setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
     }
   }, [recorder]);
 
@@ -913,7 +929,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     const CALL_ROUND_MS = 20_000;
     // End the call automatically after this many consecutive failed rounds so
     // a persistent network outage does not loop forever.
-    const MAX_CONSECUTIVE_ERRORS = 2;
+    const MAX_CONSECUTIVE_ERRORS = 4;
 
     isCallActiveRef.current = true;
     callForcesVoiceRef.current = true;

@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -298,8 +299,21 @@ export default function CompanionScreen() {
 
   const handleSignOut = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSettingsVisible(false);
-    signOut();
+    Alert.alert(
+      "Sign out?",
+      "You'll need to sign in again to continue your conversation.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: () => {
+            setSettingsVisible(false);
+            signOut();
+          },
+        },
+      ],
+    );
   };
 
   const handleDevCheckIn = () => {
