@@ -286,6 +286,20 @@ router.patch("/conversations/:id", async (req, res) => {
   });
 });
 
+// Delete a conversation and all its content — owner only.
+// Cascade deletes messages, companion self, and self-snapshots (enforced at
+// the DB level via onDelete: "cascade"). Idempotent in the sense that a
+// second call for a conversation that no longer exists returns 404, which is
+// consistent with requireOwnedConversation's not-found behaviour.
+router.delete("/conversations/:id", async (req, res) => {
+  const conversation = await requireOwnedConversation(req, res);
+  if (!conversation) return;
+
+  await db.delete(conversations).where(eq(conversations.id, conversation.id));
+
+  res.json({ ok: true });
+});
+
 // List messages in a conversation
 router.get("/conversations/:id/messages", async (req, res) => {
   const conversation = await requireOwnedConversation(req, res);

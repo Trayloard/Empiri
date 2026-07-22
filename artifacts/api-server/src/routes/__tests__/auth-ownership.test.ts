@@ -531,3 +531,140 @@ describe("owner can access their own conversation", () => {
     expect(checkRes.status).toBe(404);
   });
 });
+
+// ---------------------------------------------------------------------------
+// PATCH and DELETE: malformed IDs produce the same canonical 404 as GET
+// ---------------------------------------------------------------------------
+
+describe("conversation not-found indistinguishability via PATCH /conversations/:id", () => {
+  const EXPECTED_404 = { error: "Conversation not found" };
+  // Note: path-traversal strings like "../etc" are normalised by Node's HTTP
+  // layer before Express sees them and so never reach parseConversationId.
+  const malformedIds = ["abc", "1.5", "-1", "0", "1e2", "12abc", "null", "undefined"];
+
+  for (const bad of malformedIds) {
+    it(`malformed id "${bad}" → 404 with canonical body`, async () => {
+      const res = await request(app)
+        .patch(`/api/conversations/${bad}`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ title: "Renamed" });
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(EXPECTED_404);
+    });
+  }
+
+  it("valid-format but nonexistent id → 404 with canonical body", async () => {
+    const res = await request(app)
+      .patch("/api/conversations/999999999")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "Renamed" });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(EXPECTED_404);
+  });
+
+  it("another user's conversation id → 404 with canonical body", async () => {
+    const res = await request(app)
+      .patch(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ title: "Hijacked" });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(EXPECTED_404);
+  });
+
+  it("all three categories return byte-identical JSON", async () => {
+    const [malformed, missing, wrongUser] = await Promise.all([
+      request(app)
+        .patch("/api/conversations/abc")
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ title: "x" }),
+      request(app)
+        .patch("/api/conversations/999999999")
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ title: "x" }),
+      request(app)
+        .patch(`/api/conversations/${convAId}`)
+        .set("Authorization", `Bearer ${tokenB}`)
+        .send({ title: "x" }),
+    ]);
+
+    const bodyText = JSON.stringify(EXPECTED_404);
+    expect(malformed.status).toBe(404);
+    expect(missing.status).toBe(404);
+    expect(wrongUser.status).toBe(404);
+    expect(JSON.stringify(malformed.body)).toBe(bodyText);
+    expect(JSON.stringify(missing.body)).toBe(bodyText);
+    expect(JSON.stringify(wrongUser.body)).toBe(bodyText);
+  });
+});
+
+describe("conversation not-found indistinguishability via DELETE /conversations/:id", () => {
+  const EXPECTED_404 = { error: "Conversation not found" };
+  const malformedIds = ["abc", "1.5", "-1", "0", "1e2", "12abc", "null", "undefined"];
+
+  for (const bad of malformedIds) {
+    it(`malformed id "${bad}" → 404 with canonical body`, async () => {
+      const res = await request(app)
+        .delete(`/api/conversations/${bad}`)
+        .set("Authorization", `Bearer ${tokenA}`);
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(EXPECTED_404);
+    });
+  }
+
+  it("valid-format but nonexistent id → 404 with canonical body", async () => {
+    const res = await request(app)
+      .delete("/api/conversations/999999999")
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(EXPECTED_404);
+  });
+
+  it("another user's conversation id → 404 with canonical body", async () => {
+    const res = await request(app)
+      .delete(`/api/conversations/${convAId}`)
+      .set("Authorization", `Bearer ${tokenB}`);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(EXPECTED_404);
+  });
+
+  it("all three categories return byte-identical JSON", async () => {
+    const [malformed, missing, wrongUser] = await Promise.all([
+      request(app)
+        .delete("/api/conversations/abc")
+        .set("Authorization", `Bearer ${tokenA}`),
+      request(app)
+        .delete("/api/conversations/999999999")
+        .set("Authorization", `Bearer ${tokenA}`),
+      request(app)
+        .delete(`/api/conversations/${convAId}`)
+        .set("Authorization", `Bearer ${tokenB}`),
+    ]);
+
+    const bodyText = JSON.stringify(EXPECTED_404);
+    expect(malformed.status).toBe(404);
+    expect(missing.status).toBe(404);
+    expect(wrongUser.status).toBe(404);
+    expect(JSON.stringify(malformed.body)).toBe(bodyText);
+    expect(JSON.stringify(missing.body)).toBe(bodyText);
+    expect(JSON.stringify(wrongUser.body)).toBe(bodyText);
+  });
+
+  it("owner can delete their own conversation (200 + { ok: true })", async () => {
+    const [tempConv] = await db
+      .insert(conversations)
+      .values({ title: "Temp For Delete Test", ownerId: userAId })
+      .returning();
+
+    const res = await request(app)
+      .delete(`/api/conversations/${tempConv.id}`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+
+    // Verify it's gone — subsequent GET returns 404
+    const check = await request(app)
+      .get(`/api/conversations/${tempConv.id}`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(check.status).toBe(404);
+  });
+});
