@@ -50,6 +50,19 @@ function advance(ms: number) {
 }
 
 describe("useSmoothedWarmth", () => {
+  it("starts at the correct value on the very first render when reduce-motion is already active", () => {
+    mockUseReducedMotion.mockReturnValue(true);
+
+    const { result } = renderHook(
+      ({ w }: { w: number }) => useSmoothedWarmth(w),
+      { initialProps: { w: 0.12 } },
+    );
+
+    // No timers advanced, no rerender — the initial state must equal the
+    // initial warmth value because reduce-motion was on before first render.
+    expect(result.current).toBe(0.12);
+  });
+
   it("snaps to the new value immediately when reduced motion is on", () => {
     mockUseReducedMotion.mockReturnValue(true);
     const { result, rerender } = renderHook(
@@ -148,6 +161,25 @@ describe("useSmoothedWarmth", () => {
 });
 
 describe("useAccentColor", () => {
+  it("returns the correct final color on the very first render when reduce-motion is already active", () => {
+    mockUseReducedMotion.mockReturnValue(true);
+
+    const { result } = renderHook(
+      ({ w }: { w: number }) => useAccentColor(w),
+      { initialProps: { w: 0.12 } },
+    );
+
+    // No timers advanced, no rerender needed — with reduce-motion on from
+    // the very first call, the hook must snap to the mathematically correct
+    // final color, not the neutral statusAccent or any intermediate value.
+    const expected = accentForWarmth(0.12, COLORS.statusAccent, COLORS.spectrum);
+    expect(result.current.toLowerCase()).toBe(expected.toLowerCase());
+    // Confirm it is not the neutral base color (no easing occurred).
+    expect(result.current.toLowerCase()).not.toBe(
+      COLORS.statusAccent.toLowerCase(),
+    );
+  });
+
   it("derives the color from the smoothed warmth and lands on the target color", () => {
     const { result, rerender } = renderHook(
       ({ w }: { w: number }) => useAccentColor(w),
