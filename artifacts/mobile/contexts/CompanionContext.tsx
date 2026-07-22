@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   companionCheckInFull,
   createConversation,
+  deleteConversation as deleteConversationApi,
   devRegressSelf,
   fetchStream,
   getCompanionSettings,
@@ -113,6 +114,12 @@ interface CompanionContextValue {
    * the title everywhere immediately. Throws on failure so the caller can
    * surface an error. */
   renameConversation: (title: string) => Promise<void>;
+  /**
+   * Delete a conversation by id. Removes it from the chat list and, if it
+   * was the active conversation, automatically switches to the next available
+   * one (or creates a fresh chat when none remain). Throws on API failure.
+   */
+  deleteConversation: (id: number) => Promise<void>;
   initializing: boolean;
   initError: string | null;
   error: string | null;
@@ -1291,6 +1298,64 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
   }, []);
 
+  /**
+   * Delete a conversation. Removes it from the local list and, when it was
+   * the active conversation, transparently moves to the most-recent remaining
+   * chat (or creates a new one when the list would otherwise be empty).
+   */
+  const deleteConversation = useCallback(
+    async (id: number) => {
+      await deleteConversationApi(id);
+
+      // Remove from local switcher list.
+      const remaining = chats.filter((c) => c.id !== id);
+      setChats(remaining);
+
+      // Clean up any persisted reflection-dismissal key for this chat.
+      AsyncStorage.removeItem(`${REFLECTION_DISMISSED_PREFIX}.${id}`).catch(() => {});
+
+      // If this wasn't the active conversation we're done.
+      if (conversationIdRef.current !== id) return;
+
+      // Active chat was deleted — move somewhere else.
+      if (remaining.length > 0) {
+        // Pick the newest remaining conversation (last in oldest-first array).
+        const next = remaining[remaining.length - 1];
+        const myToken = ++switchTokenRef.current;
+        const [conversation, history] = await Promise.all([
+          getConversation(next.id),
+          listMessages(next.id),
+        ]);
+        if (switchTokenRef.current !== myToken) return;
+        conversationIdRef.current = conversation.id;
+        setConversationId(conversation.id);
+        setConversationTitle(conversation.title);
+        setMessages(history);
+        failedTurnRef.current = null;
+        setFailedTurn(null);
+        setError(null);
+        setPendingReflection(null);
+        setStatus("idle");
+        await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
+      } else {
+        // No chats remain — create a fresh one.
+        const conversation = await createConversation({ title: "Empiri" });
+        conversationIdRef.current = conversation.id;
+        setConversationId(conversation.id);
+        setConversationTitle(conversation.title);
+        setChats([conversation]);
+        setMessages([]);
+        failedTurnRef.current = null;
+        setFailedTurn(null);
+        setError(null);
+        setPendingReflection(null);
+        setStatus("idle");
+        await AsyncStorage.setItem(CONVERSATION_KEY, String(conversation.id));
+      }
+    },
+    [chats],
+  );
+
   /** Create a fresh conversation and switch to it. Throws on failure. */
   const startNewChat = useCallback(async () => {
     const conversation = await createConversation({ title: "New chat" });
@@ -1380,6 +1445,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         openConversation,
         startNewChat,
         renameConversation,
+        deleteConversation,
         initializing,
         initError,
         error,

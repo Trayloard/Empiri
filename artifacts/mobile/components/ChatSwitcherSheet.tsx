@@ -4,6 +4,7 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -29,6 +30,11 @@ interface ChatSwitcherSheetProps {
   onNewChat: () => Promise<void>;
   /** Rename the currently open conversation (opens the rename dialog). */
   onRenameActive: () => void;
+  /**
+   * Delete a conversation by id. The sheet shows a native confirmation alert
+   * before calling this. Rejects on failure.
+   */
+  onDeleteChat: (id: number) => Promise<void>;
   /** Refresh the list from the server (best-effort, fire-and-forget). */
   onRefresh: () => void;
   onClose: () => void;
@@ -53,6 +59,7 @@ export function ChatSwitcherSheet({
   onSelect,
   onNewChat,
   onRenameActive,
+  onDeleteChat,
   onRefresh,
   onClose,
   accent,
@@ -111,6 +118,38 @@ export function ChatSwitcherSheet({
       onClose();
     } catch {
       setSheetError("Couldn't create a new chat. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDeletePress = (id: number, title: string) => {
+    haptic();
+    Alert.alert(
+      "Delete this chat?",
+      `"${title}" and all its messages will be permanently removed.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => void handleDeleteConfirmed(id),
+        },
+      ],
+    );
+  };
+
+  const handleDeleteConfirmed = async (id: number) => {
+    if (busyId != null) return;
+    setBusyId(id);
+    setSheetError(null);
+    try {
+      await onDeleteChat(id);
+      // If we deleted the active chat the context switches automatically;
+      // close the sheet so the user lands in the new active chat.
+      if (id === activeId) onClose();
+    } catch {
+      setSheetError("Couldn't delete that chat. Try again.");
     } finally {
       setBusyId(null);
     }
@@ -187,6 +226,7 @@ export function ChatSwitcherSheet({
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
               const active = item.id === activeId;
+              const isBusy = busyId === item.id;
               return (
                 <Pressable
                   onPress={() => handleOpen(item.id)}
@@ -234,28 +274,43 @@ export function ChatSwitcherSheet({
                       {active ? "Current chat" : formatDate(item.createdAt)}
                     </Text>
                   </View>
-                  {busyId === item.id ? (
+
+                  {isBusy ? (
                     <ActivityIndicator size="small" color={tint} />
-                  ) : active ? (
-                    <Pressable
-                      onPress={() => {
-                        haptic();
-                        onRenameActive();
-                      }}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Rename this chat"
-                      testID="switcher-rename-button"
-                      style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
-                    >
-                      <Feather name="edit-2" size={15} color={tint} />
-                    </Pressable>
                   ) : (
-                    <Feather
-                      name="chevron-right"
-                      size={16}
-                      color={colors.mutedForeground}
-                    />
+                    <View style={styles.rowActions}>
+                      {active ? (
+                        <Pressable
+                          onPress={() => {
+                            haptic();
+                            onRenameActive();
+                          }}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel="Rename this chat"
+                          testID="switcher-rename-button"
+                          style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+                        >
+                          <Feather name="edit-2" size={15} color={tint} />
+                        </Pressable>
+                      ) : null}
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleDeletePress(item.id, item.title);
+                        }}
+                        hitSlop={8}
+                        disabled={busyId != null}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete chat ${item.title}`}
+                        testID={`delete-chat-${item.id}`}
+                        style={({ pressed }) => ({
+                          opacity: pressed || busyId != null ? 0.4 : 0.6,
+                        })}
+                      >
+                        <Feather name="trash-2" size={15} color={colors.destructive} />
+                      </Pressable>
+                    </View>
                   )}
                 </Pressable>
               );
@@ -356,6 +411,11 @@ const styles = StyleSheet.create({
   rowSub: {
     fontSize: 12,
     fontFamily: FONTS.regular,
+  },
+  rowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
   },
   emptyText: {
     fontSize: 14,

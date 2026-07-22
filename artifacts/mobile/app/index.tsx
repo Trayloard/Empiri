@@ -135,6 +135,7 @@ export default function CompanionScreen() {
     openConversation,
     startNewChat,
     renameConversation,
+    deleteConversation,
     initializing,
     initError,
     error,
@@ -742,6 +743,7 @@ export default function CompanionScreen() {
           setSwitcherVisible(false);
           openRename();
         }}
+        onDeleteChat={deleteConversation}
         onRefresh={() => {
           refreshChats().catch(() => {});
         }}
