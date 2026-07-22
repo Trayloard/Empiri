@@ -208,6 +208,92 @@ describe("chat switching", () => {
     expect(result.current.status).toBe("idle");
   });
 
+  it("switching back to A after visiting B shows A's messages again", async () => {
+    const chatAHistory = [makeMessage(5, 1, "user", "message from A")];
+    // Return A's history for id=1, B's history for id=2
+    mockListMessages.mockImplementation(async (id: number) => {
+      if (id === chatA.id) return chatAHistory;
+      if (id === chatB.id) return chatBHistory;
+      return [];
+    });
+
+    const { result } = await renderReadyCompanion();
+    expect(result.current.conversationId).toBe(chatA.id);
+
+    // Switch A → B
+    await act(async () => {
+      await result.current.openConversation(chatB.id);
+    });
+    expect(result.current.messages).toEqual(chatBHistory);
+
+    // Switch back B → A
+    await act(async () => {
+      await result.current.openConversation(chatA.id);
+    });
+    expect(result.current.conversationId).toBe(chatA.id);
+    expect(result.current.conversationTitle).toBe("Chat A");
+    expect(result.current.messages).toEqual(chatAHistory);
+    // None of B's messages bleed through
+    expect(
+      result.current.messages.some((m) =>
+        chatBHistory.some((b) => b.id === m.id),
+      ),
+    ).toBe(false);
+  });
+
+  it("a slow openConversation(A) that resolves after openConversation(B) never overwrites B's messages", async () => {
+    // Use a three-chat setup: the initial chat is chatC, then the user rapidly
+    // taps A (slow) then B (fast) before A's fetch completes.
+    const chatC = makeConversation(3, "Chat C");
+    mockListConversations.mockResolvedValue([chatC, chatA, chatB]);
+
+    // listMessages(A) is held; listMessages(B) resolves immediately.
+    let releaseA!: (msgs: Message[]) => void;
+    mockListMessages.mockImplementation(async (id: number) => {
+      if (id === chatA.id) {
+        return new Promise<Message[]>((resolve) => {
+          releaseA = resolve;
+        });
+      }
+      if (id === chatB.id) return chatBHistory;
+      return [];
+    });
+    mockGetConversation.mockImplementation(async (id: number) => {
+      if (id === chatA.id) return chatA;
+      if (id === chatB.id) return chatB;
+      return chatC;
+    });
+
+    const { result } = await renderReadyCompanion();
+    expect(result.current.conversationId).toBe(chatC.id);
+
+    // Kick off openConversation(A) — its listMessages is blocked.
+    let openAPromise: Promise<void>;
+    act(() => {
+      openAPromise = result.current.openConversation(chatA.id);
+    });
+
+    // Immediately open B — this resolves quickly and becomes the "desired" chat.
+    await act(async () => {
+      await result.current.openConversation(chatB.id);
+    });
+    expect(result.current.conversationId).toBe(chatB.id);
+    expect(result.current.messages).toEqual(chatBHistory);
+
+    // Now let A's slow fetch complete.
+    await act(async () => {
+      releaseA([makeMessage(99, chatA.id, "user", "late message from A")]);
+      await openAPromise;
+    });
+
+    // B must still be shown — the late A result is discarded.
+    expect(result.current.conversationId).toBe(chatB.id);
+    expect(result.current.messages).toEqual(chatBHistory);
+    expect(
+      result.current.messages.some((m) => m.content === "late message from A"),
+    ).toBe(false);
+  });
+
   it("a failure from the previous chat surfaces no error or retry in the new chat", async () => {
     let rejectReply!: (err: Error) => void;
     mockSendMessage.mockReturnValue(

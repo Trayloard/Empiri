@@ -254,6 +254,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
 
   const conversationIdRef = useRef<number | null>(null);
+  // Monotonically-increasing counter: every openConversation call takes a
+  // snapshot before the await and checks it afterwards. The last caller wins;
+  // any earlier in-flight call that resolves late sees a stale token and
+  // discards its result instead of overwriting the newer chat.
+  const switchTokenRef = useRef<number>(0);
   const failedTurnRef = useRef<FailedTurn | null>(null);
   const moodStateRef = useRef<CompanionMoodState>(moodState);
   const notificationsEnabledRef = useRef<boolean>(notificationsEnabled);
@@ -1265,10 +1270,15 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
    */
   const openConversation = useCallback(async (id: number) => {
     if (conversationIdRef.current === id) return;
+    // Claim this switch. If another openConversation call starts (and finishes)
+    // while we're awaiting, our token will be stale and we discard the result
+    // instead of overwriting the newer chat.
+    const myToken = ++switchTokenRef.current;
     const [conversation, history] = await Promise.all([
       getConversation(id),
       listMessages(id),
     ]);
+    if (switchTokenRef.current !== myToken) return;
     conversationIdRef.current = conversation.id;
     setConversationId(conversation.id);
     setConversationTitle(conversation.title);
