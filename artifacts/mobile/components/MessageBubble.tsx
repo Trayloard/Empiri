@@ -27,9 +27,16 @@ interface MessageBubbleProps {
    * user-bubble gradient; `0` keeps the neutral brand gradient unchanged.
    */
   warmth?: number;
+  /**
+   * Personality-derived accent hex (from `accentForWarmth`). Tints the
+   * assistant bubble border so Empiri's character is subtly present in every
+   * reply. At warmth=0 this is the neutral `statusAccent`, keeping the design
+   * consistent with the rest of the chrome. Omit to fall back to `glassBorder`.
+   */
+  accent?: string;
 }
 
-export function MessageBubble({ role, content, warmth = 0 }: MessageBubbleProps) {
+export function MessageBubble({ role, content, warmth = 0, accent }: MessageBubbleProps) {
   const colors = useColors();
   const scheme = useColorScheme();
   const isUser = role === "user";
@@ -61,13 +68,17 @@ export function MessageBubble({ role, content, warmth = 0 }: MessageBubbleProps)
     );
   }
 
+  // Assistant bubble border: personality-tinted when an accent is provided,
+  // falling back to the static glass border when the parent has no warmth data.
+  const assistantBorderColor = accent ? `${accent}40` : colors.glassBorder;
+
   return (
     <View style={[styles.row, { justifyContent: "flex-start" }]}>
       <View
         style={[
           styles.bubble,
           styles.assistantBubble,
-          { backgroundColor: colors.glass, borderColor: colors.glassBorder },
+          { backgroundColor: colors.glass, borderColor: assistantBorderColor },
         ]}
       >
         <BlurView
