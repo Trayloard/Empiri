@@ -147,6 +147,8 @@ beforeEach(async () => {
     id: 1,
     title: "Empiri",
     createdAt: new Date("2026-06-12T00:00:00.000Z").toISOString(),
+    lastMessageText: null,
+    lastMessageAt: null,
   });
   mockListMessages.mockResolvedValue([]);
 });
@@ -671,6 +673,8 @@ describe("CompanionContext conversation title persistence", () => {
       id: 7,
       title: "Late night talks",
       createdAt: new Date("2026-06-12T00:00:00.000Z").toISOString(),
+      lastMessageText: null,
+      lastMessageAt: null,
     });
 
     const { result } = await renderReadyCompanion();
@@ -698,6 +702,8 @@ describe("CompanionContext conversation title persistence", () => {
       id: 1,
       title: "Morning pages",
       createdAt: new Date("2026-06-12T00:00:00.000Z").toISOString(),
+      lastMessageText: null,
+      lastMessageAt: null,
     });
 
     await act(async () => {
@@ -729,6 +735,8 @@ describe("CompanionContext conversation title persistence", () => {
       id: 7,
       title: "Late night talks",
       createdAt: new Date("2026-06-12T00:00:00.000Z").toISOString(),
+      lastMessageText: null,
+      lastMessageAt: null,
     });
 
     const { result } = await renderReadyCompanion();
@@ -774,6 +782,8 @@ describe("CompanionContext stale conversation pointer recovery", () => {
         id: 5,
         title: "Restored chat",
         createdAt: new Date("2026-06-12T00:00:00.000Z").toISOString(),
+        lastMessageText: null,
+        lastMessageAt: null,
       },
     ]);
 
@@ -812,6 +822,8 @@ describe("CompanionContext stale conversation pointer recovery", () => {
       id: 42,
       title: "Empiri",
       createdAt: new Date("2026-06-12T00:00:00.000Z").toISOString(),
+      lastMessageText: null,
+      lastMessageAt: null,
     });
 
     const { result } = await renderReadyCompanion();

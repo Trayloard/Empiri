@@ -130,6 +130,8 @@ beforeEach(async () => {
     id: 1,
     title: "Empiri",
     createdAt: new Date("2026-06-12T00:00:00.000Z").toISOString(),
+    lastMessageText: null,
+    lastMessageAt: null,
   });
   mockListMessages.mockResolvedValue([]);
 });

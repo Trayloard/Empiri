@@ -42,14 +42,34 @@ interface ChatSwitcherSheetProps {
   accent?: string;
 }
 
-function formatDate(iso: string): string {
+/** Returns a short relative label: "just now", "3m ago", "2h ago", "5d ago". */
+function formatRelativeTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** Truncate a string to maxLen characters, appending "…" if trimmed. */
+function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 1) + "…";
+}
+
+/** One-line subtitle for a chat row based on its last message preview. */
+function formatPreview(chat: Conversation, active: boolean): string {
+  if (active) return "Current chat";
+  if (!chat.lastMessageText) return "No messages yet";
+  const preview = truncate(chat.lastMessageText.replace(/\n+/g, " "), 60);
+  const timeLabel = chat.lastMessageAt ? formatRelativeTime(chat.lastMessageAt) : "";
+  return timeLabel ? `${timeLabel} · ${preview}` : preview;
 }
 
 export function ChatSwitcherSheet({
@@ -271,7 +291,7 @@ export function ChatSwitcherSheet({
                       style={[styles.rowSub, { color: colors.mutedForeground }]}
                       numberOfLines={1}
                     >
-                      {active ? "Current chat" : formatDate(item.createdAt)}
+                      {formatPreview(item, active)}
                     </Text>
                   </View>
 

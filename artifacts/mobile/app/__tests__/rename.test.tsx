@@ -268,6 +268,8 @@ beforeEach(async () => {
     id: 1,
     title: INITIAL_TITLE,
     createdAt: CREATED_AT,
+    lastMessageText: null,
+    lastMessageAt: null,
   });
   mockListMessages.mockResolvedValue([]);
 });
@@ -281,6 +283,8 @@ describe("Rename-chat dialog — end to end", () => {
       id: 1,
       title: "Morning Pages",
       createdAt: CREATED_AT,
+      lastMessageText: null,
+      lastMessageAt: null,
     });
 
     const { getByTestId, queryByText } = renderScreen();

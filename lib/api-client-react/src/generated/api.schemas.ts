@@ -55,6 +55,10 @@ export interface Conversation {
   id: number;
   title: string;
   createdAt: string;
+  /** @nullable */
+  lastMessageText: string | null;
+  /** @nullable */
+  lastMessageAt: string | null;
 }
 
 export interface ConversationInput {

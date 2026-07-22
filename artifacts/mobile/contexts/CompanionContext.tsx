@@ -830,6 +830,19 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           assistantMsg,
         ]);
 
+        // Keep the switcher preview in sync without a full refresh.
+        setChats((prev) =>
+          prev.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  lastMessageText: assistantMsg.content,
+                  lastMessageAt: assistantMsg.createdAt,
+                }
+              : c,
+          ),
+        );
+
         // A real exchange happened — the companion perks up.
         touchInteraction();
 

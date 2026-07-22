@@ -93,7 +93,7 @@ const mockSendMessage = sendMessage as jest.MockedFunction<typeof sendMessage>;
 const CREATED_AT = new Date("2026-07-01T00:00:00.000Z").toISOString();
 
 function makeConversation(id: number, title: string): Conversation {
-  return { id, title, createdAt: CREATED_AT };
+  return { id, title, createdAt: CREATED_AT, lastMessageText: null, lastMessageAt: null };
 }
 
 function makeMessage(

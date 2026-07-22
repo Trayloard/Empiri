@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import {
   db,
   conversations,
@@ -183,6 +183,8 @@ router.post("/conversations", async (req, res) => {
     id: conversation.id,
     title: conversation.title,
     createdAt: conversation.createdAt,
+    lastMessageText: null,
+    lastMessageAt: null,
   });
 });
 
@@ -196,7 +198,21 @@ router.get("/conversations", async (req, res) => {
   }
 
   const rows = await db
-    .select()
+    .select({
+      id: conversations.id,
+      title: conversations.title,
+      createdAt: conversations.createdAt,
+      lastMessageText: sql<string | null>`(
+        SELECT content FROM messages
+        WHERE conversation_id = ${conversations.id}
+        ORDER BY created_at DESC LIMIT 1
+      )`,
+      lastMessageAt: sql<string | null>`(
+        SELECT created_at FROM messages
+        WHERE conversation_id = ${conversations.id}
+        ORDER BY created_at DESC LIMIT 1
+      )`,
+    })
     .from(conversations)
     .where(eq(conversations.ownerId, req.user.id))
     .orderBy(asc(conversations.createdAt));
@@ -206,6 +222,8 @@ router.get("/conversations", async (req, res) => {
       id: c.id,
       title: c.title,
       createdAt: c.createdAt,
+      lastMessageText: c.lastMessageText ?? null,
+      lastMessageAt: c.lastMessageAt ?? null,
     })),
   );
 });
@@ -245,15 +263,33 @@ async function requireOwnedConversation(
   return { ...conversation, ownerId: req.user.id };
 }
 
-// Fetch a single conversation (id, title, createdAt) — owner only
+// Fetch a single conversation (id, title, createdAt, last message) — owner only
 router.get("/conversations/:id", async (req, res) => {
   const conversation = await requireOwnedConversation(req, res);
   if (!conversation) return;
+
+  const [row] = await db
+    .select({
+      lastMessageText: sql<string | null>`(
+        SELECT content FROM messages
+        WHERE conversation_id = ${conversations.id}
+        ORDER BY created_at DESC LIMIT 1
+      )`,
+      lastMessageAt: sql<string | null>`(
+        SELECT created_at FROM messages
+        WHERE conversation_id = ${conversations.id}
+        ORDER BY created_at DESC LIMIT 1
+      )`,
+    })
+    .from(conversations)
+    .where(eq(conversations.id, conversation.id));
 
   res.json({
     id: conversation.id,
     title: conversation.title,
     createdAt: conversation.createdAt,
+    lastMessageText: row?.lastMessageText ?? null,
+    lastMessageAt: row?.lastMessageAt ?? null,
   });
 });
 
@@ -283,6 +319,8 @@ router.patch("/conversations/:id", async (req, res) => {
     id: updated.id,
     title: updated.title,
     createdAt: updated.createdAt,
+    lastMessageText: null,
+    lastMessageAt: null,
   });
 });
 
