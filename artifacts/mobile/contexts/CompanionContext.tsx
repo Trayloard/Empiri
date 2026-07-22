@@ -310,7 +310,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const applyMoodState = useCallback((next: CompanionMoodState) => {
     moodStateRef.current = next;
     setMoodState(next);
-    setMood(computeMood(next));
+    // Don't overwrite the sad label while a failed turn is waiting for a retry.
+    // The mood snaps back to a computed value only once the turn is resolved.
+    if (failedTurnRef.current == null) {
+      setMood(computeMood(next));
+    }
     AsyncStorage.setItem(MOOD_KEY, JSON.stringify(next)).catch(() => {});
   }, []);
 
@@ -578,8 +582,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated, authLoading]);
 
   // Let the mood drift visibly while the app stays open.
+  // Skip the tick while a failed turn is pending — the companion stays sad
+  // until the user actually fixes the message, not just until the next minute.
   useEffect(() => {
     const interval = setInterval(() => {
+      if (failedTurnRef.current != null) return;
       setMood(computeMood(moodStateRef.current));
     }, 60_000);
     return () => clearInterval(interval);

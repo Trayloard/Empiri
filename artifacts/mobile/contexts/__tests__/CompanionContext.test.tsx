@@ -394,6 +394,36 @@ describe("CompanionContext sad-mood arc", () => {
     expect(result.current.mood.label).toBe("sad");
   });
 
+  it("stays sad after an unrelated state update while the failed turn is still pending", async () => {
+    mockSendMessage.mockRejectedValueOnce(new Error("AI unavailable"));
+
+    const { result } = await renderReadyCompanion();
+
+    act(() => {
+      result.current.toggleVoice();
+    });
+    await waitFor(() => expect(result.current.voiceEnabled).toBe(false));
+
+    await act(async () => {
+      await result.current.sendText("hello");
+    });
+
+    // Companion goes sad and the failed turn is still unresolved.
+    expect(result.current.mood.label).toBe("sad");
+    expect(result.current.failedTurn).not.toBeNull();
+
+    // An unrelated state mutation (toggling voice back on) must not clear the
+    // sad label — the companion stays sad until the user actually retries.
+    act(() => {
+      result.current.toggleVoice();
+    });
+    await waitFor(() => expect(result.current.voiceEnabled).toBe(true));
+
+    expect(result.current.mood.label).toBe("sad");
+    expect(result.current.failedTurn).not.toBeNull();
+    expect(result.current.error).toBe(FRIENDLY_ERROR);
+  });
+
   it("recovers from sad on a plain successful send (not only via retry)", async () => {
     mockSendMessage.mockRejectedValueOnce(new Error("AI unavailable"));
     mockSendMessage.mockResolvedValueOnce({
