@@ -245,6 +245,31 @@ describe("InnerSelfSheet curiosity-theme expansion", () => {
     expect(expanded.props.accessibilityLabel).toBe("Space theme, expanded");
   });
 
+  it("theme nodes announce their member count in the accessibility hint", async () => {
+    const { getByTestId } = await renderSheet();
+
+    // Space holds 3 curiosities, Cooking holds 2.
+    expect(getByTestId("node-interest-theme-space").props.accessibilityHint).toBe(
+      "Contains 3 curiosities, double tap to open",
+    );
+    expect(getByTestId("node-interest-theme-cooking").props.accessibilityHint).toBe(
+      "Contains 2 curiosities, double tap to open",
+    );
+
+    // Expanding flips the action wording while keeping the count.
+    fireEvent.press(getByTestId("node-interest-theme-space"));
+    expect(getByTestId("node-interest-theme-space").props.accessibilityHint).toBe(
+      "Contains 3 curiosities, double tap to close",
+    );
+  });
+
+  it("non-theme nodes carry no accessibility hint", async () => {
+    const { getByTestId } = await renderSheet();
+
+    expect(getByTestId("node-drive-connection").props.accessibilityHint).toBeUndefined();
+    expect(getByTestId("node-interest-1").props.accessibilityHint).toBeUndefined();
+  });
+
   it("non-theme nodes carry no expanded accessibilityState", async () => {
     const { getByTestId } = await renderSheet();
 
