@@ -141,6 +141,8 @@ interface GNode {
    * of this theme's member curiosities instead of opening the detail card.
    */
   toggleId?: string;
+  /** Set on theme nodes only: how many curiosities the theme contains. */
+  memberCount?: number;
 }
 
 interface GEdge {
@@ -387,6 +389,7 @@ function buildGraph(
       detail: NodeDetail;
       parent?: string;
       toggleId?: string;
+      memberCount?: number;
     }[],
   ) => {
     const bandTop = bottom + BAND_GAP;
@@ -422,6 +425,7 @@ function buildGraph(
         isHub: false,
         detail: lf.detail,
         toggleId: lf.toggleId,
+        memberCount: lf.memberCount,
       });
       edges.push({ from: lf.parent ?? id, to: lf.id, spine: false });
       maxB = Math.max(maxB, cy + LEAF_H / 2);
@@ -532,6 +536,7 @@ function buildGraph(
         const themeLeaf = {
           id: themeId,
           toggleId: slug,
+          memberCount: item.members.length,
           label: `${item.label.toUpperCase()} ·${item.members.length}`,
           value,
           detail: {
@@ -633,11 +638,19 @@ function NodeView({
       ? `${node.detail.title} theme, ${isExpanded ? "expanded" : "collapsed"}`
       : `${node.detail.title}. ${node.detail.role}`;
 
+  const a11yHint =
+    node.toggleId != null
+      ? `Contains ${node.memberCount ?? 0} ${
+          (node.memberCount ?? 0) === 1 ? "curiosity" : "curiosities"
+        }, double tap to ${isExpanded ? "close" : "open"}`
+      : undefined;
+
   return (
     <Pressable
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
+      accessibilityHint={a11yHint}
       accessibilityState={node.toggleId != null ? { expanded: isExpanded ?? false } : undefined}
       testID={`node-${node.id}`}
       style={[
