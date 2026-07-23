@@ -98,6 +98,8 @@ overrides:
   "brace-expansion@>=2.0.0 <2.1.2": ">=2.1.2 <3"    # CVE-2026-13149 (high)
   "brace-expansion@>=5.0.0 <5.0.7": ">=5.0.7 <6"    # CVE-2026-13149 (high)
   "shell-quote@<1.9.0": ">=1.9.0"              # CVE-2026-13311 (high)
+  "fast-uri@>=3.0.0 <3.1.4": ">=3.1.4 <4"      # GHSA-4c8g-83qw-93j6 + GHSA-v2hh-gcrm-f6hx (high)
+  "body-parser@>=2.0.0 <2.3.0": ">=2.3.0 <3"   # GHSA-v422-hmwv-36x6 (low)
   # replit uses linux-x64 only, we can exclude all other platforms
   "esbuild>@esbuild/darwin-arm64": "-"
   "esbuild>@esbuild/darwin-x64": "-"
