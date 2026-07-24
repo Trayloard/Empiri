@@ -448,13 +448,12 @@ function buildGraph(
 
   band(
     "drives",
-    "DRIVES",
+    t("innerSelf.hubDrives"),
     "drive",
     {
-      title: "Drives",
-      role: "The nucleus",
-      blurb:
-        `${name}'s needs — the quiet pulls behind how it feels. When one goes unmet for a while, it starts to crave it.`,
+      title: t("innerSelf.drivesTitle"),
+      role: t("innerSelf.drivesRole"),
+      blurb: t("innerSelf.drivesBlurb", { name }),
     },
     self.drives.map((d) => ({
       id: `drive-${d.key}`,
@@ -462,8 +461,8 @@ function buildGraph(
       value: clamp(d.striving),
       detail: {
         title: titleCase(d.key),
-        role: "Drive · a quiet need",
-        blurb: DRIVE_BLURB[d.key] ?? `A quiet need shaping how ${name} feels.`,
+        role: t("innerSelf.driveRole"),
+        blurb: DRIVE_BLURB[d.key] ?? t("innerSelf.driveFallback", { name }),
         valueLabel: cravingPhrase(d.striving),
         valuePct: clamp(d.striving),
       },
@@ -472,39 +471,38 @@ function buildGraph(
 
   band(
     "traits",
-    "TRAITS",
+    t("innerSelf.hubTraits"),
     "trait",
     {
-      title: "Traits",
-      role: "Its temperament",
-      blurb: "The personality slowly forming from your time together.",
+      title: t("innerSelf.traitsTitle"),
+      role: t("innerSelf.traitsRole"),
+      blurb: t("innerSelf.traitsBlurb"),
     },
-    self.traits.map((t) => ({
-      id: `trait-${t.key}`,
-      label: t.key.toUpperCase(),
-      value: clamp(t.value),
+    self.traits.map((tr) => ({
+      id: `trait-${tr.key}`,
+      label: tr.key.toUpperCase(),
+      value: clamp(tr.value),
       detail: {
-        title: titleCase(t.key),
-        role: "Trait · part of its temperament",
-        blurb:
-          TRAIT_BLURB[t.key] ?? "A part of the personality forming between you.",
-        valueLabel: strengthPhrase(t.value),
-        valuePct: clamp(t.value),
+        title: titleCase(tr.key),
+        role: t("innerSelf.traitRole"),
+        blurb: TRAIT_BLURB[tr.key] ?? t("innerSelf.traitFallback"),
+        valueLabel: strengthPhrase(tr.value),
+        valuePct: clamp(tr.value),
       },
     })),
   );
 
   band(
     "interests",
-    "INTERESTS",
+    t("innerSelf.hubInterests"),
     "interest",
     {
-      title: "Interests",
-      role: "Its curiosities",
+      title: t("innerSelf.interestsTitle"),
+      role: t("innerSelf.interestsRole"),
       blurb:
         self.interests.length > 0
-          ? `The things that have caught ${name}'s eye, grown from what you talk about.`
-          : `Nothing here yet — ${name}'s curiosities grow as you chat.`,
+          ? t("innerSelf.interestsBlurb", { name })
+          : t("innerSelf.interestsBlurbEmpty", { name }),
     },
     (() => {
       const usedSlugs = new Set<string>();
@@ -517,9 +515,8 @@ function buildGraph(
               value: clamp(item.affinity),
               detail: {
                 title: item.display,
-                role: "Curiosity · caught its eye",
-                blurb:
-                  "Something you've talked about that's started to matter to Empiri.",
+                role: t("innerSelf.curiosityRole"),
+                blurb: t("innerSelf.curiosityBlurb"),
                 valueLabel: affinityPhrase(item.affinity),
                 valuePct: clamp(item.affinity),
               },
@@ -542,7 +539,7 @@ function buildGraph(
           (m) => `${m.topic.toUpperCase()} · ${affinityPhrase(m.affinity)}`,
         );
         if (item.members.length > shown.length) {
-          lines.push(`+${item.members.length - shown.length} more`);
+          lines.push(t("innerSelf.themeMore", { count: item.members.length - shown.length }));
         }
         const themeLeaf = {
           id: themeId,
@@ -552,9 +549,8 @@ function buildGraph(
           value,
           detail: {
             title: item.label,
-            role: `Theme · ${item.members.length} curiosities`,
-            blurb:
-              "A few related things you keep coming back to, gathered into one curiosity. Tap to open or close it.",
+            role: t("innerSelf.themeRole", { count: item.members.length }),
+            blurb: t("innerSelf.themeBlurb"),
             valueLabel: affinityPhrase(value),
             valuePct: value,
             lines,
@@ -570,9 +566,8 @@ function buildGraph(
             value: clamp(m.affinity),
             detail: {
               title: m.display,
-              role: `Curiosity · part of ${item.label}`,
-              blurb:
-                "Something you've talked about that's started to matter to Empiri.",
+              role: t("innerSelf.themeMemberRole", { label: item.label }),
+              blurb: t("innerSelf.curiosityBlurb"),
               valueLabel: affinityPhrase(m.affinity),
               valuePct: clamp(m.affinity),
             },
@@ -586,7 +581,7 @@ function buildGraph(
   nodes.push({
     id: "voice",
     category: "voice",
-    label: "VOICE",
+    label: t("innerSelf.hubVoice"),
     cx: centerX,
     cy: vTop + HUB_H / 2,
     w: hubW,
@@ -594,13 +589,13 @@ function buildGraph(
     value: null,
     isHub: true,
     detail: {
-      title: "Voice",
-      role: "How it all comes together",
-      blurb: `All of this shapes the way ${name} talks with you.`,
+      title: t("innerSelf.voiceTitle"),
+      role: t("innerSelf.voiceRole"),
+      blurb: t("innerSelf.voiceBlurb", { name }),
       lines:
         self.narrative.length > 0
           ? self.narrative
-          : ["We're still writing this story together."],
+          : [t("innerSelf.voiceNarrativeEmpty")],
     },
   });
   edges.push({ from: prev, to: "voice", spine: true });
@@ -646,14 +641,30 @@ function NodeView({
 
   const a11yLabel =
     node.toggleId != null
-      ? `${node.detail.title} theme, ${isExpanded ? "expanded" : "collapsed"}`
-      : `${node.detail.title}. ${node.detail.role}`;
+      ? isExpanded
+        ? t("innerSelf.nodeThemeExpanded", { title: node.detail.title })
+        : t("innerSelf.nodeThemeCollapsed", { title: node.detail.title })
+      : t("innerSelf.nodeLabel", {
+          title: node.detail.title,
+          role: node.detail.role,
+        });
 
+  const memberCount = node.memberCount ?? 0;
   const a11yHint =
     node.toggleId != null
-      ? `Contains ${node.memberCount ?? 0} ${
-          (node.memberCount ?? 0) === 1 ? "curiosity" : "curiosities"
-        }, double tap to ${isExpanded ? "close" : "open"}`
+      ? (memberCount === 1
+          ? t("innerSelf.nodeHintOne", {
+              count: memberCount,
+              action: isExpanded
+                ? t("innerSelf.actionClose")
+                : t("innerSelf.actionOpen"),
+            })
+          : t("innerSelf.nodeHintMany", {
+              count: memberCount,
+              action: isExpanded
+                ? t("innerSelf.actionClose")
+                : t("innerSelf.actionOpen"),
+            }))
       : undefined;
 
   return (
@@ -809,7 +820,7 @@ export function InnerSelfSheet({
       setSelf((prev) =>
         prev ? { ...prev, facts: previousFacts } : prev,
       );
-      setFactDeleteError("Couldn't remove that just now. Please try again.");
+      setFactDeleteError(t("innerSelf.factRemoveError"));
     } finally {
       setDeletingFactKey(null);
     }
@@ -937,7 +948,7 @@ export function InnerSelfSheet({
     if (conversationId == null || memorySaving) return;
     const trimmed = memoryDraft.trim();
     if (!trimmed) {
-      setMemoryActionError("The memory can't be empty — use Forget instead.");
+      setMemoryActionError(t("innerSelf.memoryEmptyError"));
       return;
     }
     setMemorySaving(true);
@@ -954,7 +965,7 @@ export function InnerSelfSheet({
         ).catch(() => {});
       }
     } catch {
-      setMemoryActionError("Couldn't save just now. Please try again.");
+      setMemoryActionError(t("innerSelf.memorySaveError"));
     } finally {
       setMemorySaving(false);
     }
@@ -975,7 +986,7 @@ export function InnerSelfSheet({
         ).catch(() => {});
       }
     } catch {
-      setMemoryActionError("Couldn't forget just now. Please try again.");
+      setMemoryActionError(t("innerSelf.memoryForgetError"));
     } finally {
       setMemorySaving(false);
     }
@@ -1088,7 +1099,7 @@ export function InnerSelfSheet({
             onPress={onClose}
             testID="inner-self-close"
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={t("a11y.close")}
             hitSlop={12}
             style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.6 : 1 }]}
           >
@@ -1097,14 +1108,14 @@ export function InnerSelfSheet({
 
           <View style={styles.aliveWrap}>
             <Animated.View style={[styles.aliveDot, aliveStyle]} />
-            <Text style={styles.aliveText}>ALIVE</Text>
+            <Text style={styles.aliveText}>{t("innerSelf.alive")}</Text>
           </View>
 
           <Pressable
             onPress={() => { onClose(); router.push("/evolution-log"); }}
             testID="evolution-log-btn"
             accessibilityRole="button"
-            accessibilityLabel="Evolution log"
+            accessibilityLabel={t("a11y.evolutionLog")}
             hitSlop={12}
             style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.6 : 1 }]}
           >
@@ -1164,13 +1175,13 @@ export function InnerSelfSheet({
                   color="rgba(255,255,255,0.5)"
                 />
                 <Text style={styles.stateText}>
-                  Couldn&apos;t peek inside just now.
+                  {t("innerSelf.peekError")}
                 </Text>
                 {error ? (
                   <Pressable
                     onPress={() => setSelfAttempt((a) => a + 1)}
                     accessibilityRole="button"
-                    accessibilityLabel="Try again"
+                    accessibilityLabel={t("common.tryAgain")}
                     testID="retry-self"
                     style={({ pressed }) => [
                       styles.retryBtn,
@@ -1180,7 +1191,7 @@ export function InnerSelfSheet({
                   >
                     <Feather name="refresh-cw" size={13} color={sheetAccent} />
                     <Text style={[styles.retryText, { color: sheetAccent }]}>
-                      Try again
+                      {t("common.tryAgain")}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -1246,8 +1257,8 @@ export function InnerSelfSheet({
         ) : mode === "growth" ? (
           <>
             <View style={styles.caption}>
-              <Text style={styles.captionTitle}>HOW I&apos;VE GROWN</Text>
-              <Text style={styles.captionSub}>my inner self, over time</Text>
+              <Text style={styles.captionTitle}>{t("innerSelf.growthCaption")}</Text>
+              <Text style={styles.captionSub}>{t("innerSelf.growthSub")}</Text>
             </View>
             <GrowthTimeline
               conversationId={conversationId}
@@ -1259,8 +1270,8 @@ export function InnerSelfSheet({
         ) : (
           <>
             <View style={styles.caption}>
-              <Text style={styles.captionTitle}>WHAT I REMEMBER</Text>
-              <Text style={styles.captionSub}>the gist of our earlier talks</Text>
+              <Text style={styles.captionTitle}>{t("innerSelf.memoryCaption")}</Text>
+              <Text style={styles.captionSub}>{t("innerSelf.memorySub")}</Text>
             </View>
 
             {memoryLoading || conversationId == null ? (
@@ -1275,12 +1286,12 @@ export function InnerSelfSheet({
                   color="rgba(255,255,255,0.5)"
                 />
                 <Text style={styles.stateText}>
-                  Couldn&apos;t recall just now.
+                  {t("innerSelf.recallError")}
                 </Text>
                 <Pressable
                   onPress={() => setMemoryAttempt((a) => a + 1)}
                   accessibilityRole="button"
-                  accessibilityLabel="Try again"
+                  accessibilityLabel={t("common.tryAgain")}
                   testID="retry-memory"
                   style={({ pressed }) => [
                     styles.retryBtn,
@@ -1290,7 +1301,7 @@ export function InnerSelfSheet({
                 >
                   <Feather name="refresh-cw" size={13} color={sheetAccent} />
                   <Text style={[styles.retryText, { color: sheetAccent }]}>
-                    Try again
+                    {t("common.tryAgain")}
                   </Text>
                 </Pressable>
               </View>
@@ -1302,8 +1313,7 @@ export function InnerSelfSheet({
                   color="rgba(255,255,255,0.45)"
                 />
                 <Text style={styles.stateText}>
-                  Nothing to remember yet. As we talk more, I&apos;ll keep the
-                  gist of our earlier conversations here.
+                  {t("innerSelf.memoryEmpty")}
                 </Text>
               </View>
             ) : (
@@ -1327,7 +1337,7 @@ export function InnerSelfSheet({
                           editable={!memorySaving}
                           maxLength={2000}
                           style={styles.memoryInput}
-                          placeholder={`What should ${name} remember?`}
+                          placeholder={t("innerSelf.memoryPlaceholder", { name })}
                           placeholderTextColor="rgba(255,255,255,0.35)"
                           testID="memory-edit-input"
                         />
@@ -1336,20 +1346,20 @@ export function InnerSelfSheet({
                             onPress={cancelMemoryEdit}
                             disabled={memorySaving}
                             accessibilityRole="button"
-                            accessibilityLabel="Cancel editing"
+                            accessibilityLabel={t("a11y.cancelEditing")}
                             testID="memory-edit-cancel"
                             style={({ pressed }) => [
                               styles.memoryBtn,
                               { opacity: pressed || memorySaving ? 0.6 : 1 },
                             ]}
                           >
-                            <Text style={styles.memoryBtnText}>Cancel</Text>
+                            <Text style={styles.memoryBtnText}>{t("common.cancel")}</Text>
                           </Pressable>
                           <Pressable
                             onPress={saveMemoryEdit}
                             disabled={memorySaving}
                             accessibilityRole="button"
-                            accessibilityLabel="Save memory"
+                            accessibilityLabel={t("a11y.saveMemory")}
                             testID="memory-edit-save"
                             style={({ pressed }) => [
                               styles.memoryBtn,
@@ -1364,7 +1374,7 @@ export function InnerSelfSheet({
                               />
                             ) : (
                               <Text style={styles.memoryBtnPrimaryText}>
-                                Save
+                                {t("common.save")}
                               </Text>
                             )}
                           </Pressable>
@@ -1380,26 +1390,26 @@ export function InnerSelfSheet({
                         {memoryConfirmClear ? (
                           <View style={styles.memoryActionRow}>
                             <Text style={styles.memoryConfirmText}>
-                              Forget all of this?
+                              {t("innerSelf.forgetAll")}
                             </Text>
                             <Pressable
                               onPress={() => setMemoryConfirmClear(false)}
                               disabled={memorySaving}
                               accessibilityRole="button"
-                              accessibilityLabel="Keep this memory"
+                              accessibilityLabel={t("a11y.keepThisMemory")}
                               testID="memory-clear-cancel"
                               style={({ pressed }) => [
                                 styles.memoryBtn,
                                 { opacity: pressed || memorySaving ? 0.6 : 1 },
                               ]}
                             >
-                              <Text style={styles.memoryBtnText}>Keep</Text>
+                              <Text style={styles.memoryBtnText}>{t("innerSelf.keep")}</Text>
                             </Pressable>
                             <Pressable
                               onPress={clearMemory}
                               disabled={memorySaving}
                               accessibilityRole="button"
-                              accessibilityLabel="Yes, forget it"
+                              accessibilityLabel={t("a11y.yesForgetIt")}
                               testID="memory-clear-confirm"
                               style={({ pressed }) => [
                                 styles.memoryBtn,
@@ -1414,7 +1424,7 @@ export function InnerSelfSheet({
                                 />
                               ) : (
                                 <Text style={styles.memoryBtnDangerText}>
-                                  Forget
+                                  {t("innerSelf.forget")}
                                 </Text>
                               )}
                             </Pressable>
@@ -1424,7 +1434,7 @@ export function InnerSelfSheet({
                             <Pressable
                               onPress={startMemoryEdit}
                               accessibilityRole="button"
-                              accessibilityLabel={`Edit what ${name} remembers`}
+                              accessibilityLabel={t("a11y.editMemory", { name })}
                               testID="memory-edit"
                               style={({ pressed }) => [
                                 styles.memoryBtn,
@@ -1436,7 +1446,7 @@ export function InnerSelfSheet({
                                 size={12}
                                 color="rgba(231,233,245,0.85)"
                               />
-                              <Text style={styles.memoryBtnText}>Edit</Text>
+                              <Text style={styles.memoryBtnText}>{t("innerSelf.edit")}</Text>
                             </Pressable>
                             <Pressable
                               onPress={() => {
@@ -1444,7 +1454,7 @@ export function InnerSelfSheet({
                                 setMemoryConfirmClear(true);
                               }}
                               accessibilityRole="button"
-                              accessibilityLabel={`Forget what ${name} remembers`}
+                              accessibilityLabel={t("a11y.forgetMemory", { name })}
                               testID="memory-clear"
                               style={({ pressed }) => [
                                 styles.memoryBtn,
@@ -1456,7 +1466,7 @@ export function InnerSelfSheet({
                                 size={12}
                                 color="rgba(231,233,245,0.85)"
                               />
-                              <Text style={styles.memoryBtnText}>Forget</Text>
+                              <Text style={styles.memoryBtnText}>{t("innerSelf.forget")}</Text>
                             </Pressable>
                           </View>
                         )}
@@ -1471,7 +1481,7 @@ export function InnerSelfSheet({
                       </Text>
                     ) : null}
                     <Text style={styles.memoryFootnote}>
-                      {`A gentle recap ${name} keeps so our longer talks stay connected. You can correct it or ask ${name} to forget.`}
+                      {t("innerSelf.memoryFootnote", { name })}
                     </Text>
                   </>
                 ) : null}
@@ -1485,15 +1495,14 @@ export function InnerSelfSheet({
                         memory != null && styles.factsTitleSpaced,
                       ]}
                     >
-                      LITTLE THINGS I&apos;VE PICKED UP
+                      {t("innerSelf.factsTitle")}
                     </Text>
                     {facts.length === 0 ? (
                       <Text
                         style={styles.factsEmptyText}
                         testID="facts-empty"
                       >
-                        Nothing yet — as we keep chatting, little things
-                        you share will appear here.
+                        {t("innerSelf.factsEmpty")}
                       </Text>
                     ) : (
                       <>
@@ -1532,8 +1541,8 @@ export function InnerSelfSheet({
                                   accessibilityRole="button"
                                   accessibilityLabel={
                                     confirmDeleteFactKey === fact.key
-                                      ? "Cancel"
-                                      : `Forget this — ${fact.text}`
+                                      ? t("common.cancel")
+                                      : t("a11y.forgetFact", { text: fact.text })
                                   }
                                   testID={`fact-delete-${fact.key}`}
                                   hitSlop={10}
@@ -1570,13 +1579,13 @@ export function InnerSelfSheet({
                                   testID={`fact-confirm-${fact.key}`}
                                 >
                                   <Text style={styles.memoryConfirmText}>
-                                    Forget this?
+                                    {t("innerSelf.forgetThis")}
                                   </Text>
                                   <Pressable
                                     onPress={cancelFactDelete}
                                     disabled={deletingFactKey != null}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Keep this"
+                                    accessibilityLabel={t("a11y.keepThis")}
                                     testID={`fact-confirm-keep-${fact.key}`}
                                     style={({ pressed }) => [
                                       styles.memoryBtn,
@@ -1589,14 +1598,14 @@ export function InnerSelfSheet({
                                     ]}
                                   >
                                     <Text style={styles.memoryBtnText}>
-                                      Keep
+                                      {t("innerSelf.keep")}
                                     </Text>
                                   </Pressable>
                                   <Pressable
                                     onPress={() => deleteFact(fact.key)}
                                     disabled={deletingFactKey != null}
                                     accessibilityRole="button"
-                                    accessibilityLabel="Yes, forget it"
+                                    accessibilityLabel={t("a11y.yesForgetIt")}
                                     testID={`fact-confirm-forget-${fact.key}`}
                                     style={({ pressed }) => [
                                       styles.memoryBtn,
@@ -1616,7 +1625,7 @@ export function InnerSelfSheet({
                                       />
                                     ) : (
                                       <Text style={styles.memoryBtnDangerText}>
-                                        Forget
+                                        {t("innerSelf.forget")}
                                       </Text>
                                     )}
                                   </Pressable>
@@ -1634,8 +1643,7 @@ export function InnerSelfSheet({
                           </Text>
                         ) : null}
                         <Text style={styles.memoryFootnote}>
-                          Little things you&apos;ve shared — the ones we return
-                          to stay the brightest.
+                          {t("innerSelf.factsFootnote")}
                         </Text>
                       </>
                     )}
@@ -1683,7 +1691,7 @@ export function InnerSelfSheet({
                   onPress={() => setSelected(null)}
                   hitSlop={12}
                   accessibilityRole="button"
-                  accessibilityLabel="Close detail"
+                  accessibilityLabel={t("a11y.closeDetail")}
                   style={({ pressed }) => [
                     styles.detailClose,
                     { opacity: pressed ? 0.6 : 1 },
