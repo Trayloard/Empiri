@@ -278,6 +278,7 @@ const en = {
   // Inner self — captions & states
   "innerSelf.mindCaption": "{name}'S MIND",
   "innerSelf.mindSub": "tap a node to look closer",
+  "innerSelf.mindTitle": "{name}'S MIND",
   "innerSelf.peekError": "Couldn't peek inside just now.",
   "innerSelf.growthCaption": "HOW I'VE GROWN",
   "innerSelf.growthSub": "my inner self, over time",
@@ -546,6 +547,7 @@ const de: Record<Key, string> = {
 
   "innerSelf.mindCaption": "{name}S GEIST",
   "innerSelf.mindSub": "tippe auf einen Knoten, um näher hinzuschauen",
+  "innerSelf.mindTitle": "{name}S GEDANKENWELT",
   "innerSelf.peekError": "Konnte gerade nicht hineinschauen.",
   "innerSelf.growthCaption": "WIE ICH GEWACHSEN BIN",
   "innerSelf.growthSub": "mein inneres Selbst, im Lauf der Zeit",
