@@ -276,6 +276,7 @@ const en = {
   "innerSelf.actionClose": "close",
 
   // Inner self — captions & states
+  "innerSelf.alive": "ALIVE",
   "innerSelf.mindCaption": "{name}'S MIND",
   "innerSelf.mindSub": "tap a node to look closer",
   "innerSelf.mindTitle": "{name}'S MIND",
@@ -545,6 +546,7 @@ const de: Record<Key, string> = {
   "innerSelf.actionOpen": "Öffnen",
   "innerSelf.actionClose": "Schließen",
 
+  "innerSelf.alive": "LEBENDIG",
   "innerSelf.mindCaption": "{name}S GEIST",
   "innerSelf.mindSub": "tippe auf einen Knoten, um näher hinzuschauen",
   "innerSelf.mindTitle": "{name}S GEDANKENWELT",

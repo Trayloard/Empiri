@@ -15,6 +15,8 @@
 - [Empiri orb/glow trait smoothing](orb-trait-smoothing.md) — ease only the trait part of blob opacity via 3s shared values; never ease breathing cadence (loop restarts/freezes); warm boolean→smoothstep.
 - [Personality accent tinting](accent-tinting-pattern.md) — always blend from each surface's own base color via accentForWarmth so a neutral personality stays pixel-identical.
 - [Deferred personalization follow-ups](deferred-personalization-followups.md) — 3 ideas to remind user about next session: chat-header name/tone, evolution log, auth-gate settings screen.
+- [Empiri future feature requests](empiri-future-feature-requests.md) — user wants reminders: dopamine/deficit neuromodulation in neurobrane (ask for their "Dopamin-Block" spec), self-coding skills, blank-slate first launch.
+- [i18n pattern](empiri-i18n.md) — all mobile UI strings via t() in lib/i18n.ts, flat dotted keys, en/de parity enforced; AI language via optional `locale` in request bodies + server languageDirective.
 - [Async start() generation token](effect-async-start-generation-token.md) — RN AppState-driven listener effects with an awaiting start() need a generation counter, or backgrounding leaks listeners.
 - [pnpm overrides single source](pnpm-overrides-single-source.md) — package.json pnpm.overrides silently disables ALL pnpm-workspace.yaml overrides; keep them in yaml only, verify via lockfile header, bound replacement ranges.
 - [API post-response work needs Reserved VM](api-post-response-work.md) — self folds run after res.end via in-memory queue; Autoscale kills them + multi-instance races; all self-savers must queue+reload.
