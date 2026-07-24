@@ -150,6 +150,7 @@ function feelPercepts(
 async function buildSystemPrompt(
   userId: string,
   self: Awaited<ReturnType<typeof import("../lib/companionSelf").loadOrCreateSelf>>,
+  locale?: string,
 ): Promise<string> {
   const settings = await loadSettings(userId);
   const base = composePersona(self);
@@ -158,7 +159,40 @@ async function buildSystemPrompt(
     settings.tone as Tone,
     settings.personalityNote ?? "",
   );
-  return addendum ? `${base}\n\n${addendum}` : base;
+  const language = languageDirective(locale);
+  const parts = [base, addendum, language].filter(Boolean);
+  return parts.join("\n\n");
+}
+
+/**
+ * Turn the device's BCP-47 language tag into a reply-language directive so
+ * the companion speaks the user's system language. Unknown or missing tags
+ * produce no directive — the model then mirrors the user's own language.
+ */
+function languageDirective(locale?: string): string {
+  if (!locale) return "";
+  const tag = locale.trim();
+  if (!/^[a-zA-Z]{2,3}([-_][a-zA-Z0-9]{2,8})*$/.test(tag)) return "";
+  const primary = tag.toLowerCase().split(/[-_]/)[0];
+  const KNOWN: Record<string, string> = {
+    de: "German",
+    en: "English",
+    fr: "French",
+    es: "Spanish",
+    it: "Italian",
+    pt: "Portuguese",
+    nl: "Dutch",
+    tr: "Turkish",
+    pl: "Polish",
+    ru: "Russian",
+    ja: "Japanese",
+    ko: "Korean",
+    zh: "Chinese",
+    ar: "Arabic",
+  };
+  const name = KNOWN[primary];
+  const lang = name ? `${name} ("${tag}")` : `the language with BCP-47 tag "${tag}"`;
+  return `The user's device language is ${lang}. Always reply in that language unless the user explicitly writes in, or asks for, a different one.`;
 }
 
 // Create a new conversation — requires a signed-in user
@@ -431,7 +465,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
   // colour this very reply — then layer the user's personalisation.
   const self = await loadOrCreateSelf(id);
   const felt = feelPercepts(id, self, parsed.data.percepts, req.log);
-  const systemContent = await buildSystemPrompt(conversation.ownerId, felt);
+  const systemContent = await buildSystemPrompt(conversation.ownerId, felt, parsed.data.locale);
   const windowedMessages = buildContextMessages(history, contextSummary);
   const chatMessages = [
     { role: "system" as const, content: systemContent },
@@ -550,7 +584,7 @@ router.post("/conversations/:id/messages/stream", async (req, res) => {
 
   const self = await loadOrCreateSelf(id);
   const felt = feelPercepts(id, self, parsed.data.percepts, req.log);
-  const systemContent = await buildSystemPrompt(conversation.ownerId, felt);
+  const systemContent = await buildSystemPrompt(conversation.ownerId, felt, parsed.data.locale);
   const windowedMessages = buildContextMessages(history, contextSummary);
   const chatMessages = [
     { role: "system" as const, content: systemContent },
@@ -672,7 +706,7 @@ router.post("/conversations/:id/checkin", async (req, res) => {
   // Load self and compose system prompt while reflection is in flight.
   const self = await loadOrCreateSelf(id);
   const felt = feelPercepts(id, self, percepts, req.log);
-  const systemContent = await buildSystemPrompt(conversation.ownerId, felt);
+  const systemContent = await buildSystemPrompt(conversation.ownerId, felt, parsed.data.locale);
 
   // Collect the reflection: use it if it's already resolved, skip if not.
   const reflectionThought = await Promise.race([

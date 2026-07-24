@@ -192,3 +192,62 @@ describe("Auth sign-in flow", () => {
     expect(mockPromptAsync).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Auth logout flow", () => {
+  it("logout() posts to the logout endpoint, clears SecureStore, and returns the user to unauthenticated state", async () => {
+    mockGetItemAsync.mockResolvedValue("stored-session-token");
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user: MOCK_USER }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    (globalThis as Record<string, unknown>).fetch = fetchMock;
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    await act(async () => {
+      await result.current.logout();
+    });
+
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
+    expect(result.current.user).toBeNull();
+
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith("auth_session_token");
+
+    const logoutCall = fetchMock.mock.calls.find(([url]) =>
+      (url as string).endsWith("/api/mobile-auth/logout"),
+    ) as [string, RequestInit];
+    expect(logoutCall).toBeDefined();
+    expect(logoutCall[0]).toBe("https://test.example.com/api/mobile-auth/logout");
+    expect(logoutCall[1].method).toBe("POST");
+    expect((logoutCall[1].headers as Record<string, string>).Authorization).toBe(
+      "Bearer stored-session-token",
+    );
+  });
+
+  it("logout() still clears the session locally even when the network call fails", async () => {
+    mockGetItemAsync.mockResolvedValue("stored-session-token");
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user: MOCK_USER }),
+      })
+      .mockRejectedValueOnce(new Error("network down"));
+    (globalThis as Record<string, unknown>).fetch = fetchMock;
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    await act(async () => {
+      await result.current.logout();
+    });
+
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
+    expect(result.current.user).toBeNull();
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith("auth_session_token");
+  });
+});

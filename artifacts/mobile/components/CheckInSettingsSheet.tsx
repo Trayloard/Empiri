@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FONTS } from "@/constants/fonts";
 import { useColors } from "@/hooks/useColors";
+import { t } from "@/lib/i18n";
 import type { CheckInCadence } from "@/lib/mood";
 import { DEV_NUDGE_SECONDS } from "@/lib/notifications";
 import {
@@ -50,30 +51,29 @@ interface CheckInSettingsSheetProps {
 
 interface CadenceOption {
   value: CheckInCadence;
-  label: string;
-  description: string;
+  labelKey: "settings.cadenceOffLabel" | "settings.cadenceDailyLabel" | "settings.cadenceFrequentLabel";
+  descKey: "settings.cadenceOffDesc" | "settings.cadenceDailyDesc" | "settings.cadenceFrequentDesc";
   icon: keyof typeof Feather.glyphMap;
 }
 
-// Presented in the task's order: Off → Daily → A few times a day. Copy stays in
-// English (the app's UI language).
+// Presented in the task's order: Off → Daily → A few times a day.
 const OPTIONS: CadenceOption[] = [
   {
     value: "off",
-    label: "Off",
-    description: "Empiri waits for you to say hi first.",
+    labelKey: "settings.cadenceOffLabel",
+    descKey: "settings.cadenceOffDesc",
     icon: "moon",
   },
   {
     value: "daily",
-    label: "Once a day",
-    description: "A gentle check-in after a quiet day.",
+    labelKey: "settings.cadenceDailyLabel",
+    descKey: "settings.cadenceDailyDesc",
     icon: "sunrise",
   },
   {
     value: "frequent",
-    label: "A few times a day",
-    description: "Empiri reaches out when it's been a few hours.",
+    labelKey: "settings.cadenceFrequentLabel",
+    descKey: "settings.cadenceFrequentDesc",
     icon: "sun",
   },
 ];
@@ -118,7 +118,7 @@ export function CheckInSettingsSheet({
           style={StyleSheet.absoluteFill}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close check-in settings"
+          accessibilityLabel={t("a11y.closeCheckInSettings")}
         />
 
         <View
@@ -136,17 +136,17 @@ export function CheckInSettingsSheet({
           <View style={styles.header}>
             <View style={styles.headerText}>
               <Text style={[styles.title, { color: colors.foreground }]}>
-                Check-ins
+                {t("settings.checkInsTitle")}
               </Text>
               <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                How often should Empiri reach out?
+                {t("settings.checkInsSubtitle")}
               </Text>
             </View>
             <Pressable
               onPress={onClose}
               testID="check-in-settings-close"
               accessibilityRole="button"
-              accessibilityLabel="Done"
+              accessibilityLabel={t("a11y.done")}
               hitSlop={12}
               style={({ pressed }) => [
                 styles.closeBtn,
@@ -170,7 +170,10 @@ export function CheckInSettingsSheet({
                   testID={`cadence-option-${opt.value}`}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
-                  accessibilityLabel={`${opt.label}. ${opt.description}`}
+                  accessibilityLabel={t("a11y.cadenceOption", {
+                    label: t(opt.labelKey),
+                    description: t(opt.descKey),
+                  })}
                   style={({ pressed }) => [
                     styles.option,
                     {
@@ -190,7 +193,7 @@ export function CheckInSettingsSheet({
                     <Text
                       style={[styles.optionLabel, { color: colors.foreground }]}
                     >
-                      {opt.label}
+                      {t(opt.labelKey)}
                     </Text>
                     <Text
                       style={[
@@ -198,7 +201,7 @@ export function CheckInSettingsSheet({
                         { color: colors.mutedForeground },
                       ]}
                     >
-                      {opt.description}
+                      {t(opt.descKey)}
                     </Text>
                   </View>
                   {active ? (
@@ -217,7 +220,7 @@ export function CheckInSettingsSheet({
           </View>
 
           <Text style={[styles.footnote, { color: colors.mutedForeground }]}>
-            Turning check-ins off also pauses notifications.
+            {t("settings.checkInsFootnote")}
           </Text>
 
           {quietHours && onQuietHoursChange && (
@@ -238,7 +241,7 @@ export function CheckInSettingsSheet({
                 testID="quiet-hours-toggle"
                 accessibilityRole="switch"
                 accessibilityState={{ checked: quietHours.enabled }}
-                accessibilityLabel="Quiet hours"
+                accessibilityLabel={t("settings.quietHours")}
                 style={({ pressed }) => [
                   styles.quietHeader,
                   { opacity: pressed ? 0.7 : 1 },
@@ -254,14 +257,17 @@ export function CheckInSettingsSheet({
                   <Text
                     style={[styles.quietTitle, { color: colors.foreground }]}
                   >
-                    Quiet hours
+                    {t("settings.quietHours")}
                   </Text>
                   <Text
                     style={[styles.quietDesc, { color: colors.mutedForeground }]}
                   >
                     {quietHours.enabled
-                      ? `No check-ins ${formatQuietTime(quietHours.startMinutes)} – ${formatQuietTime(quietHours.endMinutes)}`
-                      : "Silence check-ins during set hours."}
+                      ? t("settings.quietHoursActive", {
+                          start: formatQuietTime(quietHours.startMinutes),
+                          end: formatQuietTime(quietHours.endMinutes),
+                        })
+                      : t("settings.quietHoursInactive")}
                   </Text>
                 </View>
                 <View
@@ -292,10 +298,20 @@ export function CheckInSettingsSheet({
                 <View style={styles.quietTimes}>
                   {(
                     [
-                      { key: "startMinutes", label: "From" },
-                      { key: "endMinutes", label: "Until" },
+                      {
+                        key: "startMinutes",
+                        label: t("settings.quietFrom"),
+                        earlierLabel: t("a11y.quietEarlierFrom"),
+                        laterLabel: t("a11y.quietLaterFrom"),
+                      },
+                      {
+                        key: "endMinutes",
+                        label: t("settings.quietUntil"),
+                        earlierLabel: t("a11y.quietEarlierUntil"),
+                        laterLabel: t("a11y.quietLaterUntil"),
+                      },
                     ] as const
-                  ).map(({ key, label }) => (
+                  ).map(({ key, label, earlierLabel, laterLabel }) => (
                     <View
                       key={key}
                       style={[styles.quietTimeRow, { borderColor: colors.border }]}
@@ -318,7 +334,7 @@ export function CheckInSettingsSheet({
                           }
                           testID={`quiet-${key}-minus`}
                           accessibilityRole="button"
-                          accessibilityLabel={`Earlier ${label.toLowerCase()} time`}
+                          accessibilityLabel={earlierLabel}
                           hitSlop={8}
                           style={({ pressed }) => [
                             styles.quietStepBtn,
@@ -352,7 +368,7 @@ export function CheckInSettingsSheet({
                           }
                           testID={`quiet-${key}-plus`}
                           accessibilityRole="button"
-                          accessibilityLabel={`Later ${label.toLowerCase()} time`}
+                          accessibilityLabel={laterLabel}
                           hitSlop={8}
                           style={({ pressed }) => [
                             styles.quietStepBtn,
@@ -391,7 +407,7 @@ export function CheckInSettingsSheet({
                 testID="senses-toggle"
                 accessibilityRole="switch"
                 accessibilityState={{ checked: !!sensesEnabled }}
-                accessibilityLabel="Senses"
+                accessibilityLabel={t("settings.senses")}
                 style={({ pressed }) => [
                   styles.quietHeader,
                   { opacity: pressed ? 0.7 : 1 },
@@ -407,14 +423,14 @@ export function CheckInSettingsSheet({
                   <Text
                     style={[styles.quietTitle, { color: colors.foreground }]}
                   >
-                    Senses
+                    {t("settings.senses")}
                   </Text>
                   <Text
                     style={[styles.quietDesc, { color: colors.mutedForeground }]}
                   >
                     {sensesEnabled
-                      ? "Empiri notices little things — a shake, charging, the time of day — while the app is open."
-                      : "Let Empiri gently notice motion, charging, and the time of day."}
+                      ? t("settings.sensesOn")
+                      : t("settings.sensesOff")}
                   </Text>
                 </View>
                 <View
@@ -443,7 +459,7 @@ export function CheckInSettingsSheet({
             <Pressable
               onPress={onPersonalize}
               accessibilityRole="button"
-              accessibilityLabel="Personalize your companion"
+              accessibilityLabel={t("a11y.personalizeCompanion")}
               style={({ pressed }) => [
                 styles.personalizeRow,
                 {
@@ -454,7 +470,7 @@ export function CheckInSettingsSheet({
             >
               <Feather name="sliders" size={16} color={tint} style={{ marginRight: 10 }} />
               <Text style={[styles.personalizeLabel, { color: colors.foreground }]}>
-                Personalize your companion
+                {t("settings.personalize")}
               </Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
@@ -465,7 +481,7 @@ export function CheckInSettingsSheet({
               onPress={onSignOut}
               testID="sign-out-button"
               accessibilityRole="button"
-              accessibilityLabel="Sign out"
+              accessibilityLabel={t("a11y.signOut")}
               style={({ pressed }) => [
                 styles.personalizeRow,
                 {
@@ -481,7 +497,7 @@ export function CheckInSettingsSheet({
                 style={{ marginRight: 10 }}
               />
               <Text style={[styles.personalizeLabel, { color: colors.destructive }]}>
-                Sign out
+                {t("settings.signOut")}
               </Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
@@ -493,7 +509,7 @@ export function CheckInSettingsSheet({
               testID="dev-tools-section"
             >
               <Text style={[styles.devLabel, { color: colors.mutedForeground }]}>
-                Dev tools
+                {t("settings.devTools")}
               </Text>
               <View style={styles.devButtons}>
                 <Pressable
@@ -501,7 +517,7 @@ export function CheckInSettingsSheet({
                   disabled={!onDevCheckIn}
                   testID="dev-trigger-checkin"
                   accessibilityRole="button"
-                  accessibilityLabel="Trigger a check-in now"
+                  accessibilityLabel={t("a11y.devCheckIn")}
                   style={({ pressed }) => [
                     styles.devButton,
                     {
@@ -514,7 +530,7 @@ export function CheckInSettingsSheet({
                   <Text
                     style={[styles.devButtonText, { color: colors.foreground }]}
                   >
-                    Check in now
+                    {t("settings.devCheckIn")}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -522,7 +538,7 @@ export function CheckInSettingsSheet({
                   disabled={!onDevNudge}
                   testID="dev-trigger-nudge"
                   accessibilityRole="button"
-                  accessibilityLabel="Schedule a nudge in a few seconds"
+                  accessibilityLabel={t("a11y.devNudge")}
                   style={({ pressed }) => [
                     styles.devButton,
                     {
@@ -535,7 +551,7 @@ export function CheckInSettingsSheet({
                   <Text
                     style={[styles.devButtonText, { color: colors.foreground }]}
                   >
-                    Nudge in {DEV_NUDGE_SECONDS}s
+                    {t("settings.devNudge", { seconds: DEV_NUDGE_SECONDS })}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -543,7 +559,7 @@ export function CheckInSettingsSheet({
                   disabled={!onDevRegress}
                   testID="dev-trigger-regress"
                   accessibilityRole="button"
-                  accessibilityLabel="Wind Empiri back a few steps"
+                  accessibilityLabel={t("a11y.devWindBack")}
                   style={({ pressed }) => [
                     styles.devButton,
                     {
@@ -556,7 +572,7 @@ export function CheckInSettingsSheet({
                   <Text
                     style={[styles.devButtonText, { color: colors.foreground }]}
                   >
-                    Wind back
+                    {t("settings.devWindBack")}
                   </Text>
                 </Pressable>
               </View>

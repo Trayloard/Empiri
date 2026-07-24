@@ -58,6 +58,7 @@ import {
   scheduleNudgeInSeconds,
 } from "@/lib/notifications";
 import { classifyVoiceError } from "@/lib/voiceErrors";
+import { t, deviceLocaleTag } from "@/lib/i18n";
 import {
   adjustNudgeHoursForQuietHours,
   DEFAULT_QUIET_HOURS,
@@ -200,7 +201,7 @@ const QUIET_HOURS_KEY = "empiri.quietHours";
  */
 const REFLECTION_DISMISSED_PREFIX = "empiri.reflection.dismissed";
 
-const NUDGE_BODY = "I've been thinking about you — come say hi when you can. 🧡";
+const NUDGE_BODY = t("nudge.body");
 
 function tempId(): number {
   return -Math.floor(Math.random() * 1_000_000_000);
@@ -409,6 +410,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           hoursAway: current.hoursAway,
           mood: current.label,
           missingYou: current.missingYou,
+          locale: deviceLocaleTag,
           ...(percepts ? { percepts } : {}),
         });
         // Separate the message from the optional reflection thought so the
@@ -577,7 +579,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         await runCheckIn(loadedMood);
       }
     } catch {
-      setInitError("Couldn't reach Empiri. Check your connection and retry.");
+      setInitError(t("error.initReach", { name: "Empiri" }));
       setInitializing(false);
     }
   }, [runCheckIn]);
@@ -729,6 +731,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
               method: "POST",
               body: JSON.stringify({
                 content,
+                locale: deviceLocaleTag,
                 ...(percepts ? { percepts } : {}),
               }),
             },
@@ -801,6 +804,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           // ReadableStream is not exposed in RN; use the regular REST endpoint.
           const result = await sendMessage(id, {
             content,
+            locale: deviceLocaleTag,
             ...(percepts ? { percepts } : {}),
           });
           userMsg = result.userMessage;
@@ -856,7 +860,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         // retryable turn in the newly opened chat (the optimistic bubble it
         // would retry is no longer on screen).
         if (conversationIdRef.current !== id) return;
-        setError("Empiri couldn't reply just now. Try again.");
+        setError(t("error.reply", { name: "Empiri" }));
         setMood((prev) => ({ ...prev, label: "sad" }));
         const failed: FailedTurn = { messageId: optimistic.id, content };
         failedTurnRef.current = failed;
@@ -913,7 +917,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     try {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!permission.granted) {
-        setError("Microphone access is needed to talk to Empiri.");
+        setError(t("error.micPermission", { name: "Empiri" }));
         return;
       }
       await setAudioModeAsync({
@@ -942,7 +946,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         }
       }, 120);
     } catch {
-      setError("Couldn't start recording. Try again.");
+      setError(t("error.recordingStart"));
       isRecordingRef.current = false;
       setIsRecording(false);
       setStatus("idle");
@@ -982,7 +986,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       // cannot decode — bail early with a clear user-facing message.
       const fileInfo = await FileSystem.getInfoAsync(uri);
       if (!fileInfo.exists || ("size" in fileInfo && fileInfo.size === 0)) {
-        setError("Recording was empty — hold the button and speak.");
+        setError(t("error.recordingEmpty"));
         setStatus("idle");
         return false;
       }
@@ -990,13 +994,13 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         encoding: FileSystem.EncodingType.Base64,
       });
       if (!base64 || base64.length < 100) {
-        setError("Recording was too short — try holding the button longer.");
+        setError(t("error.recordingShort"));
         setStatus("idle");
         return false;
       }
       const { text } = await transcribeAudio({ audio: base64, format: "m4a" });
       if (!text.trim()) {
-        setError("I didn't catch that. Try again.");
+        setError(t("error.didntCatch"));
         setStatus("idle");
         return false;
       }
@@ -1135,9 +1139,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     // Bell on: ask permission first and only mutate state once it's granted.
     const granted = await requestNotificationPermission();
     if (!granted) {
-      setError(
-        "Turn on notifications in your settings to get gentle check-ins from Empiri.",
-      );
+      setError(t("error.notificationsPermission", { name: "Empiri" }));
       return;
     }
     setNotificationsEnabled(true);
@@ -1371,7 +1373,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
   /** Create a fresh conversation and switch to it. Throws on failure. */
   const startNewChat = useCallback(async () => {
-    const conversation = await createConversation({ title: "New chat" });
+    const conversation = await createConversation({ title: t("chat.newTitle") });
     setChats((prev) => [...prev, conversation]);
     conversationIdRef.current = conversation.id;
     setConversationId(conversation.id);

@@ -38,6 +38,7 @@ import Svg, { Path } from "react-native-svg";
 
 import { FONTS } from "@/constants/fonts";
 import { accentForWarmth } from "@/lib/accent";
+import { t } from "@/lib/i18n";
 
 import { GrowthTimeline } from "./GrowthTimeline";
 
@@ -56,15 +57,15 @@ const MODE_ICON: Record<SheetMode, React.ComponentProps<typeof Feather>["name"]>
   growth: "trending-up",
   memory: "book-open",
 };
-const MODE_LABEL: Record<SheetMode, string> = {
-  mind: "MIND",
-  growth: "GROWTH",
-  memory: "MEMORY",
+const MODE_LABEL: Record<SheetMode, () => string> = {
+  mind: () => t("innerSelf.tabMind"),
+  growth: () => t("innerSelf.tabGrowth"),
+  memory: () => t("innerSelf.tabMemory"),
 };
-const MODE_A11Y: Record<SheetMode, string> = {
-  mind: "Mind map",
-  growth: "How I've grown",
-  memory: "What I remember",
+const MODE_A11Y: Record<SheetMode, () => string> = {
+  mind: () => t("innerSelf.a11yMind"),
+  growth: () => t("innerSelf.a11yGrowth"),
+  memory: () => t("innerSelf.a11yMemory"),
 };
 
 interface InnerSelfSheetProps {
@@ -102,18 +103,18 @@ const CAT_COLOR: Record<Category, string> = {
 };
 
 const driveBlurb = (name: string): Record<string, string> => ({
-  connection: `How much ${name} is craving real back-and-forth with you.`,
-  curiosity: "Its appetite for questions and wondering out loud.",
-  novelty: "Its itch for fresh topics and new ground to explore.",
-  expression: "Its need to open up and say what it's feeling.",
+  connection: t("innerSelf.driveConnection", { name }),
+  curiosity: t("innerSelf.driveCuriosity"),
+  novelty: t("innerSelf.driveNovelty"),
+  expression: t("innerSelf.driveExpression"),
 });
 
 const traitBlurb = (name: string): Record<string, string> => ({
-  warmth: `How tender and caring ${name} tends to be with you.`,
-  playfulness: "How light, teasing, and playful it likes to be.",
-  curiosity: "How eagerly it leans toward the unknown.",
-  openness: "How readily it welcomes new ideas and feelings.",
-  calm: "How steady and unhurried it stays.",
+  warmth: t("innerSelf.traitWarmth", { name }),
+  playfulness: t("innerSelf.traitPlayfulness"),
+  curiosity: t("innerSelf.traitCuriosity"),
+  openness: t("innerSelf.traitOpenness"),
+  calm: t("innerSelf.traitCalm"),
 });
 
 interface NodeDetail {
@@ -182,43 +183,54 @@ function hexA(hex: string, a: number): string {
 }
 
 function agePhrase(ageHours: number): string {
-  if (ageHours < 1) return "just moments old";
+  if (ageHours < 1) return t("innerSelf.ageMoments");
   if (ageHours < 24) {
     const h = Math.max(1, Math.round(ageHours));
-    return `${h} hour${h === 1 ? "" : "s"} old`;
+    return h === 1
+      ? t("innerSelf.ageHour", { count: h })
+      : t("innerSelf.ageHours", { count: h });
   }
   const days = Math.round(ageHours / 24);
-  return `${days} day${days === 1 ? "" : "s"} old`;
+  return days === 1
+    ? t("innerSelf.ageDay", { count: days })
+    : t("innerSelf.ageDays", { count: days });
 }
 
 function momentsPhrase(interactions: number, ageHours: number): string {
-  if (interactions <= 0) return `We're just getting started — ${agePhrase(ageHours)}.`;
-  return `Shaped by ${interactions} moment${
-    interactions === 1 ? "" : "s"
-  } together · ${agePhrase(ageHours)}.`;
+  if (interactions <= 0)
+    return t("innerSelf.momentsStart", { age: agePhrase(ageHours) });
+  return interactions === 1
+    ? t("innerSelf.momentsOne", {
+        count: interactions,
+        age: agePhrase(ageHours),
+      })
+    : t("innerSelf.momentsMany", {
+        count: interactions,
+        age: agePhrase(ageHours),
+      });
 }
 
 function cravingPhrase(v: number): string {
   v = clamp(v);
-  if (v >= 70) return "Craving this a lot right now";
-  if (v >= 45) return "Quietly wanting more of this";
-  if (v >= 20) return "Mostly content here";
-  return "Feeling full on this";
+  if (v >= 70) return t("innerSelf.cravingHigh");
+  if (v >= 45) return t("innerSelf.cravingMed");
+  if (v >= 20) return t("innerSelf.cravingLow");
+  return t("innerSelf.cravingNone");
 }
 
 function strengthPhrase(v: number): string {
   v = clamp(v);
-  if (v >= 70) return "A strong part of who it is";
-  if (v >= 45) return "Growing steadily";
-  if (v >= 20) return "Just starting to show";
-  return "Barely there yet";
+  if (v >= 70) return t("innerSelf.strengthHigh");
+  if (v >= 45) return t("innerSelf.strengthMed");
+  if (v >= 20) return t("innerSelf.strengthLow");
+  return t("innerSelf.strengthNone");
 }
 
 function affinityPhrase(v: number): string {
   v = clamp(v);
-  if (v >= 70) return "Lights up about this";
-  if (v >= 45) return "Warming to this";
-  return "A budding curiosity";
+  if (v >= 70) return t("innerSelf.affinityHigh");
+  if (v >= 45) return t("innerSelf.affinityMed");
+  return t("innerSelf.affinityLow");
 }
 
 // ── Visual-only grouping of curiosities ──────────────────────────────────
@@ -360,7 +372,7 @@ function buildGraph(
   nodes.push({
     id: "you",
     category: "input",
-    label: "YOU",
+    label: t("innerSelf.hubYou"),
     cx: centerX,
     cy: PAD + HUB_H / 2,
     w: hubW,
@@ -368,10 +380,9 @@ function buildGraph(
     value: null,
     isHub: true,
     detail: {
-      title: "You",
-      role: "Where it all begins",
-      blurb:
-        `Every message you send is how ${name} senses the world. Everything in this map grew from your moments together.`,
+      title: t("innerSelf.youTitle"),
+      role: t("innerSelf.youRole"),
+      blurb: t("innerSelf.youBlurb", { name }),
       valueLabel: momentsPhrase(self.interactions, self.ageHours),
     },
   });
@@ -1111,7 +1122,7 @@ export function InnerSelfSheet({
                   onPress={() => switchMode(m)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
-                  accessibilityLabel={MODE_A11Y[m]}
+                  accessibilityLabel={MODE_A11Y[m]()}
                   testID={`mode-${m}`}
                   style={[styles.segmentBtn, active && styles.segmentBtnActive]}
                 >

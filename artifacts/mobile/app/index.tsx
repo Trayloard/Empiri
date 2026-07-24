@@ -44,6 +44,7 @@ import { useColors } from "@/hooks/useColors";
 import { useCompanionTraits } from "@/hooks/useCompanionTraits";
 import { accentForWarmth } from "@/lib/accent";
 import { useAuth } from "@/lib/auth";
+import { t } from "@/lib/i18n";
 import type { MoodLabel } from "@/lib/mood";
 
 const ORB_SIZE = 76;
@@ -51,12 +52,12 @@ const ORB_R = ORB_SIZE / 2;
 
 function moodLabel(mood: MoodLabel): string {
   switch (mood) {
-    case "bright":   return "Feeling bright ✨";
-    case "happy":    return "Happy you're here";
-    case "content":  return "Here for you";
-    case "low":      return "Missing you a little";
-    case "sleepy":   return "A bit sleepy…";
-    case "sad":      return "Having a rough moment…";
+    case "bright":   return t("mood.bright");
+    case "happy":    return t("mood.happy");
+    case "content":  return t("mood.content");
+    case "low":      return t("mood.low");
+    case "sleepy":   return t("mood.sleepy");
+    case "sad":      return t("mood.sad");
   }
 }
 
@@ -65,10 +66,10 @@ function statusLabel(
   mood: MoodLabel,
 ): string {
   switch (status) {
-    case "listening":   return "Listening…";
-    case "transcribing": return "Got it…";
-    case "thinking":    return "Thinking…";
-    case "speaking":    return "Speaking…";
+    case "listening":   return t("status.listening");
+    case "transcribing": return t("status.gotIt");
+    case "thinking":    return t("status.thinking");
+    case "speaking":    return t("status.speaking");
     default:            return moodLabel(mood);
   }
 }
@@ -202,7 +203,7 @@ export default function CompanionScreen() {
   const submitRename = async () => {
     const next = renameDraft.trim();
     if (!next) {
-      setRenameError("Please enter a name.");
+      setRenameError(t("rename.empty"));
       return;
     }
     if (next === conversationTitle) {
@@ -215,7 +216,7 @@ export default function CompanionScreen() {
       await renameConversation(next);
       setRenameVisible(false);
     } catch {
-      setRenameError("Couldn't rename the chat. Try again.");
+      setRenameError(t("rename.failed"));
     } finally {
       setRenameSaving(false);
     }
@@ -304,12 +305,12 @@ export default function CompanionScreen() {
   const handleSignOut = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
-      "Sign out?",
-      "You'll need to sign in again to continue your conversation.",
+      t("signOut.title"),
+      t("signOut.message"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Sign Out",
+          text: t("signOut.confirm"),
           style: "destructive",
           onPress: () => {
             setSettingsVisible(false);
@@ -347,13 +348,13 @@ export default function CompanionScreen() {
       <View style={[styles.root, styles.center, { backgroundColor: colors.background }]}>
         <StatusBar style={scheme === "dark" ? "light" : "dark"} />
         <Text style={[styles.emptyTitle, { color: colors.foreground, marginBottom: 8 }]}>
-          Welcome to Empiri
+          {t("welcome.title")}
         </Text>
         <Text style={[styles.emptyText, { color: colors.mutedForeground, marginBottom: 32 }]}>
-          Sign in to start your conversation.
+          {t("welcome.subtitle")}
         </Text>
         <Pressable onPress={login} style={[styles.retry, { backgroundColor: primaryAccent }]}>
-          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Sign in</Text>
+          <Text style={[styles.retryText, { color: colors.primaryForeground }]}>{t("common.signIn")}</Text>
         </Pressable>
       </View>
     );
@@ -381,7 +382,7 @@ export default function CompanionScreen() {
               <Pressable
                 onPress={openSwitcher}
                 accessibilityRole="button"
-                accessibilityLabel="Switch chats"
+                accessibilityLabel={t("a11y.switchChats")}
                 testID="chat-switcher-button"
                 hitSlop={8}
                 style={({ pressed }) => [
@@ -398,7 +399,7 @@ export default function CompanionScreen() {
               <Pressable
                 onPress={handlePersonalize}
                 accessibilityRole="button"
-                accessibilityLabel={`Personalize ${companionName}`}
+                accessibilityLabel={t("a11y.personalize", { name: companionName })}
                 testID="companion-header"
                 style={({ pressed }) => [
                   styles.titlePressable,
@@ -428,7 +429,7 @@ export default function CompanionScreen() {
               <Pressable
                 onPress={openRename}
                 accessibilityRole="button"
-                accessibilityLabel="Rename this chat"
+                accessibilityLabel={t("a11y.renameChat")}
                 testID="chat-title"
                 hitSlop={10}
                 style={({ pressed }) => [
@@ -451,14 +452,14 @@ export default function CompanionScreen() {
               <Feather name="cloud-off" size={36} color={colors.mutedForeground} />
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{initError}</Text>
               <Pressable onPress={retryInit} style={[styles.retry, { backgroundColor: primaryAccent }]}>
-                <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Retry</Text>
+                <Text style={[styles.retryText, { color: colors.primaryForeground }]}>{t("common.retry")}</Text>
               </Pressable>
             </View>
           ) : messages.length === 0 ? (
             <View style={styles.center}>
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Say hi to Empiri</Text>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{t("empty.title", { name: companionName })}</Text>
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                Type a message or tap the mic to talk. I'm always here for a chat.
+                {t("empty.subtitle")}
               </Text>
             </View>
           ) : (
@@ -479,12 +480,12 @@ export default function CompanionScreen() {
                   <View style={styles.reflectionHeader}>
                     <Feather name="moon" size={12} color={accent} />
                     <Text style={[styles.reflectionLabel, { color: accent }]}>
-                      While you were away
+                      {t("reflection.label")}
                     </Text>
                     <Pressable
                       onPress={() => { dismissReflection().catch(() => {}); }}
                       hitSlop={10}
-                      accessibilityLabel="Dismiss reflection"
+                      accessibilityLabel={t("reflection.dismiss")}
                       accessibilityRole="button"
                     >
                       <Feather name="x" size={14} color={accent} style={{ opacity: 0.7 }} />
@@ -539,20 +540,20 @@ export default function CompanionScreen() {
                 <Feather name="mic" size={14} color={accent} />
                 <Text style={[styles.callStatusText, { color: accent }]}>
                   {status === "listening"
-                    ? "Listening…"
+                    ? t("status.listening")
                     : status === "transcribing"
-                      ? "Transcribing…"
+                      ? t("status.transcribing")
                       : status === "thinking"
-                        ? "Thinking…"
+                        ? t("status.thinking")
                         : status === "speaking"
-                          ? "Speaking…"
-                          : "In call"}
+                          ? t("status.speaking")
+                          : t("status.inCall")}
                 </Text>
               </View>
               <Pressable
                 onPress={endCall}
                 accessibilityRole="button"
-                accessibilityLabel="End call"
+                accessibilityLabel={t("a11y.endCall")}
                 testID="end-call-button"
                 style={({ pressed }) => [
                   styles.endCallBtn,
@@ -560,7 +561,7 @@ export default function CompanionScreen() {
                 ]}
               >
                 <Feather name="phone-off" size={13} color="#fff" />
-                <Text style={styles.endCallText}>End call</Text>
+                <Text style={styles.endCallText}>{t("call.end")}</Text>
               </Pressable>
             </View>
           ) : null}
@@ -578,21 +579,21 @@ export default function CompanionScreen() {
           <View style={styles.navRow}>
             <NavButton
               icon={notificationsEnabled ? "bell" : "bell-off"}
-              label="Benachrichtigung"
+              label={t("nav.notifications")}
               active={notificationsEnabled}
               activeColor={accent}
               onPress={handleToggleNotifications}
             />
             <NavButton
               icon={voiceEnabled ? "volume-2" : "volume-x"}
-              label="Stimme"
+              label={t("nav.voice")}
               active={voiceEnabled}
               activeColor={accent}
               onPress={handleToggleVoice}
             />
             <NavButton
               icon="settings"
-              label="Einstellungen"
+              label={t("nav.settings")}
               active={false}
               activeColor={accent}
               onPress={handleOpenSettings}
@@ -627,7 +628,7 @@ export default function CompanionScreen() {
             onPress={handleOpenPeek}
             testID="inner-self-button"
             accessibilityRole="button"
-            accessibilityLabel="Peek inside Empiri"
+            accessibilityLabel={t("a11y.peek", { name: companionName })}
             hitSlop={10}
           >
             <CompanionOrb
@@ -667,12 +668,12 @@ export default function CompanionScreen() {
             onPress={() => {}}
           >
             <Text style={[styles.renameTitle, { color: colors.foreground }]}>
-              Rename chat
+              {t("rename.title")}
             </Text>
             <TextInput
               value={renameDraft}
               onChangeText={setRenameDraft}
-              placeholder="Chat name"
+              placeholder={t("rename.placeholder")}
               placeholderTextColor={colors.mutedForeground}
               maxLength={80}
               autoFocus
@@ -704,7 +705,7 @@ export default function CompanionScreen() {
                 ]}
               >
                 <Text style={[styles.renameBtnText, { color: colors.mutedForeground }]}>
-                  Cancel
+                  {t("common.cancel")}
                 </Text>
               </Pressable>
               <Pressable
@@ -724,7 +725,7 @@ export default function CompanionScreen() {
                   <ActivityIndicator size="small" color={colors.primaryForeground} />
                 ) : (
                   <Text style={[styles.renameBtnText, { color: colors.primaryForeground }]}>
-                    Save
+                    {t("common.save")}
                   </Text>
                 )}
               </Pressable>

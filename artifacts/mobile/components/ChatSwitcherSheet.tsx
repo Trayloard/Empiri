@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FONTS } from "@/constants/fonts";
 import { useColors } from "@/hooks/useColors";
+import { t } from "@/lib/i18n";
 
 interface ChatSwitcherSheetProps {
   visible: boolean;
@@ -48,12 +49,12 @@ function formatRelativeTime(iso: string): string {
   if (Number.isNaN(d.getTime())) return "";
   const diffMs = Date.now() - d.getTime();
   const mins = Math.floor(diffMs / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t("switcher.time.justNow");
+  if (mins < 60) return t("switcher.time.minutes", { mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("switcher.time.hours", { hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
+  if (days < 7) return t("switcher.time.days", { days });
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
@@ -65,8 +66,8 @@ function truncate(text: string, maxLen: number): string {
 
 /** One-line subtitle for a chat row based on its last message preview. */
 function formatPreview(chat: Conversation, active: boolean): string {
-  if (active) return "Current chat";
-  if (!chat.lastMessageText) return "No messages yet";
+  if (active) return t("switcher.currentChat");
+  if (!chat.lastMessageText) return t("switcher.noMessages");
   const preview = truncate(chat.lastMessageText.replace(/\n+/g, " "), 60);
   const timeLabel = chat.lastMessageAt ? formatRelativeTime(chat.lastMessageAt) : "";
   return timeLabel ? `${timeLabel} · ${preview}` : preview;
@@ -122,7 +123,7 @@ export function ChatSwitcherSheet({
       await onSelect(id);
       onClose();
     } catch {
-      setSheetError("Couldn't open that chat. Try again.");
+      setSheetError(t("switcher.openFailed"));
     } finally {
       setBusyId(null);
     }
@@ -137,7 +138,7 @@ export function ChatSwitcherSheet({
       await onNewChat();
       onClose();
     } catch {
-      setSheetError("Couldn't create a new chat. Try again.");
+      setSheetError(t("switcher.createFailed"));
     } finally {
       setBusyId(null);
     }
@@ -146,12 +147,12 @@ export function ChatSwitcherSheet({
   const handleDeletePress = (id: number, title: string) => {
     haptic();
     Alert.alert(
-      "Delete this chat?",
-      `"${title}" and all its messages will be permanently removed.`,
+      t("switcher.deleteTitle"),
+      t("switcher.deleteMessage", { title }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Delete",
+          text: t("common.delete"),
           style: "destructive",
           onPress: () => void handleDeleteConfirmed(id),
         },
@@ -169,7 +170,7 @@ export function ChatSwitcherSheet({
       // close the sheet so the user lands in the new active chat.
       if (id === activeId) onClose();
     } catch {
-      setSheetError("Couldn't delete that chat. Try again.");
+      setSheetError(t("switcher.deleteFailed"));
     } finally {
       setBusyId(null);
     }
@@ -192,7 +193,7 @@ export function ChatSwitcherSheet({
           style={StyleSheet.absoluteFill}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close chat list"
+          accessibilityLabel={t("a11y.closeChatList")}
         />
         <View
           style={[
@@ -207,12 +208,12 @@ export function ChatSwitcherSheet({
           <View style={[styles.handle, { backgroundColor: colors.glassBorder }]} />
 
           <View style={styles.headerRow}>
-            <Text style={[styles.title, { color: colors.foreground }]}>Your chats</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>{t("switcher.title")}</Text>
             <Pressable
               onPress={handleNewChat}
               disabled={busyId != null}
               accessibilityRole="button"
-              accessibilityLabel="Start a new chat"
+              accessibilityLabel={t("a11y.startNewChat")}
               testID="new-chat-button"
               style={({ pressed }) => [
                 styles.newChatBtn,
@@ -228,7 +229,7 @@ export function ChatSwitcherSheet({
               ) : (
                 <Feather name="plus" size={15} color={tint} />
               )}
-              <Text style={[styles.newChatText, { color: tint }]}>New chat</Text>
+              <Text style={[styles.newChatText, { color: tint }]}>{t("switcher.newChat")}</Text>
             </Pressable>
           </View>
 
@@ -253,7 +254,9 @@ export function ChatSwitcherSheet({
                   disabled={busyId != null}
                   accessibilityRole="button"
                   accessibilityLabel={
-                    active ? `${item.title} (current chat)` : `Open chat ${item.title}`
+                    active
+                      ? t("a11y.currentChatRow", { title: item.title })
+                      : t("a11y.openChat", { title: item.title })
                   }
                   testID={`chat-row-${item.id}`}
                   style={({ pressed }) => [
@@ -307,7 +310,7 @@ export function ChatSwitcherSheet({
                           }}
                           hitSlop={8}
                           accessibilityRole="button"
-                          accessibilityLabel="Rename this chat"
+                          accessibilityLabel={t("a11y.renameChat")}
                           testID="switcher-rename-button"
                           style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
                         >
@@ -322,7 +325,7 @@ export function ChatSwitcherSheet({
                         hitSlop={8}
                         disabled={busyId != null}
                         accessibilityRole="button"
-                        accessibilityLabel={`Delete chat ${item.title}`}
+                        accessibilityLabel={t("a11y.deleteChat", { title: item.title })}
                         testID={`delete-chat-${item.id}`}
                         style={({ pressed }) => ({
                           opacity: pressed || busyId != null ? 0.4 : 0.6,
@@ -337,7 +340,7 @@ export function ChatSwitcherSheet({
             }}
             ListEmptyComponent={
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                No chats yet — start one!
+                {t("switcher.empty")}
               </Text>
             }
           />

@@ -186,11 +186,13 @@ async function renderAndWait() {
   // findByTestId retries with act() until the async history fetch resolves
   // and the chart becomes visible — same pattern as GrowthTimeline.retry.test.tsx.
   // Extended timeout covers first-test module warm-up latency.
-  await utils.findByTestId("growth-timeline", undefined, { timeout: 5000 });
+  await utils.findByTestId("growth-timeline", undefined, { timeout: 15000 });
   return utils;
 }
 
 describe("GrowthTimeline scrubber — pan gesture", () => {
+  // Extended timeout: the first test in the suite pays the module warm-up
+  // cost, which can exceed the default 5 s when suites run in parallel.
   it("shows the readout when a pan begins", async () => {
     const { queryByTestId } = await renderAndWait();
 
@@ -201,7 +203,7 @@ describe("GrowthTimeline scrubber — pan gesture", () => {
     });
 
     expect(queryByTestId("scrubber-readout")).toBeTruthy();
-  });
+  }, 20_000);
 
   it("keeps the readout visible as the pan moves", async () => {
     const { queryByTestId } = await renderAndWait();

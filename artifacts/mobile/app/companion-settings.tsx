@@ -19,36 +19,37 @@ import { FONTS } from "@/constants/fonts";
 import { useCompanion } from "@/contexts/CompanionContext";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/lib/auth";
+import { t } from "@/lib/i18n";
 
 const TONE_OPTIONS = [
   {
     value: "calm" as const,
-    label: "Calm",
-    description: "Gentle, steady, and warm.",
+    labelKey: "tone.calmLabel" as const,
+    descKey: "tone.calmDesc" as const,
     icon: "cloud" as const,
   },
   {
     value: "playful" as const,
-    label: "Playful",
-    description: "Lighthearted, fun, and full of wordplay.",
+    labelKey: "tone.playfulLabel" as const,
+    descKey: "tone.playfulDesc" as const,
     icon: "smile" as const,
   },
   {
     value: "witty" as const,
-    label: "Witty",
-    description: "Clever and a little sharp.",
+    labelKey: "tone.wittyLabel" as const,
+    descKey: "tone.wittyDesc" as const,
     icon: "zap" as const,
   },
   {
     value: "wise" as const,
-    label: "Wise",
-    description: "Thoughtful, reflective, and a bit philosophical.",
+    labelKey: "tone.wiseLabel" as const,
+    descKey: "tone.wiseDesc" as const,
     icon: "book-open" as const,
   },
   {
     value: "cheerful" as const,
-    label: "Cheerful",
-    description: "Bright, uplifting, and encouraging.",
+    labelKey: "tone.cheerfulLabel" as const,
+    descKey: "tone.cheerfulDesc" as const,
     icon: "sun" as const,
   },
 ];
@@ -124,7 +125,7 @@ export default function CompanionSettingsScreen() {
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t("a11y.goBack")}
           hitSlop={12}
           style={({ pressed }) => [
             styles.backBtn,
@@ -135,7 +136,7 @@ export default function CompanionSettingsScreen() {
         </Pressable>
 
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-          Personalize
+          {t("companion.headerTitle")}
         </Text>
 
         {/* Spacer to center title */}
@@ -156,7 +157,7 @@ export default function CompanionSettingsScreen() {
           {/* Name */}
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              Name your companion
+              {t("companion.nameLabel")}
             </Text>
             <TextInput
               value={name}
@@ -175,14 +176,14 @@ export default function CompanionSettingsScreen() {
               ]}
             />
             <Text style={[styles.hint, { color: colors.mutedForeground }]}>
-              This name appears in the tooltip and is used by your companion.
+              {t("companion.nameHint")}
             </Text>
           </View>
 
           {/* Tone */}
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              Conversation tone
+              {t("companion.toneLabel")}
             </Text>
             <View style={styles.toneList}>
               {TONE_OPTIONS.map((opt) => {
@@ -197,7 +198,10 @@ export default function CompanionSettingsScreen() {
                     }}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: active }}
-                    accessibilityLabel={`${opt.label}. ${opt.description}`}
+                    accessibilityLabel={t("a11y.cadenceOption", {
+                      label: t(opt.labelKey),
+                      description: t(opt.descKey),
+                    })}
                     style={({ pressed }) => [
                       styles.toneOption,
                       {
@@ -217,7 +221,7 @@ export default function CompanionSettingsScreen() {
                       <Text
                         style={[styles.toneLabel, { color: colors.foreground }]}
                       >
-                        {opt.label}
+                        {t(opt.labelKey)}
                       </Text>
                       <Text
                         style={[
@@ -225,7 +229,7 @@ export default function CompanionSettingsScreen() {
                           { color: colors.mutedForeground },
                         ]}
                       >
-                        {opt.description}
+                        {t(opt.descKey)}
                       </Text>
                     </View>
                     {active ? (
@@ -242,12 +246,12 @@ export default function CompanionSettingsScreen() {
           {/* Personality note */}
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              About you
+              {t("companion.aboutLabel")}
             </Text>
             <TextInput
               value={note}
               onChangeText={setNote}
-              placeholder="What should your companion know about you?"
+              placeholder={t("companion.aboutPlaceholder")}
               placeholderTextColor={colors.mutedForeground}
               multiline
               numberOfLines={4}
@@ -269,12 +273,12 @@ export default function CompanionSettingsScreen() {
           {/* Evolution log entry point */}
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              Growth
+              {t("companion.growthLabel")}
             </Text>
             <Pressable
               onPress={() => router.push("/evolution-log")}
               accessibilityRole="button"
-              accessibilityLabel="Open the evolution log"
+              accessibilityLabel={t("a11y.openEvolutionLog")}
               style={({ pressed }) => [
                 styles.linkRow,
                 {
@@ -291,10 +295,10 @@ export default function CompanionSettingsScreen() {
               />
               <View style={styles.linkText}>
                 <Text style={[styles.linkLabel, { color: colors.foreground }]}>
-                  Evolution log
+                  {t("companion.evolutionLog")}
                 </Text>
                 <Text style={[styles.linkDesc, { color: colors.mutedForeground }]}>
-                  See how your companion has grown over time.
+                  {t("companion.evolutionDesc")}
                 </Text>
               </View>
               <Feather
@@ -310,7 +314,7 @@ export default function CompanionSettingsScreen() {
             onPress={handleSave}
             disabled={saving}
             accessibilityRole="button"
-            accessibilityLabel="Save companion settings"
+            accessibilityLabel={t("a11y.saveCompanionSettings")}
             style={({ pressed }) => [
               styles.saveBtn,
               {
@@ -323,7 +327,7 @@ export default function CompanionSettingsScreen() {
               <ActivityIndicator color={colors.primaryForeground} />
             ) : (
               <Text style={[styles.saveBtnText, { color: colors.primaryForeground }]}>
-                {saved ? "Saved ✓" : "Save"}
+                {saved ? t("companion.saved") : t("common.save")}
               </Text>
             )}
           </Pressable>

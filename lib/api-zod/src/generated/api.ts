@@ -103,7 +103,9 @@ export const LogoutMobileSessionResponse = zod.object({
 export const ListConversationsResponseItem = zod.object({
   "id": zod.number(),
   "title": zod.string(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "lastMessageText": zod.string().nullable(),
+  "lastMessageAt": zod.string().nullable()
 })
 export const ListConversationsResponse = zod.array(ListConversationsResponseItem)
 
@@ -126,7 +128,9 @@ export const GetConversationParams = zod.object({
 export const GetConversationResponse = zod.object({
   "id": zod.number(),
   "title": zod.string(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "lastMessageText": zod.string().nullable(),
+  "lastMessageAt": zod.string().nullable()
 })
 
 
@@ -148,7 +152,9 @@ export const RenameConversationBody = zod.object({
 export const RenameConversationResponse = zod.object({
   "id": zod.number(),
   "title": zod.string(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "lastMessageText": zod.string().nullable(),
+  "lastMessageAt": zod.string().nullable()
 })
 
 
@@ -184,6 +190,8 @@ export const sendMessageBodyPerceptsItemDetailMax = 32;
 
 export const sendMessageBodyPerceptsMax = 8;
 
+export const sendMessageBodyLocaleMax = 64;
+
 
 
 export const SendMessageBody = zod.object({
@@ -193,7 +201,8 @@ export const SendMessageBody = zod.object({
   "intensity": zod.number().min(sendMessageBodyPerceptsItemIntensityMin).max(sendMessageBodyPerceptsItemIntensityMax).describe('How salient the moment felt, 0-1'),
   "at": zod.number().describe('When it happened (epoch milliseconds, client clock)'),
   "detail": zod.string().max(sendMessageBodyPerceptsItemDetailMax).optional().describe('Optional qualifier, e.g. the daypart bucket (\"late_night\")')
-}).describe('One gentle, privacy-safe moment of device perception (opt-in only).')).max(sendMessageBodyPerceptsMax).optional().describe('Device percepts sensed since the last send (opt-in senses only)')
+}).describe('One gentle, privacy-safe moment of device perception (opt-in only).')).max(sendMessageBodyPerceptsMax).optional().describe('Device percepts sensed since the last send (opt-in senses only)'),
+  "locale": zod.string().max(sendMessageBodyLocaleMax).optional().describe('BCP-47 device language tag (e.g. \"de\", \"en-US\"); the companion replies in this language')
 })
 
 export const SendMessageResponse = zod.object({
@@ -228,6 +237,8 @@ export const companionCheckInBodyPerceptsItemDetailMax = 32;
 
 export const companionCheckInBodyPerceptsMax = 8;
 
+export const companionCheckInBodyLocaleMax = 64;
+
 
 
 export const CompanionCheckInBody = zod.object({
@@ -239,7 +250,8 @@ export const CompanionCheckInBody = zod.object({
   "intensity": zod.number().min(companionCheckInBodyPerceptsItemIntensityMin).max(companionCheckInBodyPerceptsItemIntensityMax).describe('How salient the moment felt, 0-1'),
   "at": zod.number().describe('When it happened (epoch milliseconds, client clock)'),
   "detail": zod.string().max(companionCheckInBodyPerceptsItemDetailMax).optional().describe('Optional qualifier, e.g. the daypart bucket (\"late_night\")')
-}).describe('One gentle, privacy-safe moment of device perception (opt-in only).')).max(companionCheckInBodyPerceptsMax).optional().describe('Device percepts sensed since the last send (opt-in senses only)')
+}).describe('One gentle, privacy-safe moment of device perception (opt-in only).')).max(companionCheckInBodyPerceptsMax).optional().describe('Device percepts sensed since the last send (opt-in senses only)'),
+  "locale": zod.string().max(companionCheckInBodyLocaleMax).optional().describe('BCP-47 device language tag (e.g. \"de\", \"en-US\"); the companion replies in this language')
 })
 
 export const CompanionCheckInResponse = zod.object({
@@ -284,7 +296,9 @@ export const GetCompanionSelfResponse = zod.object({
   "from": zod.number().describe('Epoch ms of the earliest moment the chapter covers.'),
   "to": zod.number().describe('Epoch ms of the latest moment the chapter covers.'),
   "text": zod.string().describe('The condensed chapter text, second person (\"Back then you…\").'),
-  "themes": zod.array(zod.string()).describe('Core themes of the period (normalized topic keys).')
+  "themes": zod.array(zod.string()).describe('Core themes of the period (normalized topic keys).'),
+  "sourceLines": zod.array(zod.string()).optional().describe('The raw narrative lines that were condensed into this chapter. Present only for chapters written after this field was introduced; omitted for older chapters (show only the chapter text in that case).'),
+  "memoryDate": zod.number().optional().describe('Epoch ms of the earliest moment a memory in this chapter was originally written. Prefer this over `from` for display — it reflects when the memory was made, not when it was filed. Absent for older chapters; fall back to `from`.')
 })).describe('The condensed life story so far — dated chapters, oldest first.'),
   "interactions": zod.number(),
   "ageHours": zod.number(),

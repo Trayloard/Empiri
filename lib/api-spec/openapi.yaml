@@ -745,10 +745,18 @@ components:
         createdAt:
           type: string
           format: date-time
+        lastMessageText:
+          type: string
+          nullable: true
+        lastMessageAt:
+          type: string
+          nullable: true
       required:
         - id
         - title
         - createdAt
+        - lastMessageText
+        - lastMessageAt
     ConversationInput:
       type: object
       properties:
@@ -820,6 +828,10 @@ components:
           items:
             $ref: "#/components/schemas/Percept"
           description: Device percepts sensed since the last send (opt-in senses only)
+        locale:
+          type: string
+          maxLength: 64
+          description: BCP-47 device language tag (e.g. "de", "en-US"); the companion replies in this language
       required:
         - content
     SendMessageResult:
@@ -850,6 +862,10 @@ components:
           items:
             $ref: "#/components/schemas/Percept"
           description: Device percepts sensed since the last send (opt-in senses only)
+        locale:
+          type: string
+          maxLength: 64
+          description: BCP-47 device language tag (e.g. "de", "en-US"); the companion replies in this language
       required:
         - hoursAway
         - mood
@@ -961,6 +977,22 @@ components:
           description: Core themes of the period (normalized topic keys).
           items:
             type: string
+        sourceLines:
+          type: array
+          description: >-
+            The raw narrative lines that were condensed into this chapter.
+            Present only for chapters written after this field was
+            introduced; omitted for older chapters (show only the chapter
+            text in that case).
+          items:
+            type: string
+        memoryDate:
+          type: number
+          description: >-
+            Epoch ms of the earliest moment a memory in this chapter was
+            originally written. Prefer this over `from` for display — it
+            reflects when the memory was made, not when it was filed. Absent
+            for older chapters; fall back to `from`.
       required:
         - from
         - to

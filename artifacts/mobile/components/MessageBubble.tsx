@@ -18,6 +18,7 @@ import Animated, {
 import { FONTS } from "@/constants/fonts";
 import { useColors } from "@/hooks/useColors";
 import { hexToRgba, spectrumForWarmth } from "@/lib/accent";
+import { t } from "@/lib/i18n";
 
 interface MessageBubbleProps {
   role: string;
@@ -110,7 +111,7 @@ export function RetryBubble({
         onPress={onRetry}
         testID="retry-button"
         accessibilityRole="button"
-        accessibilityLabel="Try again"
+        accessibilityLabel={t("common.tryAgain")}
         hitSlop={6}
         style={({ pressed }) => [
           styles.bubble,
@@ -130,7 +131,7 @@ export function RetryBubble({
         />
         <Feather name="rotate-ccw" size={15} color={tint} />
         <Text style={[styles.retryText, { color: tint }]}>
-          Try again
+          {t("common.tryAgain")}
         </Text>
       </Pressable>
     </View>

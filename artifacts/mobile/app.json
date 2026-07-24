@@ -21,7 +21,9 @@
       }
     },
     "android": {
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -52,7 +54,8 @@
         {
           "motionPermission": "With Senses turned on, Empiri notices gentle motion like a playful shake while the app is open."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,

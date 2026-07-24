@@ -21,6 +21,7 @@ import type { MutableRefObject } from "react";
 import { FONTS } from "@/constants/fonts";
 import { useColors } from "@/hooks/useColors";
 import { accentForWarmth, spectrumForWarmth } from "@/lib/accent";
+import { t } from "@/lib/i18n";
 
 /** Duration of the hold needed to enter audio-call mode (ms). */
 const HOLD_DURATION_MS = 3000;
@@ -183,10 +184,10 @@ export function ChatInput({
           style={[styles.input, { color: colors.foreground }]}
           placeholder={
             isCallActive
-              ? "Call in progress…"
+              ? t("input.callInProgress")
               : isRecording
-                ? "Listening…"
-                : "Message Empiri…"
+                ? t("status.listening")
+                : t("input.placeholder")
           }
           placeholderTextColor={colors.mutedForeground}
           value={text}
