@@ -1137,7 +1137,7 @@ export function InnerSelfSheet({
                       active && styles.segmentTextActive,
                     ]}
                   >
-                    {MODE_LABEL[m]}
+                    {MODE_LABEL[m]()}
                   </Text>
                 </Pressable>
               );
@@ -1148,8 +1148,8 @@ export function InnerSelfSheet({
         {mode === "mind" ? (
           <>
             <View style={styles.caption}>
-              <Text style={styles.captionTitle}>{`${name.toUpperCase()}'S MIND`}</Text>
-              <Text style={styles.captionSub}>tap a node to look closer</Text>
+              <Text style={styles.captionTitle}>{t("innerSelf.mindTitle", { name: name.toUpperCase() })}</Text>
+              <Text style={styles.captionSub}>{t("innerSelf.mindSub")}</Text>
             </View>
 
             {loading || conversationId == null ? (
