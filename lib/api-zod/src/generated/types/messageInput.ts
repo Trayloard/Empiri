@@ -15,4 +15,9 @@ export interface MessageInput {
      * @maxItems 8
      */
   percepts?: Percept[];
+  /**
+     * BCP-47 device language tag (e.g. "de", "en-US"); the companion replies in this language
+     * @maxLength 64
+     */
+  locale?: string;
 }

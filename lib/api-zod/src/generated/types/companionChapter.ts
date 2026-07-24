@@ -15,4 +15,8 @@ export interface CompanionChapter {
   text: string;
   /** Core themes of the period (normalized topic keys). */
   themes: string[];
+  /** The raw narrative lines that were condensed into this chapter. Present only for chapters written after this field was introduced; omitted for older chapters (show only the chapter text in that case). */
+  sourceLines?: string[];
+  /** Epoch ms of the earliest moment a memory in this chapter was originally written. Prefer this over `from` for display — it reflects when the memory was made, not when it was filed. Absent for older chapters; fall back to `from`. */
+  memoryDate?: number;
 }

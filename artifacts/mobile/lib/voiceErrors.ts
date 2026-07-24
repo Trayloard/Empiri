@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+
 /**
  * Classifies a voice transcription error into a user-friendly message.
  *
@@ -13,7 +15,7 @@ export function classifyVoiceError(err: unknown): string {
   const msg = raw.toLowerCase();
 
   if (msg.includes("no speech")) {
-    return "I didn't catch that. Try again.";
+    return t("error.didntCatch");
   }
 
   if (
@@ -25,8 +27,8 @@ export function classifyVoiceError(err: unknown): string {
     msg.includes("timeout") ||
     msg.includes("no internet")
   ) {
-    return "Couldn't upload the recording. Check your connection and try again.";
+    return t("error.upload");
   }
 
-  return "Something went wrong with the recording. Try again in a moment.";
+  return t("error.recordingGeneric");
 }
