@@ -504,7 +504,9 @@ router.post("/conversations/:id/messages", async (req, res) => {
   // Let this genuine exchange shape Empiri's inner self. The language-model
   // analysis (with heuristic fallback) runs AFTER the reply so it never adds
   // latency; failures are logged inside and never affect the response.
-  void queueSelfEvolution(id, content, req.log);
+  void queueSelfEvolution(id, content, req.log, {
+    voice: parsed.data.channel === "voice",
+  });
 
   // Eigenleben: if this was the first message after a long absence, prime
   // Empiri's reflection so the thought is already resolved (or in flight)
@@ -642,7 +644,9 @@ router.post("/conversations/:id/messages/stream", async (req, res) => {
 
   // Fold the exchange into the inner self after the stream has closed — the
   // analysis (with heuristic fallback) never delays or breaks the reply.
-  void queueSelfEvolution(id, content, req.log);
+  void queueSelfEvolution(id, content, req.log, {
+    voice: parsed.data.channel === "voice",
+  });
 
   // Eigenleben: prime the reflection so a concurrent check-in can consume
   // it instantly from the in-process cache. Fire-and-forget — no latency.

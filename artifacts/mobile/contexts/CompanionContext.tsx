@@ -91,6 +91,8 @@ export type CompanionStatus =
 export interface FailedTurn {
   messageId: number;
   content: string;
+  /** True when the turn originated from the voice flow (spoken, transcribed). */
+  voice?: boolean;
 }
 
 interface CompanionContextValue {
@@ -713,7 +715,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   // back to the regular REST endpoint. Either path routes errors through the
   // same catch block which sets mood → "sad" and marks the turn as retryable.
   const deliver = useCallback(
-    async (content: string, optimistic: Message, id: number) => {
+    async (content: string, optimistic: Message, id: number, voice = false) => {
       setError(null);
       clearFailedTurn();
       setStatus("thinking");
@@ -733,6 +735,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
                 content,
                 locale: deviceLocaleTag,
                 ...(percepts ? { percepts } : {}),
+                ...(voice ? { channel: "voice" as const } : {}),
               }),
             },
           );
@@ -806,6 +809,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
             content,
             locale: deviceLocaleTag,
             ...(percepts ? { percepts } : {}),
+            ...(voice ? { channel: "voice" as const } : {}),
           });
           userMsg = result.userMessage;
           assistantMsg = result.assistantMessage;
@@ -862,7 +866,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         if (conversationIdRef.current !== id) return;
         setError(t("error.reply", { name: "Empiri" }));
         setMood((prev) => ({ ...prev, label: "sad" }));
-        const failed: FailedTurn = { messageId: optimistic.id, content };
+        const failed: FailedTurn = { messageId: optimistic.id, content, voice };
         failedTurnRef.current = failed;
         setFailedTurn(failed);
       } finally {
@@ -877,7 +881,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const sendText = useCallback(
-    async (raw: string) => {
+    async (raw: string, opts?: { voice?: boolean }) => {
       const content = raw.trim();
       const id = conversationIdRef.current;
       if (!content || id == null) return;
@@ -890,7 +894,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, optimistic]);
-      await deliver(content, optimistic, id);
+      await deliver(content, optimistic, id, opts?.voice ?? false);
     },
     [deliver],
   );
@@ -909,7 +913,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       content: turn.content,
       createdAt: new Date().toISOString(),
     };
-    await deliver(turn.content, optimistic, id);
+    await deliver(turn.content, optimistic, id, turn.voice ?? false);
   }, [deliver]);
 
   const startListening = useCallback(async () => {
@@ -1004,7 +1008,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         setStatus("idle");
         return false;
       }
-      await sendText(text);
+      await sendText(text, { voice: true });
       return true;
     } catch (err) {
       setError(classifyVoiceError(err));

@@ -109,6 +109,17 @@ export interface Percept {
   detail?: string;
 }
 
+/**
+ * How the message was produced; "voice" marks a spoken (transcribed) exchange
+ */
+export type MessageInputChannel = typeof MessageInputChannel[keyof typeof MessageInputChannel];
+
+
+export const MessageInputChannel = {
+  text: 'text',
+  voice: 'voice',
+} as const;
+
 export interface MessageInput {
   /** @minLength 1 */
   content: string;
@@ -122,6 +133,8 @@ export interface MessageInput {
      * @maxLength 64
      */
   locale?: string;
+  /** How the message was produced; "voice" marks a spoken (transcribed) exchange */
+  channel?: MessageInputChannel;
 }
 
 export interface SendMessageResult {

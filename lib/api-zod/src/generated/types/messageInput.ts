@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { MessageInputChannel } from './messageInputChannel';
 import type { Percept } from './percept';
 
 export interface MessageInput {
@@ -20,4 +21,6 @@ export interface MessageInput {
      * @maxLength 64
      */
   locale?: string;
+  /** How the message was produced; "voice" marks a spoken (transcribed) exchange */
+  channel?: MessageInputChannel;
 }
