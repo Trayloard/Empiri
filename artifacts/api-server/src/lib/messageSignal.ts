@@ -177,20 +177,30 @@ export interface SignalLogger {
   error: (obj: unknown, msg?: string) => void;
 }
 
+/** Optional per-fold context riding alongside the raw message text. */
+export interface SignalOptions {
+  /** True when the exchange arrived through the voice flow (spoken, transcribed). */
+  voice?: boolean;
+}
+
 /**
  * Resolve the interaction signal for a user message: model analysis first,
- * deterministic heuristic as the fallback. Never throws.
+ * deterministic heuristic as the fallback. Never throws. Voice-flow exchanges
+ * are marked on the signal so the reward loop can weight them slightly warmer.
  */
 export async function resolveMessageSignal(
   content: string,
   log?: SignalLogger,
+  options?: SignalOptions,
 ): Promise<InteractionSignal> {
+  let signal: InteractionSignal;
   try {
-    return await analyzeMessage(content);
+    signal = await analyzeMessage(content);
   } catch (err) {
     log?.warn({ err }, "Message analysis failed; falling back to heuristic signal");
-    return deriveMessageSignal(content);
+    signal = deriveMessageSignal(content);
   }
+  return options?.voice ? { ...signal, voice: true } : signal;
 }
 
 /** Maximum number of themes a condensed chapter may carry. */
@@ -325,10 +335,11 @@ export function queueSelfEvolution(
   conversationId: number,
   content: string,
   log?: SignalLogger,
+  options?: SignalOptions,
 ): Promise<void> {
   return enqueueConversationTask(conversationId, async () => {
     try {
-      const signal = await resolveMessageSignal(content, log);
+      const signal = await resolveMessageSignal(content, log, options);
       // Reload inside the queue so we always fold into the latest state, not
       // the copy the route loaded before replying.
       const self = await loadOrCreateSelf(conversationId);

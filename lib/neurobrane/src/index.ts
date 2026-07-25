@@ -49,6 +49,15 @@ export {
   type SensesData,
 } from "./blocks/senses";
 export {
+  rewardBlock,
+  REWARD_BLOCK_ID,
+  computeStimulus,
+  patternSimilarity,
+  rewardDriveGains,
+  type RewardData,
+  type RewardPattern,
+} from "./blocks/reward";
+export {
   memoryBlock,
   MEMORY_BLOCK_ID,
   normalizeFactKey,

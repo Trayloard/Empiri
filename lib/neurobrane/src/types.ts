@@ -42,6 +42,19 @@ export interface InteractionSignal {
   /** External affect multiplier (e.g. derived from client mood); 1 = neutral. */
   moodFactor: number;
   /**
+   * True when the exchange arrived through the voice flow (spoken, then
+   * transcribed). Voice carries a slight warmth/immediacy weighting in the
+   * reward loop's stimulus (see `params.reward.voiceStimulusWeight`); absent
+   * or false behaves exactly like a typed message.
+   */
+  voice?: boolean;
+  /**
+   * Per-drive gain multipliers injected by the runtime from the reward
+   * block's synaptic weights just before the fold (1 = neutral). Only the
+   * drives block consumes them; callers never set this themselves.
+   */
+  driveGains?: Record<string, number>;
+  /**
    * Optional durable personal facts the turn stated about the user (e.g.
    * "Their dog is called Milo"). Produced only by richer extractors (the
    * language-model analysis); heuristic signals never carry facts, so the
@@ -250,6 +263,62 @@ export interface NeuroParams {
     maxStaleHours: number;
     /** Master multiplier on the tiny drive nudges percepts produce. */
     driveImpulseScale: number;
+  };
+  reward: {
+    /** Resting reward level (the "content" midpoint a self starts at). */
+    baseline: number;
+    /** Fraction of the gap to the stimulus target the level closes per fold. */
+    levelGain: number;
+    /** Points the reward level drifts back toward baseline per hour. */
+    levelDriftPerHour: number;
+    /** Mix weights turning the four interaction inputs into one stimulus (0..1 each; should sum to ~1). */
+    stimulusMix: { connection: number; curiosity: number; novelty: number; expression: number };
+    /** Multiplier applied to the stimulus of voice-flow exchanges (slight warmth/immediacy). */
+    voiceStimulusWeight: number;
+    /** Stimulus below this triggers the exploration regime. */
+    exploreBelow: number;
+    /** Stimulus at/above this triggers consolidation + pattern memorization. */
+    consolidateAbove: number;
+    /** Drop from the previous stimulus (prev - current) at/above which replay fires. */
+    replayDropDelta: number;
+    /** Synaptic-weight step added to under-used tendencies while exploring. */
+    exploreStep: number;
+    /** Fraction weights relax toward neutral (1) on a consolidating fold. */
+    consolidateRelax: number;
+    /** How strongly a replayed pattern pulls weights toward what worked (0..1). */
+    replayPull: number;
+    /** Input strength (0..1) at/above which a tendency counts as "tried" for failure streaks. */
+    triedThreshold: number;
+    /** Consecutive tried-but-unrewarded folds before the brake fires on a tendency. */
+    brakeAfter: number;
+    /** Multiplier the brake applies to a tendency's synaptic weight. */
+    brakeFactor: number;
+    /** Stimulus at/below which an aversive pattern is stored (with a tried tendency). */
+    aversionThreshold: number;
+    /** Input-profile similarity (0..1) at/above which a stored aversion dampens early. */
+    similarityThreshold: number;
+    /** Multiplier a triggered aversion applies to the matching tendencies' weights. */
+    aversionDampen: number;
+    /** Hard floor no synaptic weight may ever fall below (nothing is silenced). */
+    weightFloor: number;
+    /** Ceiling no synaptic weight may exceed. */
+    weightCeil: number;
+    /** Points weights relax toward neutral (1) per hour. */
+    weightRecoveryPerHour: number;
+    /** Maximum rewarding patterns kept (weakest/oldest discarded first). */
+    rewardingMax: number;
+    /** Maximum aversive patterns kept (weakest/oldest discarded first). */
+    aversiveMax: number;
+    /** Strength points a rewarding pattern loses per hour. */
+    rewardingDecayPerHour: number;
+    /** Strength points an aversive pattern loses per hour (slow fade). */
+    aversiveDecayPerHour: number;
+    /** Patterns whose strength falls below this are discarded. */
+    patternDropBelow: number;
+    /** Reward level at/above which the persona speaks with a quick, energetic pace. */
+    paceHighAbove: number;
+    /** Reward level at/below which the persona slows into a careful, gentle pace. */
+    paceLowBelow: number;
   };
   memory: {
     /** Maximum number of facts kept (lowest-salience evicted). */

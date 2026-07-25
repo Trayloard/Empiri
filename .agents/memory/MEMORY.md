@@ -24,4 +24,5 @@
 - [Expo e2e auth untestable](expo-e2e-auth-untestable.md) — runTest's Replit-auth claim override can't pass the Expo AuthSession popup login; verify signed-in UI via tsc + jest instead.
 - [Meaning-based curiosity grouping](interest-theme-grouping.md) — themes are LLM-computed server-side, cached by topic-set signature; JSONB rejects \u0000; gpt-5-mini needs ≥4096 completion tokens.
 - [Task specs may assume unmerged features](task-specs-unmerged-features.md) — isolated-env tasks can describe behavior as "now" existing that isn't in this checkout; verify with grep and implement it if missing.
+- [Reward-Center neuromodulation](reward-neuromodulation.md) — reward block modulates drives only via signal.driveGains multipliers (neutral 1); skips non-message folds; voice warmth via params.
 - [Mobile typecheck JSX compat shim](mobile-jsx-compat-shim.md) — expo-blur/expo-linear-gradient/react-native-svg JSX type errors fixed with types/module-overrides.d.ts; global fixed with types/node-global.d.ts; skipLibCheck:true in mobile tsconfig.

@@ -10,6 +10,7 @@ import type {
 import { NEURO_PARAMS } from "./params";
 import { enabledBlocks } from "./blocks/registry";
 import { perceptDriveNudges, sanitizePercepts } from "./blocks/senses";
+import { rewardDriveGains, REWARD_BLOCK_ID, type RewardData } from "./blocks/reward";
 import { clamp, extractTopicsDetailed, round1 } from "./util";
 import { BASE_IDENTITY, INNER_HEADER, STYLE_RULES } from "./persona";
 
@@ -98,11 +99,23 @@ export function evolve(
 ): InnerSelf {
   const decayed = project(self, params, now);
   const blocks: Record<string, BlockEnvelope> = { ...decayed.blocks };
+
+  // Neuromodulation: the reward block's learned synaptic weights ride along
+  // as per-drive gain multipliers, so the drives block accelerates or brakes
+  // exactly as the reward loop has learned. Neutral weights (all 1) make the
+  // enriched signal behave identically to the raw one.
+  const rewardEnv = params.enabledBlocks.includes(REWARD_BLOCK_ID)
+    ? blocks[REWARD_BLOCK_ID]
+    : undefined;
+  const enriched: InteractionSignal = rewardEnv
+    ? { ...signal, driveGains: rewardDriveGains(rewardEnv.data as RewardData, params) }
+    : signal;
+
   for (const block of enabledBlocks(params)) {
     const env = blocks[block.id];
     if (!env) continue;
     const weight = params.blockWeights[block.id] ?? 1;
-    const data = block.applyInteraction(env.data, signal, params, {
+    const data = block.applyInteraction(env.data, enriched, params, {
       now,
       elapsedMs: 0,
       weight,

@@ -35,6 +35,7 @@ export * from './healthStatus';
 export * from './logoutSuccess';
 export * from './message';
 export * from './messageInput';
+export * from './messageInputChannel';
 export * from './mobileTokenExchangeRequest';
 export * from './mobileTokenExchangeSuccess';
 export * from './percept';

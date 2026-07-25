@@ -61,7 +61,12 @@ export const drivesBlock: BlockDefinition<DrivesData> = {
     const levels: Record<string, number> = { ...data.levels };
     for (const [key, def] of Object.entries(params.drives.defs)) {
       const input = clamp(inputs[key] ?? 0, 0, 1);
-      const gain = def.satisfyGain * input * signal.moodFactor * params.learningRate * ctx.weight;
+      // Reward-loop neuromodulation: the runtime injects per-drive gain
+      // multipliers learned by the reward block (1 = neutral, i.e. exactly
+      // the pre-reward behavior).
+      const synaptic = signal.driveGains?.[key] ?? 1;
+      const gain =
+        def.satisfyGain * input * synaptic * signal.moodFactor * params.learningRate * ctx.weight;
       const current = typeof levels[key] === "number" ? levels[key] : def.baseline;
       levels[key] = clamp(current + gain, params.bounds.min, params.bounds.max);
     }

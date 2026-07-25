@@ -202,7 +202,8 @@ export const SendMessageBody = zod.object({
   "at": zod.number().describe('When it happened (epoch milliseconds, client clock)'),
   "detail": zod.string().max(sendMessageBodyPerceptsItemDetailMax).optional().describe('Optional qualifier, e.g. the daypart bucket (\"late_night\")')
 }).describe('One gentle, privacy-safe moment of device perception (opt-in only).')).max(sendMessageBodyPerceptsMax).optional().describe('Device percepts sensed since the last send (opt-in senses only)'),
-  "locale": zod.string().max(sendMessageBodyLocaleMax).optional().describe('BCP-47 device language tag (e.g. \"de\", \"en-US\"); the companion replies in this language')
+  "locale": zod.string().max(sendMessageBodyLocaleMax).optional().describe('BCP-47 device language tag (e.g. \"de\", \"en-US\"); the companion replies in this language'),
+  "channel": zod.enum(['text', 'voice']).optional().describe('How the message was produced; \"voice\" marks a spoken (transcribed) exchange')
 })
 
 export const SendMessageResponse = zod.object({

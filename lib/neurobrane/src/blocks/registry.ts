@@ -3,6 +3,7 @@ import { coreSelfBlock, CORE_SELF_BLOCK_ID } from "./coreSelf";
 import { drivesBlock, DRIVES_BLOCK_ID } from "./drives";
 import { memoryBlock, MEMORY_BLOCK_ID } from "./memory";
 import { sensesBlock, SENSES_BLOCK_ID } from "./senses";
+import { rewardBlock, REWARD_BLOCK_ID } from "./reward";
 
 /**
  * Every known building block, keyed by id. To add a block: implement
@@ -14,6 +15,7 @@ export const ALL_BLOCKS: Record<string, BlockDefinition<any>> = {
   [DRIVES_BLOCK_ID]: drivesBlock,
   [MEMORY_BLOCK_ID]: memoryBlock,
   [SENSES_BLOCK_ID]: sensesBlock,
+  [REWARD_BLOCK_ID]: rewardBlock,
 };
 
 /** The active blocks for the given params, in declared fold order. */
