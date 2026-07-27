@@ -21,16 +21,8 @@ outputType = "webview"
 artifactId = "artifacts/launch-video"
 
 [[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/launch-video run dev"
-cwd = "./artifacts/launch-video"
-waitForPort = 19679
-ensurePreviewReachable = "/"
-router = "path"
-
-[workflows.workflow.tasks.env]
-PORT = "19679"
-BASE_PATH = "/launch-video/"
+task = "workflow.run"
+args = "artifacts/launch-video: web"
 
 [[workflows.workflow]]
 name = "artifacts/mobile: expo"
@@ -42,16 +34,8 @@ outputType = "webview"
 artifactId = "artifacts/mobile"
 
 [[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/mobile run dev"
-cwd = "./artifacts/mobile"
-waitForPort = 18115
-ensurePreviewReachable = "/status"
-router = "expo-domain"
-
-[workflows.workflow.tasks.env]
-PORT = "18115"
-BASE_PATH = "/"
+task = "workflow.run"
+args = "artifacts/mobile: expo"
 
 [[workflows.workflow]]
 name = "artifacts/api-server: API Server"
@@ -63,15 +47,8 @@ outputType = "webview"
 artifactId = "3B4_FFSkEVBkAeYMFRJ2e"
 
 [[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run dev"
-cwd = "./artifacts/api-server"
-waitForPort = 8080
-ensurePreviewReachable = "/"
-router = "path"
-
-[workflows.workflow.tasks.env]
-PORT = "8080"
+task = "workflow.run"
+args = "artifacts/api-server: API Server"
 
 [[workflows.workflow]]
 name = "artifacts/mockup-sandbox: Component Preview Server"
@@ -84,16 +61,8 @@ artifactId = "XegfDyZt7HqfW2Bb8Ghoy"
 isCanvasWorkflow = true
 
 [[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/mockup-sandbox run dev"
-cwd = "./artifacts/mockup-sandbox"
-waitForPort = 8081
-ensurePreviewReachable = "/"
-router = "path"
-
-[workflows.workflow.tasks.env]
-PORT = "8081"
-BASE_PATH = "/__mockup"
+task = "workflow.run"
+args = "artifacts/mockup-sandbox: Component Preview Server"
 
 [[workflows.workflow]]
 name = "test"
@@ -107,24 +76,6 @@ args = "pnpm install --frozen-lockfile && pnpm test"
 isValidation = true
 
 [[workflows.workflow]]
-name = "Empiri app"
-mode = "sequential"
-author = 58120139
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "test"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "typecheck"
-
-[[workflows.workflow]]
 name = "typecheck"
 author = "agent"
 
@@ -134,6 +85,15 @@ args = "pnpm run typecheck"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "Test"
+mode = "sequential"
+author = 58120139
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "test"
 
 [agent]
 stack = "PNPM_WORKSPACE"
