@@ -872,10 +872,26 @@ export function InnerSelfSheet({
                       );
                     } else {
                       // Same as before — try again after the next delay.
+                      // If the budget is now exhausted and the initial themes
+                      // were null, explicitly reset to null so the heuristic
+                      // fallback is guaranteed to be active rather than relying
+                      // on the initial state not having changed.
+                      if (attempt >= DELAYS_MS.length && data.themes == null) {
+                        setSelf((prev) =>
+                          prev ? { ...prev, themes: null } : prev,
+                        );
+                      }
                       poll();
                     }
                   })
-                  .catch(() => poll());
+                  .catch(() => {
+                    if (attempt >= DELAYS_MS.length && data.themes == null) {
+                      setSelf((prev) =>
+                        prev ? { ...prev, themes: null } : prev,
+                      );
+                    }
+                    poll();
+                  });
               }, delay);
             };
             poll();

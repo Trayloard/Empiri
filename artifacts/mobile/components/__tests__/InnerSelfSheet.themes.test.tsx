@@ -398,6 +398,39 @@ describe("InnerSelfSheet background theme refresh", () => {
     expect(mockGetSelf).toHaveBeenCalledTimes(2);
   });
 
+  it("falls back to heuristic grouping when all three polls are exhausted with themes still null", async () => {
+    // LLM is down / slow — every call returns themes: null throughout the
+    // entire poll budget (initial + 3 background polls = 4 total calls).
+    mockGetSelf.mockResolvedValue(SELF_NO_THEMES);
+    mockGetMemory.mockResolvedValue({ summary: null });
+
+    const { findByTestId, queryByTestId } = render(
+      <InnerSelfSheet {...defaultProps} />,
+    );
+
+    // Map appears immediately with heuristic grouping (no theme nodes).
+    expect(await findByTestId("node-you")).toBeTruthy();
+    expect(queryByTestId("node-interest-theme-space")).toBeNull();
+    // All three interests render as individual curiosity nodes.
+    expect(await findByTestId("node-interest-0")).toBeTruthy();
+    expect(await findByTestId("node-interest-1")).toBeTruthy();
+    expect(await findByTestId("node-interest-2")).toBeTruthy();
+
+    // Advance through all three poll delays: 2 s, 4 s, 6 s.
+    await act(async () => { jest.advanceTimersByTime(2001); });
+    await act(async () => { jest.advanceTimersByTime(4001); });
+    await act(async () => { jest.advanceTimersByTime(6001); });
+
+    // After budget exhausted, the map still shows heuristic grouping —
+    // no theme node appeared and all three individual nodes remain.
+    expect(queryByTestId("node-interest-theme-space")).toBeNull();
+    expect(await findByTestId("node-interest-0")).toBeTruthy();
+    expect(await findByTestId("node-interest-1")).toBeTruthy();
+    expect(await findByTestId("node-interest-2")).toBeTruthy();
+    // Exactly four calls: initial load + three background polls.
+    expect(mockGetSelf).toHaveBeenCalledTimes(4);
+  });
+
   it("replaces stale non-null cached themes once the server finishes recomputing", async () => {
     // Stale cache: galaxies and stars grouped under Space, but astrophysics is
     // missing (the server received the new interest set and is recomputing).
